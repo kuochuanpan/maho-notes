@@ -4,42 +4,36 @@
 
 ## Overview
 
-Maho Notes is a markdown-first knowledge management system designed for collaborative use between a human (Kuo-Chuan) and an AI assistant (Maho). It supports multiple collections, semantic search, and the ability to selectively publish notes as public web pages.
+Maho Notes is a markdown-first knowledge management system. It supports multiple collections, on-device semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
 
 ## Architecture
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  macOS App   │  │   iOS App    │  │   Web App    │
-│  (SwiftUI)   │  │  (SwiftUI)   │  │  (Next.js)   │
-└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-       │                 │                 │
-       └────────────┬────┴────────┬────────┘
-                    │             │
-              ┌─────▼─────┐  ┌───▼────┐
-              │ REST API   │  │  CLI   │
-              │ (Backend)  │  │        │
-              └─────┬──────┘  └───┬────┘
-                    │             │
-              ┌─────▼─────────────▼─────┐
-              │      Core Library        │
-              │  (Markdown, Search, Git) │
-              └─────┬───────────────────┘
-                    │
-         ┌──────────┼──────────┐
-         │          │          │
-    ┌────▼───┐ ┌───▼────┐ ┌──▼───────┐
-    │ GitHub │ │ SQLite  │ │ Embeddings│
-    │ Repos  │ │ (meta)  │ │ (vector)  │
-    └────────┘ └────────┘ └──────────┘
+┌──────────────────────────┐  ┌──────────┐
+│   Universal App (SwiftUI) │  │   CLI    │
+│   macOS + iOS             │  │  (mn)    │
+└──────────┬───────────────┘  └────┬─────┘
+           │                       │
+     ┌─────▼───────────────────────▼─────┐
+     │         MahoNotesKit              │
+     │  (Markdown, Search, CRUD, Sync)   │
+     └──┬──────────┬──────────┬──────────┘
+        │          │          │
+   ┌────▼───┐ ┌───▼────┐ ┌──▼───────┐
+   │ iCloud  │ │ SQLite  │ │Embeddings│
+   │ / Git   │ │ (FTS+vec)│ │(on-device)│
+   └────────┘ └────────┘ └──────────┘
+
+Publishing (optional):
+   App → generates static HTML → pushes to user's GitHub repo → GitHub Pages
 ```
 
-## Repositories
+## Repositories (Our Instance)
 
 | Repo | Visibility | Content |
 |------|-----------|---------|
-| `kuochuanpan/maho-notes` | Public | App source code, CLI, web app, design docs |
-| `kuochuanpan/maho-vault` | Private | Actual note content (markdown files) |
+| `kuochuanpan/maho-notes` | Public | App source code, CLI, design docs (open source) |
+| `kuochuanpan/maho-vault` | Private | Our note content (other users create their own vault) |
 
 ## Data Model
 
@@ -218,66 +212,59 @@ mn index --collection japanese          # reindex one collection
 - CLI uses same model selection: `mn index --model bge-m3` or `mn index --model builtin`
 - Can also use MLX directly for BGE-M3 (faster on Apple Silicon than CoreML for large models)
 
-## Native Apps (SwiftUI)
+## Native App (Universal, SwiftUI)
 
-### Shared Codebase (macOS + iOS)
-- **MahoNotesKit** — Swift package, shared logic:
-  - Markdown parsing + rendering
-  - Git operations (via `libgit2` or shell)
-  - SQLite + vector search
-  - Collection/note CRUD
-- **MahoNotes-macOS** — macOS app target
-- **MahoNotes-iOS** — iOS app target
+One Xcode project, two targets (macOS + iOS), shared SwiftUI codebase.
 
-### macOS App
-- Sidebar: collections list
-- Middle pane: note list (within collection)
-- Main pane: markdown viewer / editor (split or toggle)
-- Toolbar: search, new note, sync, publish toggle
+### MahoNotesKit (Swift Package — Shared Logic)
+- Markdown parsing + rendering
+- iCloud sync (primary) + Git operations (optional, for CLI/publishing)
+- SQLite + FTS5 + sqlite-vec (vector search)
+- On-device embedding (CoreML / NLEmbedding)
+- Collection/note CRUD
+- Static site generator (for publishing)
+
+### macOS
+- `NavigationSplitView`: sidebar (collections) → note list → viewer/editor
+- Split-pane editor (markdown + live preview side by side)
 - Keyboard shortcuts: Cmd+N (new), Cmd+S (save), Cmd+F (search), Cmd+Shift+F (global search)
 
-### iOS App
-- Tab bar or sidebar navigation (collections)
-- Note list → tap to view
-- Edit button to toggle editor
+### iOS
+- Same `NavigationSplitView` (adapts to push navigation on iPhone)
+- Toggle between view/edit mode
 - Pull to sync
 - Share sheet for publishing
 
-### Editor
+### Editor (Shared)
 - Raw markdown editor with:
   - Syntax highlighting for markdown
   - Live preview (side-by-side on macOS, toggle on iOS)
   - Toolbar shortcuts (bold, italic, heading, link, image, code block)
   - Auto-save on pause
 
-## Web App (Next.js — Serverless)
+## Web (Published Sites via GitHub Pages)
 
-Deployed as serverless (Vercel or Cloudflare Pages). No dedicated server.
+No centralized web app. Publishing generates a static site deployed to the user's own GitHub Pages.
 
-### Architecture
-- **Static generation** for published notes (SSG at build time or ISR)
-- **Serverless functions** for API (search, edit, GitHub webhook)
-- **GitHub as backend** — reads markdown from repo via API or git
-- **Edge functions** for low-latency search (optional)
+### What the App Generates
+- Static HTML/CSS/JS from `public: true` notes
+- Deployed to user's GitHub repo → served by GitHub Pages
+- Clean theme with light/dark mode
 
-### Routes
+### Published Site Routes (per user)
 ```
-/                           → Dashboard (recent notes, collections)
-/c/:collection              → Collection view
-/c/:collection/:slug        → Note view
-/c/:collection/:slug/edit   → Note editor (authenticated)
-/search                     → Search page
-/public/:collection/:slug   → Published note (no auth, SSG)
-/api/search                 → Serverless search endpoint
-/api/notes                  → Serverless CRUD endpoint
+/                           → Index (list of published collections + notes)
+/c/:collection              → Collection page
+/c/:collection/:slug        → Published note
+/feed.xml                   → RSS feed
 ```
 
 ### Features
-- SSG for published notes (each user's own GitHub Pages)
-- GitHub OAuth for editing private vault (optional)
-- Monaco editor or CodeMirror for editing
-- Responsive (serves as mobile web fallback)
-- The web app itself can also be deployed by users as their publishing frontend
+- Beautiful rendering (syntax highlighting, KaTeX, Mermaid, furigana)
+- Responsive design
+- RSS feed, Open Graph meta tags
+- Custom domain support (user configures in GitHub Pages settings)
+- SEO-friendly static HTML
 
 ## Sync Strategy
 
@@ -366,47 +353,51 @@ mn publish --preview                # local preview before pushing
 
 ## Development Phases
 
-### Phase 1 — Foundation (MVP)
-- [ ] Vault directory structure + collections.yaml
-- [ ] CLI tool (`mn`) — new, edit, list, show, search (FTS only)
-- [ ] Git sync (pull/push)
-- [ ] Web app — read-only viewer with nice rendering
-- [ ] Populate initial Japanese notes from today's lessons
+### Phase 1 — Foundation (MVP) ← current
+- [x] Vault directory structure + collections.yaml
+- [x] CLI tool (`mn`) — new, list, show, search (basic text)
+- [x] Initial Japanese notes populated
+- [ ] CLI: edit, sync (git pull/push)
+- [ ] SQLite FTS5 index for faster search
 
-### Phase 2 — Search + Web Editor
-- [ ] SQLite FTS5 index
-- [ ] Vector embeddings + semantic search
-- [ ] Web app editor (authenticated)
-- [ ] Publishing (public notes as web pages)
-
-### Phase 3 — macOS Native App
-- [ ] SwiftUI app with sidebar + viewer
-- [ ] Local git operations
-- [ ] Markdown rendering (native + WKWebView hybrid)
+### Phase 2 — Universal App (macOS + iOS)
+- [ ] Xcode project with macOS + iOS targets
+- [ ] SwiftUI: NavigationSplitView (collections → notes → viewer)
+- [ ] Markdown rendering (swift-markdown + WKWebView for KaTeX/Mermaid)
 - [ ] Editor with live preview
+- [ ] iCloud sync (primary)
+- [ ] Local SQLite metadata + FTS5
 
-### Phase 4 — iOS App + iCloud Sync
-- [ ] Shared SwiftUI codebase adaptation (universal app)
-- [ ] iCloud Drive or CloudKit sync
-- [ ] Background sync
-- [ ] Share extension (save to vault from Safari etc.)
-- [ ] App Store submission
+### Phase 3 — Vector Search
+- [ ] On-device embedding (Apple NLEmbedding as default)
+- [ ] sqlite-vec integration
+- [ ] Downloadable model tiers (MiniLM → e5-small → BGE-M3)
+- [ ] Settings UI for model selection
+- [ ] Hybrid search (FTS5 + vector RRF)
 
-### Phase 5 — Polish
-- [ ] Furigana support
+### Phase 4 — Publishing
+- [ ] Static site generator in MahoNotesKit
+- [ ] GitHub OAuth + repo selection in app
+- [ ] Generate HTML with syntax highlighting, KaTeX, furigana
+- [ ] Push to user's GitHub repo → GitHub Pages
+- [ ] CLI: `mn publish`
+
+### Phase 5 — Polish + App Store
+- [ ] Furigana rendering (native + web)
 - [ ] Mermaid diagrams
-- [ ] RSS + Open Graph for published notes
-- [ ] Custom domain
+- [ ] RSS feed + Open Graph
+- [ ] Share extension (iOS)
 - [ ] Export (PDF, EPUB)
+- [ ] App Store submission
 
 ## Tech Stack Summary
 
 | Component | Technology |
 |-----------|-----------|
 | CLI | Swift (shares MahoNotesKit) |
-| Web App | Next.js 15 + React + Tailwind |
-| Native Apps | SwiftUI + MahoNotesKit (Swift Package) |
-| Shared Logic | MahoNotesKit — markdown, search, git, CRUD |
+| Native App | SwiftUI universal app (macOS + iOS, one project) |
+| Shared Logic | MahoNotesKit (Swift Package) — markdown, search, sync, CRUD |
+| Published Sites | Static HTML generated by app, hosted on user's GitHub Pages |
 | Markdown | remark/rehype (web), swift-markdown (native) |
 | Syntax Highlighting | Shiki (web), TreeSitter (native) |
 | Math | KaTeX (web), WKWebView + KaTeX (native) |
@@ -414,9 +405,9 @@ mn publish --preview                # local preview before pushing
 | Database | SQLite + FTS5 + sqlite-vec |
 | Embeddings | Tiered: Apple NLEmbedding (built-in) / MiniLM (90MB) / e5-small (470MB) / BGE-M3 (2.2GB) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
-| Git | SwiftGit2 (macOS/CLI) / GitHub REST API (iOS, optional) |
-| Auth | GitHub OAuth (web) |
-| Hosting | Vercel or Cloudflare Pages (serverless) |
+| Git | SwiftGit2 (CLI) / GitHub REST API (app, for publishing only) |
+| Auth | GitHub OAuth (for publishing) |
+| Hosting | GitHub Pages (user-owned, for published notes) |
 | Domain | notes.pcca.dev |
 
 ## Design Decisions
@@ -425,7 +416,7 @@ mn publish --preview                # local preview before pushing
 2. **Native app**: **Universal app** (one Xcode project, macOS + iOS targets, shared SwiftUI code)
 3. **Sync**: **iCloud** (default for app) + **GitHub** (optional, for CLI/power users/publishing)
 4. **Git on iOS**: GitHub REST API (optional); primary sync via iCloud
-5. **Web app**: **Serverless** (Vercel/Cloudflare Pages), no dedicated server
+5. **Publishing**: Static site generated by app, deployed to user's GitHub Pages (no centralized web app)
 6. **Vector search**: 100% on-device, user-selectable model per device (Apple NLEmbedding → BGE-M3), sqlite-vec for local queries
 7. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
 8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); all support 中英日
