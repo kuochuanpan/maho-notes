@@ -116,6 +116,7 @@ maho-vault/
 │   └── ...
 └── .maho/                     # Local metadata (gitignored)
     ├── index.db               # SQLite: metadata + FTS + vector embeddings
+    ├── publish-manifest.json  # Content hashes of published notes (for incremental publish)
     └── cache/                 # Rendered HTML cache
 ```
 
@@ -200,12 +201,14 @@ mn search --collection japanese "query"    # scoped search
 mn search --semantic "query" --limit 5     # top-K results
 
 # ── Publishing ────────────────────────────────────
-mn publish                            # generate + push all public:true notes to GitHub Pages
+mn publish                            # incremental: only regenerate + push changed notes
+mn publish --force                    # full rebuild (e.g., after theme change)
 mn publish <path>                     # set public:true + generate + push (one-step)
 mn unpublish <path>                   # set public:false + remove from published site
 mn publish --preview                  # local preview before push
 # Workflow: mn meta --set public=true (mark only) → mn publish (deploy later)
 # Or just: mn publish <path> (marks + deploys in one step)
+# Publishing is incremental by default — uses content hashes to detect changes.
 
 # ── Sync & Index ──────────────────────────────────
 mn sync                               # git pull + push + reindex
@@ -479,9 +482,25 @@ All platforms can publish. No git CLI needed on iOS — pure HTTP API.
 3. Enable GitHub Pages in repo settings (app guides the user)
 4. Optional: configure custom domain (e.g., `notes.alice.dev`)
 
+### Incremental Publishing
+Publishing is incremental by default. A **publish manifest** (`.maho/publish-manifest.json`) tracks the content hash (SHA-256) of each published note.
+
+On `mn publish`:
+1. Scan all `public: true` notes
+2. Compute content hash (frontmatter + body) for each
+3. Compare with manifest:
+   - **Hash changed** → regenerate HTML, include in commit
+   - **Hash unchanged** → skip
+   - **New `public: true`** → generate HTML
+   - **In manifest but now `public: false` or deleted** → remove HTML
+4. Single commit + push with all changes
+
+Use `mn publish --force` to regenerate all HTML (e.g., after a theme change).
+
 ### CLI
 ```bash
-mn publish                          # generate + push all public notes
+mn publish                          # incremental — only changed notes
+mn publish --force                  # full rebuild
 mn publish japanese/grammar/001-kunyomi-onyomi.md  # publish single note
 mn unpublish <path>                 # remove from published site
 mn publish --preview                # local preview before pushing
