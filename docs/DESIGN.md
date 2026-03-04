@@ -273,11 +273,11 @@ Deployed as serverless (Vercel or Cloudflare Pages). No dedicated server.
 ```
 
 ### Features
-- SSG for published notes (SEO, fast, free hosting)
-- GitHub OAuth for private notes
+- SSG for published notes (each user's own GitHub Pages)
+- GitHub OAuth for editing private vault (optional)
 - Monaco editor or CodeMirror for editing
 - Responsive (serves as mobile web fallback)
-- GitHub webhook: auto-rebuild on push to vault repo
+- The web app itself can also be deployed by users as their publishing frontend
 
 ## Sync Strategy
 
@@ -311,17 +311,58 @@ App must work standalone (App Store requirement). Git/GitHub is optional power-u
 
 ## Publishing
 
-### Flow
-1. Set `public: true` + `slug` in frontmatter
-2. `mn publish` or toggle in app
-3. Web app serves published notes at `/public/:collection/:slug`
-4. Optional: generate static HTML for hosting on GitHub Pages / Cloudflare Pages
+### Philosophy
+Maho Notes is a **tool, not a platform**. We don't host anyone's content.
+Each user publishes to their own GitHub Pages (or other static hosting).
 
-### Features
-- Custom domain support (e.g., `notes.pcca.dev`)
-- RSS feed for published notes
+### Architecture
+```
+User's App                    User's GitHub
+┌──────────┐    generate     ┌─────────────────┐    GitHub Pages
+│ Markdown │ ──────────────→ │ user/my-notes    │ ──────────────→ user.github.io/my-notes
+│ (public) │   static HTML   │ (public repo)    │                 or custom domain
+└──────────┘                 └─────────────────┘
+```
+
+### Flow
+1. User connects their GitHub account (OAuth) in app Settings
+2. User creates/selects a GitHub repo for publishing (e.g., `user/my-notes`)
+3. Mark notes as `public: true` + set `slug` in frontmatter
+4. Tap "Publish" → app generates static HTML + pushes to user's repo
+5. GitHub Pages serves the site automatically
+
+### What Gets Published
+- Only notes with `public: true` in frontmatter
+- Static HTML with beautiful rendering (syntax highlighting, KaTeX, furigana)
+- Auto-generated index page, collection pages, RSS feed
+- User's private notes never leave their device/iCloud
+
+### User Setup (One-Time)
+1. In app: Settings → Publishing → Connect GitHub
+2. Create or select a repo (app can create it for the user)
+3. Enable GitHub Pages in repo settings (app guides the user)
+4. Optional: configure custom domain (e.g., `notes.alice.dev`)
+
+### CLI
+```bash
+mn publish                          # generate + push all public notes
+mn publish japanese/grammar/001-kunyomi-onyomi.md  # publish single note
+mn unpublish <path>                 # remove from published site
+mn publish --preview                # local preview before pushing
+```
+
+### Static Site Features
+- Clean, responsive theme (light/dark mode)
+- Syntax highlighting, KaTeX math, Mermaid diagrams, furigana
+- Collection-based navigation
+- RSS feed
 - Open Graph meta tags for social sharing
 - Reading time estimate
+- Customizable theme (future: user-selectable themes)
+
+### Our Instance
+- `notes.pcca.dev` → Kuo-Chuan's personal published notes (our own GitHub Pages)
+- Not a shared platform — just our own deployment of the same tool
 
 ## Development Phases
 
@@ -390,6 +431,7 @@ App must work standalone (App Store requirement). Git/GitHub is optional power-u
 8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); all support 中英日
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
+11. **Publishing**: User-owned — each user publishes to their own GitHub Pages, we don't host content
 
 ---
 
