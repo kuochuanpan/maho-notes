@@ -230,15 +230,18 @@ mn batch < commands.jsonl             # batch execute from JSONL
 
 | Tier | Model | Size | Dim | Quality | Platforms |
 |------|-------|------|-----|---------|-----------|
-| 🟢 Built-in | Apple NLEmbedding | 0 MB | varies | Basic | All (iOS 17+, macOS 14+) |
+| 🟢 Built-in | Apple NLEmbedding | 0 MB | varies | Basic (⚠️ CJK quality limited) | All (iOS 17+, macOS 14+) |
 | 🟡 Light | all-MiniLM-L6-v2 (multilingual) | ~90 MB | 384 | Good | All |
 | 🟠 Standard | multilingual-e5-small | ~470 MB | 384 | Better | All |
 | 🔴 Pro | BGE-M3 | ~2.2 GB | 1024 | Best | Mac recommended |
 
-- **Default**: Apple NLEmbedding (zero download, works immediately)
+- **Default**: Apple NLEmbedding (zero download, works immediately; note: CJK quality is limited — for serious multilingual search, recommend Light tier or above)
 - **Optional**: User downloads preferred model in Settings → Search → Embedding Model
 - **Per-device choice**: iPhone can use Light, Mac can use Pro — independent
-- Models distributed as CoreML packages (downloadable from app or bundled)
+- Models distributed as CoreML packages via:
+  - **On-Demand Resources (ODR)** for App Store builds (Apple-managed CDN, lazy download)
+  - **Direct download** from GitHub Releases for CLI / sideloaded builds
+  - App prompts user before downloading; shows model size + expected quality improvement
 
 ### Embedding Pipeline (Per Device)
 1. Note created/updated → markdown syncs to device via iCloud/GitHub
@@ -385,6 +388,8 @@ Real-world example (our setup):
   5. Resolving deletes the `.conflict-*` file
   - iCloud layer: hook into `NSFileVersion` to detect iCloud-level conflicts
   - GitHub layer: detect diverged commits on pull
+  - **Rejected push (non-fast-forward)**: pull first → if conflict, split into two versions → then push. Never force push.
+  - **iCloud ↔ GitHub ordering**: iCloud settles first (local), then GitHub sync runs against the settled local state. GitHub sync is debounced (30s) to avoid racing with iCloud.
   - **No auto-merge** — markdown content is hard to merge safely
   - **No lock mechanism** — too complex, doesn't work offline
 - **What syncs**: Only markdown files + collections.yaml + assets
@@ -532,7 +537,7 @@ mn publish --preview                # local preview before pushing
 | Database | SQLite + FTS5 + sqlite-vec |
 | Embeddings | Tiered: Apple NLEmbedding (built-in) / MiniLM (90MB) / e5-small (470MB) / BGE-M3 (2.2GB) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
-| Git | SwiftGit2 (CLI) / GitHub REST API (iOS + macOS app, for publishing) |
+| Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
 | Auth | GitHub OAuth via `ASWebAuthenticationSession` (iOS/macOS) / `gh auth` (CLI) |
 | Hosting | GitHub Pages (user-owned, for published notes) |
 | Domain | notes.pcca.dev |
