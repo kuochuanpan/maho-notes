@@ -102,6 +102,34 @@ public struct GitSync: Sendable {
             try setRemoteURL(repo: repo, token: token)
             try runGit(["add", "-A"], in: vaultPath, label: "stage")
             let _ = try? commitIfNeeded(message: "Initial commit")
+
+            // Check if remote has existing commits (common when connecting to an existing repo)
+            let env = gitEnv(token: token)
+            _ = try? runGit(["fetch", "origin"], in: vaultPath, label: "fetch", env: env)
+            let remoteHasCommits = (try? runGit(["rev-parse", "origin/main"], in: vaultPath, label: "check remote")) != nil
+                || (try? runGit(["rev-parse", "origin/master"], in: vaultPath, label: "check remote")) != nil
+
+            if remoteHasCommits {
+                // Remote has history — merge with --allow-unrelated-histories
+                let branch = (try? currentBranch()) ?? "main"
+                let remoteBranch = "origin/\(branch)"
+                do {
+                    try runGit(["pull", "--no-rebase", "--allow-unrelated-histories", remoteBranch.replacingOccurrences(of: "origin/", with: ""), "--verbose"],
+                              in: vaultPath, label: "pull --allow-unrelated-histories", env: env)
+                } catch {
+                    // If pull fails (unrelated histories merge conflict), try explicit merge
+                    _ = try? runGit(["merge", "--allow-unrelated-histories", remoteBranch, "-m", "Merge remote vault with local"],
+                                   in: vaultPath, label: "merge unrelated", env: env)
+                    // If merge has conflicts, resolve them
+                    let conflicts = try resolveConflicts()
+                    if !conflicts.isEmpty {
+                        try pushWithRetry(token: token)
+                        return SyncResult(pushed: true, conflictFiles: conflicts,
+                                        message: "Merged local vault with remote \(repo). Conflicts saved as .conflict-* files.")
+                    }
+                }
+            }
+
             try pushWithRetry(token: token)
             return SyncResult(pushed: true, message: "Initialized git repo and pushed to \(repo)")
         }
@@ -177,22 +205,24 @@ public struct GitSync: Sendable {
 
     // MARK: - Pull with Conflict Handling
 
-    /// Pull with rebase, falling back to merge, handling conflicts
+    /// Pull with rebase, falling back to merge (with unrelated histories), handling conflicts
     private func pullWithConflictHandling(token: AuthToken) throws -> [String] {
         let env = gitEnv(token: token)
+        let branch = try currentBranch()
 
         // Try rebase first
         do {
-            try runGit(["pull", "--rebase", "origin", currentBranch()], in: vaultPath, label: "pull --rebase", env: env)
+            try runGit(["pull", "--rebase", "origin", branch], in: vaultPath, label: "pull --rebase", env: env)
             return []
         } catch {
             // Rebase conflict — abort and try merge
             _ = try? runGit(["rebase", "--abort"], in: vaultPath, label: "rebase --abort")
         }
 
-        // Fallback: merge
+        // Fallback: merge (with --allow-unrelated-histories for first-run scenarios)
         do {
-            try runGit(["pull", "--no-rebase", "origin", currentBranch()], in: vaultPath, label: "pull --no-rebase", env: env)
+            try runGit(["pull", "--no-rebase", "--allow-unrelated-histories", "origin", branch],
+                      in: vaultPath, label: "pull --no-rebase", env: env)
             return []
         } catch {
             // Merge conflict — resolve by splitting
@@ -270,15 +300,16 @@ public struct GitSync: Sendable {
 
     private func pushWithRetry(token: AuthToken) throws {
         let env = gitEnv(token: token)
+        let branch = try currentBranch()
         do {
-            try runGit(["push", "-u", "origin", currentBranch()], in: vaultPath, label: "push", env: env)
+            try runGit(["push", "-u", "origin", branch], in: vaultPath, label: "push", env: env)
         } catch let error as GitError {
             // Check for non-fast-forward
             if case .commandFailed(_, let output) = error,
                output.contains("non-fast-forward") || output.contains("rejected") || output.contains("fetch first") {
-                // Pull and retry
+                // Pull (with unrelated histories support) and retry
                 let _ = try pullWithConflictHandling(token: token)
-                try runGit(["push", "-u", "origin", currentBranch()], in: vaultPath, label: "push retry", env: env)
+                try runGit(["push", "-u", "origin", branch], in: vaultPath, label: "push retry", env: env)
             } else {
                 throw error
             }
@@ -430,7 +461,7 @@ public enum SyncError: Error, CustomStringConvertible {
         case .repoNotConfigured:
             return """
                 GitHub repository not configured. Set it with:
-                  mn config --set github.repo <owner/repo>
+                  mn config set github.repo <owner/repo>
                 """
         case .invalidVault(let message):
             return message
