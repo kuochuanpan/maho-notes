@@ -301,25 +301,28 @@ mn index --collection japanese          # reindex one collection
 
 | Component | Technology |
 |-----------|-----------|
-| CLI | TypeScript (Bun) or Swift |
+| CLI | Swift (shares MahoNotesKit) |
 | Web App | Next.js 15 + React + Tailwind |
-| Native Apps | SwiftUI + MahoNotesKit |
+| Native Apps | SwiftUI + MahoNotesKit (Swift Package) |
+| Shared Logic | MahoNotesKit — markdown, search, git, CRUD |
 | Markdown | remark/rehype (web), swift-markdown (native) |
-| Syntax Highlighting | Shiki (web), Highlight.js or TreeSitter (native) |
-| Math | KaTeX |
+| Syntax Highlighting | Shiki (web), TreeSitter (native) |
+| Math | KaTeX (web), WKWebView + KaTeX (native) |
+| Furigana | `{漢字|かんじ}` → `<ruby>` (web) / AttributedString (native) |
 | Database | SQLite + FTS5 + sqlite-vec |
-| Embeddings | nomic-embed-text (local, via mlx) |
-| Git | libgit2 (native) / isomorphic-git (web) / git CLI |
+| Embeddings | BGE-M3 (1024d, multilingual 中英日, local via MLX) |
+| Git | SwiftGit2 (macOS/CLI) / GitHub REST API (iOS) |
 | Auth | GitHub OAuth (web) |
 | Hosting | Cloudflare Pages or Vercel |
+| Domain | notes.pcca.dev |
 
-## Open Questions
+## Design Decisions
 
-1. **CLI language**: TypeScript (Bun) for consistency with web, or Swift for consistency with native apps?
-2. **Git on iOS**: libgit2 vs isomorphic-git vs manual HTTPS API?
-3. **Furigana syntax**: Use `{漢字|かんじ}` custom syntax or standard HTML ruby?
-4. **Embedding model**: nomic-embed-text (768d) vs all-MiniLM-L6-v2 (384d) vs multilingual model?
-5. **Domain**: `notes.pcca.dev`? `kb.pcca.dev`?
+1. **CLI language**: **Swift** — shared codebase with native apps via MahoNotesKit Swift Package
+2. **Git on iOS**: SwiftGit2 (libgit2) for macOS/CLI; GitHub REST API fallback for iOS
+3. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
+4. **Embedding model**: **BGE-M3** (1024d, ~2.2GB) — best multilingual (中英日) support, runs locally on Mac mini via MLX
+5. **Domain**: `notes.pcca.dev`
 
 ---
 
