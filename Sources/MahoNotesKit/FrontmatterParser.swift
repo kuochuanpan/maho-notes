@@ -3,7 +3,7 @@ import Yams
 
 /// Splits a markdown file into (YAML frontmatter string, body content).
 /// Returns nil for frontmatter if no valid `---` delimiters are found.
-func splitFrontmatter(_ content: String) -> (yaml: String?, body: String) {
+public func splitFrontmatter(_ content: String) -> (yaml: String?, body: String) {
     guard content.hasPrefix("---") else {
         return (nil, content)
     }

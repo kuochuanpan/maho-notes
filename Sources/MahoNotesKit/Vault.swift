@@ -128,7 +128,7 @@ public struct Vault: Sendable {
 
 // MARK: - Helpers
 
-func makeSlug(from title: String) -> String {
+public func makeSlug(from title: String) -> String {
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
     return title
         .lowercased()
@@ -140,7 +140,7 @@ func makeSlug(from title: String) -> String {
         .joined()
 }
 
-func nextFileNumber(in directory: String) throws -> Int {
+public func nextFileNumber(in directory: String) throws -> Int {
     let fm = FileManager.default
     guard fm.fileExists(atPath: directory) else { return 1 }
     let contents = try fm.contentsOfDirectory(atPath: directory)
