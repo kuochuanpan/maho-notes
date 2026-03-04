@@ -371,10 +371,18 @@ Real-world example (our setup):
 #### GitHub Sync Behavior (When Enabled)
 - **Auto push**: On note save, debounced (e.g., 30s after last edit)
 - **Auto pull**: On app launch + periodic (e.g., every 5 min) + pull-to-refresh
-- **Conflict resolution**: 
-  - Same file edited on both sides → keep both versions (`.conflict` suffix)
-  - Notify user to resolve manually
-  - iCloud conflicts use NSFileVersion (automatic)
+- **Conflict resolution** (simple: split + manual resolve):
+  1. Detect: on sync, compare `updated` timestamp + content hash
+  2. If both sides changed same file → keep both versions:
+     - `note.md` ← newer version
+     - `note.conflict-{timestamp}-{source}.md` ← older version
+  3. App shows ⚠️ badge on conflicted notes
+  4. User opens → side-by-side diff view → pick one or merge manually
+  5. Resolving deletes the `.conflict-*` file
+  - iCloud layer: hook into `NSFileVersion` to detect iCloud-level conflicts
+  - GitHub layer: detect diverged commits on pull
+  - **No auto-merge** — markdown content is hard to merge safely
+  - **No lock mechanism** — too complex, doesn't work offline
 - **What syncs**: Only markdown files + collections.yaml + assets
 - **What doesn't sync**: `.maho/` (local DB, embeddings, cache)
 
