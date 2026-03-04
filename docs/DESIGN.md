@@ -282,8 +282,11 @@ One Xcode project, shared SwiftUI codebase. Supports **macOS**, **iOS**, and **i
 | **iPhone** | Single-column push navigation | Compact UI, toggle view/edit |
 
 ### macOS
-- Split-pane editor (markdown + live preview side by side)
-- Keyboard shortcuts: Cmd+N (new), Cmd+S (save), Cmd+F (search), Cmd+Shift+F (global search)
+- Editor view modes (toggle via toolbar or shortcut):
+  - **Preview only** — 閱讀模式，純渲染（預設）
+  - **Editor only** — 純 markdown 編輯
+  - **Split view** — 左 markdown / 右 live preview（side by side）
+- Keyboard shortcuts: Cmd+N (new), Cmd+S (save), Cmd+F (search), Cmd+Shift+F (global search), Cmd+E (toggle edit mode)
 
 ### iPadOS
 - Split view like macOS (landscape) / push navigation (portrait)
