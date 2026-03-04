@@ -10,6 +10,7 @@ struct MetaCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Relative path to the note")
     var path: String
@@ -95,6 +96,13 @@ struct MetaCommand: ParsableCommand {
             let newContent = "---\n\(newYaml)---\(body)"
             try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
             print("Updated frontmatter for: \(path)")
+        } else if outputOption.json {
+            // Parse as Note for structured JSON output
+            let note = try parseNote(at: filePath, relativeTo: vault.path)
+            if let note {
+                try printJSON(note)
+            }
+            return
         } else {
             // Just show frontmatter
             for (key, value) in yaml.sorted(by: { $0.key < $1.key }) {

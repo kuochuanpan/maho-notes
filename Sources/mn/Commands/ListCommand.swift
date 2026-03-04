@@ -8,6 +8,7 @@ struct ListCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Option(name: .long, help: "Filter by collection id")
     var collection: String?
@@ -19,6 +20,11 @@ struct ListCommand: ParsableCommand {
         let vault = vaultOption.makeVault()
         let collections = try vault.collections()
         let notes = try vault.listNotes(collection: collection, tag: tag)
+
+        if outputOption.json {
+            try printJSON(notes)
+            return
+        }
 
         if notes.isEmpty {
             print("No notes found.")
@@ -51,7 +57,7 @@ struct ListCommand: ParsableCommand {
         let knownIds = Set(collections.map(\.id))
         let uncategorized = grouped.filter { !knownIds.contains($0.key) }
         for (collId, collNotes) in uncategorized {
-            print("📁 \(collId)")
+            print("? \(collId)")
             print(String(repeating: "─", count: 40))
             for note in collNotes {
                 let tags = note.tags.isEmpty ? "" : " [\(note.tags.joined(separator: ", "))]"

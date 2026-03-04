@@ -8,6 +8,7 @@ struct SearchCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Search query")
     var query: String
@@ -15,6 +16,11 @@ struct SearchCommand: ParsableCommand {
     func run() throws {
         let vault = vaultOption.makeVault()
         let results = try vault.searchNotes(query: query)
+
+        if outputOption.json {
+            try printJSON(results)
+            return
+        }
 
         if results.isEmpty {
             print("No results for: \(query)")

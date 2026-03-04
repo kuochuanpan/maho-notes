@@ -8,6 +8,7 @@ struct NewCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Note title")
     var title: String
@@ -35,6 +36,10 @@ struct NewCommand: ParsableCommand {
             tags: tagList,
             author: author
         )
+        if outputOption.json {
+            try printJSON(["path": relPath])
+            return
+        }
         print("Created: \(relPath)")
     }
 }

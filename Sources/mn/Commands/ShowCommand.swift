@@ -8,6 +8,7 @@ struct ShowCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Relative path to the note (e.g., japanese/grammar/001-kunyomi-onyomi.md)")
     var path: String
@@ -17,6 +18,11 @@ struct ShowCommand: ParsableCommand {
         guard let note = try vault.showNote(relativePath: path) else {
             print("Note not found: \(path)")
             throw ExitCode.failure
+        }
+
+        if outputOption.json {
+            try printJSON(note)
+            return
         }
 
         // Print metadata header

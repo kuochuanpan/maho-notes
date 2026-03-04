@@ -2,7 +2,7 @@ import Foundation
 import Yams
 
 /// A collection definition from collections.yaml
-public struct Collection: Sendable {
+public struct Collection: Sendable, Codable {
     public let id: String
     public let name: String
     public let icon: String
