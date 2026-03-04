@@ -669,26 +669,32 @@ mn publish --preview                # local preview before pushing
 
 ## Development Phases
 
-### Phase 1a — CLI Core ← current
+### Phase 1a — CLI Core ✅ complete
 Local CRUD fully functional. No network, no database.
 - [x] Vault directory structure + collections.yaml
 - [x] CLI (`mn`): new, list, show, search (basic grep)
 - [x] Initial Japanese notes populated (7 notes)
-- [ ] **Migration**: Remove `collection` field from existing note frontmatter (infer from path)
-- [ ] **Migration**: Update `collections.yaml` icons from emoji to SF Symbols
-- [ ] **Migration**: Update `Note` model + `Vault` — collection inferred from `relativePath`, not frontmatter
-- [ ] **Migration**: Remove `SyncCommand` from registered subcommands (sync is Phase 1c; keep source files for later)
-- [ ] **Migration**: Add `_index.md` to existing collection directories (japanese/, astronomy/, etc.)
-- [ ] CLI: `mn init` (create vault + `maho.yaml` + `collections.yaml` + `getting-started/` + `.maho/`)
-- [ ] CLI: open, delete
-- [ ] CLI: meta (frontmatter manipulation)
-- [ ] CLI: config (vault-level `maho.yaml` + device-level `.maho/config.yaml`)
-- [ ] CLI: collections, stats (including series)
-- [ ] CLI: `--json` output for all commands (`Note` + `Collection` conform to `Codable`)
-- [ ] Nested directory support (unlimited depth within collections)
-- [ ] Vault location auto-detection (iCloud container on macOS, `~/maho-vault` fallback)
-- [ ] Unit tests: `FrontmatterParser`, `makeSlug`, `nextFileNumber`, `Vault` CRUD
-- [ ] OpenClaw skill (`maho-notes`) for agent guardrails
+- [x] **Migration**: Remove `collection` field from existing note frontmatter (infer from path)
+- [x] **Migration**: Update `collections.yaml` icons from emoji to SF Symbols
+- [x] **Migration**: Update `Note` model + `Vault` — collection inferred from `relativePath`, not frontmatter
+- [x] **Migration**: Remove `SyncCommand` from registered subcommands (sync is Phase 1c; keep source files for later)
+- [x] **Migration**: Add `_index.md` to existing collection directories (japanese/, astronomy/, etc.)
+- [x] CLI: `mn init` (create vault + `maho.yaml` + `collections.yaml` + `getting-started/` + `.maho/`)
+- [x] CLI: open, delete
+- [x] CLI: meta (frontmatter manipulation — key whitelist, blocked keys, public=true warning)
+- [x] CLI: config (vault-level `maho.yaml` + device-level `.maho/config.yaml` — key validation)
+- [x] CLI: collections, stats (including series)
+- [x] CLI: `--json` output for all commands (`Note` + `Collection` conform to `Codable`)
+- [x] CLI: `mn show --body-only` (pipe-friendly body output)
+- [x] CLI: `mn list --list-collections`, `--list-tags`, `--list-series` (discovery flags)
+- [x] Nested directory support (unlimited depth within collections)
+- [x] Vault location auto-detection (iCloud container on macOS, `~/maho-vault` fallback)
+- [x] Friendly error when vault not found (actionable suggestions)
+- [x] Collection auto-discovery from filesystem (undeclared dirs with .md files, 📁 default icon)
+- [x] CLI emoji fallback for SF Symbols icons (JSON preserves raw SF Symbol names)
+- [x] Unit tests: 42 tests in 8 suites (FrontmatterParser, makeSlug, nextFileNumber, Note, Collection, Vault CRUD, Config Validation, Collection Discovery)
+- [x] GitHub Actions CI (swift build + swift test on macOS 15)
+- [x] OpenClaw skill (`maho-notes`) for agent guardrails
 
 ### Phase 1b — Full-Text Search
 - [ ] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency
