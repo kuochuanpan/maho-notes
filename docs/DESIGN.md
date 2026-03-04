@@ -186,7 +186,6 @@ mn list --series "日語基礎"            # filter by series
 # ── Write & Edit ──────────────────────────────────
 mn write <path> --content "..."       # overwrite body (preserves frontmatter, updates timestamp)
 mn write <path> --file input.md       # overwrite body from file
-mn edit <path> --find "old" --replace "new"  # surgical find/replace in body
 mn open <path>                        # open in $EDITOR (human use, macOS/Linux)
 
 # ── Metadata ──────────────────────────────────────
@@ -229,7 +228,7 @@ mn stats                              # note count, word count, per-collection s
 | Modify metadata | `mn meta` | Validates fields, prevents accidental `public: true` |
 | Delete / Publish | `mn delete` / `mn publish` | Safety confirmation |
 | Read content | Direct file read or `mn show` | No risk, either is fine |
-| Write / edit body | Direct file edit or `mn write` / `mn edit` | Fine as long as frontmatter block (`---`) is untouched |
+| Write / edit body | Direct file edit or `mn write` | Fine as long as frontmatter block (`---`) is untouched |
 | Search | `mn search` | FTS5 / vector index |
 
 ```bash
@@ -506,7 +505,7 @@ mn publish --preview                # local preview before pushing
 - [x] Vault directory structure + collections.yaml
 - [x] CLI (`mn`): new, list, show, search (basic text)
 - [x] Initial Japanese notes populated (7 notes)
-- [ ] CLI: write, edit (find/replace), open, delete
+- [ ] CLI: write, open, delete
 - [ ] CLI: meta (frontmatter manipulation)
 - [ ] CLI: sync (git pull/push)
 - [ ] CLI: --json output
