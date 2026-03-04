@@ -746,8 +746,50 @@ Local CRUD fully functional. No network, no database.
 - [x] Auto-index: `SearchIndex.indexExists()` detection for auto-build on first search
 
 ### Phase 1c — GitHub Sync
-- [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
-- [ ] `mn sync` (git pull + push, first-run auto clone)
+
+#### Auth (`mn config auth`)
+- [ ] `mn config auth` — read `$GITHUB_TOKEN` env var → fallback `gh auth token` → store in `.maho/config.yaml`
+- [ ] `mn config auth --status` — show current auth state (token source, validity)
+- [ ] Token stored device-level only (`.maho/config.yaml`), never synced to GitHub
+- [ ] Clear error when no token found (guides user to set `$GITHUB_TOKEN` or install `gh`)
+
+#### Sync (`mn sync`)
+- [ ] Re-register `SyncCommand` in `MahoNotes.swift` subcommands
+- [ ] Pre-flight checks: auth configured + `github.repo` set → clear errors if missing
+- [ ] Normal sync: `git pull --rebase` → `git add -A` → `git commit` → `git push`
+- [ ] First-run auto clone: detect empty/non-git vault + `github.repo` configured → `git clone` into vault path
+- [ ] Existing vault, no remote: `git remote add origin` from `github.repo` config
+- [ ] `mn sync --reindex` — rebuild FTS index after sync (call `SearchIndex.rebuildIndex()`)
+- [ ] Auth token injection: use stored token for HTTPS remote (set `GIT_ASKPASS` or URL-embed token)
+
+#### Conflict Handling (minimal for CLI)
+- [ ] Detect rebase conflict → `git rebase --abort`
+- [ ] Fallback to `git pull --no-rebase` (merge)
+- [ ] If merge conflict: save local version as `<note>.conflict-<timestamp>-local.md`, accept remote
+- [ ] Print clear message listing conflicted files + `.conflict-*` paths
+- [ ] Side-by-side diff view deferred to Phase 2 app
+
+#### Rejected Push (non-fast-forward)
+- [ ] Detect non-fast-forward push failure → auto `git pull` → retry push
+- [ ] If pull causes conflict → apply conflict handling above
+
+#### `.gitignore`
+- [ ] Ensure `mn init` writes `.gitignore` with `.maho/` entry (DB, embeddings, auth, cache)
+- [ ] `mn sync` first-run: verify `.gitignore` exists, add `.maho/` if missing
+
+#### Tests
+- [ ] Auth: reads `$GITHUB_TOKEN` env var correctly
+- [ ] Auth: falls back to `gh auth token` when env var absent
+- [ ] Auth: `--status` shows token source and masked value
+- [ ] Auth: clear error message when no token available
+- [ ] Sync: normal pull + commit + push flow (mock git)
+- [ ] Sync: first-run clone when vault is empty + repo configured
+- [ ] Sync: `--reindex` triggers FTS index rebuild after sync
+- [ ] Sync: error when auth not configured
+- [ ] Sync: error when `github.repo` not set
+- [ ] Conflict: rebase conflict → abort → merge fallback → `.conflict-*` file created
+- [ ] Conflict: non-fast-forward push → auto pull → retry
+- [ ] `.gitignore`: `.maho/` entry present after init and first sync
 
 ### Phase 2 — Universal App (macOS + iPadOS + iOS)
 - [ ] Xcode project with macOS + iOS targets (universal app)
