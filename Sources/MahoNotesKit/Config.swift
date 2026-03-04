@@ -35,7 +35,31 @@ public struct Config: Sendable {
         return (try Yams.load(yaml: content) as? [String: Any]) ?? [:]
     }
 
+    /// Valid leaf keys that can be set via `mn config --set`
+    private static let validKeys: Set<String> = [
+        "author.name", "author.url",
+        "github.repo",
+        "site.domain", "site.title", "site.theme",
+        "embed.model",
+    ]
+
+    /// Section keys (groups, not leaf values)
+    private static let sectionKeys: Set<String> = [
+        "author", "github", "site", "embed",
+    ]
+
     public func setValue(key: String, value: String) throws {
+        // Block setting a section key directly (e.g., `mn config --set author maho`)
+        if Self.sectionKeys.contains(key) {
+            let children = Self.validKeys.filter { $0.hasPrefix("\(key).") }.sorted()
+            throw ConfigError.sectionNotSettable(key: key, validChildren: children)
+        }
+
+        // Validate the key is known
+        guard Self.validKeys.contains(key) else {
+            throw ConfigError.unknownKey(key: key, validKeys: Self.validKeys.sorted())
+        }
+
         let topKey = key.split(separator: ".").first.map(String.init) ?? key
         let isDevice = Self.deviceKeys.contains(topKey)
 
@@ -49,6 +73,22 @@ public struct Config: Sendable {
             var config = try loadVaultConfig()
             setNestedValue(&config, keyPath: key, value: value)
             try Yams.dump(object: config).write(toFile: mahoYamlPath, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
+public enum ConfigError: Error, CustomStringConvertible {
+    case sectionNotSettable(key: String, validChildren: [String])
+    case unknownKey(key: String, validKeys: [String])
+
+    public var description: String {
+        switch self {
+        case let .sectionNotSettable(key, children):
+            let list = children.map { "  \($0)" }.joined(separator: "\n")
+            return "'\(key)' is a section, not a value. Set its fields instead:\n\(list)"
+        case let .unknownKey(key, validKeys):
+            let list = validKeys.joined(separator: ", ")
+            return "Unknown config key '\(key)'. Valid keys: \(list)"
         }
     }
 }
