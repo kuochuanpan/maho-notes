@@ -86,6 +86,14 @@ Content here...
 ```
 maho-vault/
 ├── collections.yaml          # Collection definitions
+├── getting-started/           # Tutorial collection (auto-generated on first vault creation)
+│   ├── _index.md             # Welcome to Maho Notes
+│   ├── 001-your-first-note.md
+│   ├── 002-collections.md
+│   ├── 003-markdown-features.md  # Math, Mermaid, furigana, callouts
+│   ├── 004-search.md
+│   ├── 005-sync-and-github.md
+│   └── 006-publishing.md
 ├── japanese/                  # Collection: 日本語
 │   ├── _index.md             # Collection overview
 │   ├── vocabulary/
@@ -113,7 +121,7 @@ maho-vault/
 
 ### collections.yaml
 
-Collections are **entirely user-defined**. The app ships with no hardcoded collections — a fresh vault starts empty, and users create their own via the app UI or by editing `collections.yaml` directly. The following is just an example:
+Collections are **entirely user-defined**. The app ships with no hardcoded collections — when a fresh vault is created, it includes a `getting-started` tutorial collection with a few example notes (usage, markdown features, sync & GitHub, publishing, etc.). These are real markdown files that users can edit or delete. Beyond that, users create their own collections via the app UI or by editing `collections.yaml` directly. The following is just an example:
 
 ```yaml
 # Example — each user's vault has its own collections.yaml
