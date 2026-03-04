@@ -13,6 +13,9 @@ struct ShowCommand: ParsableCommand {
     @Argument(help: "Relative path to the note (e.g., japanese/grammar/001-kunyomi-onyomi.md)")
     var path: String
 
+    @Flag(name: .long, help: "Print body content only (no frontmatter/metadata, for piping)")
+    var bodyOnly = false
+
     func run() throws {
         try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
@@ -23,6 +26,11 @@ struct ShowCommand: ParsableCommand {
 
         if outputOption.json {
             try printJSON(note)
+            return
+        }
+
+        if bodyOnly {
+            print(note.body)
             return
         }
 
