@@ -14,6 +14,32 @@ public struct Collection: Sendable, Codable {
         self.icon = icon
         self.description = description
     }
+
+    /// Emoji fallback for CLI display (SF Symbols can't render in terminal)
+    public var cliIcon: String {
+        Self.sfSymbolToEmoji[icon] ?? "📁"
+    }
+
+    private static let sfSymbolToEmoji: [String: String] = [
+        "character.book.closed": "📖",
+        "sparkles": "✨",
+        "terminal": "💻",
+        "wrench.and.screwdriver": "🔧",
+        "questionmark.circle": "❓",
+        "book.closed": "📕",
+        "star": "⭐",
+        "folder": "📁",
+        "doc.text": "📄",
+        "globe": "🌐",
+        "music.note": "🎵",
+        "photo": "🖼️",
+        "gamecontroller": "🎮",
+        "heart": "❤️",
+        "lightbulb": "💡",
+        "graduationcap": "🎓",
+        "flask": "🧪",
+        "atom": "⚛️",
+    ]
 }
 
 /// Parses collections.yaml from the vault root

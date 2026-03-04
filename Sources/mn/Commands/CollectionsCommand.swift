@@ -43,7 +43,7 @@ struct CollectionsCommand: ParsableCommand {
             let collNotes = notes.filter { $0.relativePath.hasPrefix(coll.id + "/") }
             let count = collNotes.count
 
-            print("\(coll.icon)  \(coll.name) (\(coll.id)) — \(count) note\(count == 1 ? "" : "s")")
+            print("\(coll.cliIcon) \(coll.name) (\(coll.id)) — \(count) note\(count == 1 ? "" : "s")")
             print("   \(coll.description)")
 
             let seriesNames = Set(collNotes.compactMap(\.series))
