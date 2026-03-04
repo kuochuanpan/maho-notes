@@ -30,6 +30,16 @@ func splitFrontmatter(_ content: String) -> (yaml: String?, body: String) {
     return (yamlStr, body)
 }
 
+private func formatDateField(_ value: Any?) -> String {
+    guard let value else { return "" }
+    if let date = value as? Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+    return "\(value)"
+}
+
 /// Parses a markdown file at the given path into a Note
 public func parseNote(at filePath: String, relativeTo vaultPath: String) throws -> Note? {
     let content = try String(contentsOfFile: filePath, encoding: .utf8)
@@ -66,8 +76,8 @@ public func parseNote(at filePath: String, relativeTo vaultPath: String) throws 
         title: title,
         collection: collection,
         tags: tags,
-        created: yaml["created"].map { "\($0)" } ?? "",
-        updated: yaml["updated"].map { "\($0)" } ?? "",
+        created: formatDateField(yaml["created"]),
+        updated: formatDateField(yaml["updated"]),
         isPublic: yaml["public"] as? Bool ?? false,
         slug: yaml["slug"] as? String,
         author: yaml["author"] as? String,

@@ -97,7 +97,9 @@ public struct Vault: Sendable {
         let filename = String(format: "%03d-%@.md", nextNum, slug)
         let filePath = (collectionDir as NSString).appendingPathComponent(filename)
 
-        let now = ISO8601DateFormatter().string(from: Date())
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
+        let now = dateFormatter.string(from: Date())
         let tagsYaml = tags.isEmpty ? "[]" : "[\(tags.joined(separator: ", "))]"
 
         let content = """
