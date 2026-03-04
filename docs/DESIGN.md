@@ -935,16 +935,32 @@ Local CRUD fully functional. No network, no database.
 - [ ] Backward compatible: if no registry exists, behave like single-vault (auto-detect)
 - [ ] `$MN_VAULT` env var accepts vault name (registered) or path (legacy)
 
+#### Missing Vault Path Handling
+- [ ] Single-vault command (`mn list --vault work`) + path missing → friendly error with remediation steps:
+  - Show missing path, suggest `mn vault update <name> --path <new>` or `mn vault remove <name>`
+  - Mention external drive if path is under `/Volumes/`
+- [ ] Cross-vault commands (`mn sync --all`, `mn search`) + some vaults missing → skip + warn per vault, continue others
+  - Print `⚠️ Skipping vault '<name>': path not found (<path>)` for each missing vault
+  - Never fail the entire command because one vault is unavailable
+- [ ] `mn vault list` marks missing vaults: show status column (`ok` / `missing`)
+- [ ] `mn vault add --path <path>` at registration time → verify path exists, error if not
+- [ ] Primary vault missing → clear error: "Primary vault '<name>' not found. Set a new primary: `mn vault set-primary <name>`"
+
 #### Tests
 - [ ] Registry: create, load, save, validate
 - [ ] `mn vault add` with GitHub repo → clone + register
 - [ ] `mn vault add --readonly` → access set correctly
 - [ ] `mn vault add` with existing name → error
+- [ ] `mn vault add --path` with nonexistent path → error at registration
 - [ ] `mn vault remove` → unregister, files remain
 - [ ] `mn vault remove --delete` → unregister + files deleted
 - [ ] `mn vault set-primary` → updates default
 - [ ] `mn vault list` shows all vaults with correct info
+- [ ] `mn vault list` marks missing vault path as `missing`
 - [ ] `--vault <name>` flag routes to correct vault
+- [ ] `--vault <name>` with missing path → friendly error + remediation
+- [ ] Cross-vault op with one vault missing → skip + warn, others proceed
+- [ ] Primary vault missing → clear error with guidance
 - [ ] Read-only: `mn new` blocked, `mn sync` pull-only
 - [ ] Cross-vault search returns results from multiple vaults
 - [ ] Cross-vault search results include vault name prefix
