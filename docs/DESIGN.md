@@ -391,7 +391,7 @@ The CLI auto-detects the iCloud container on macOS, so it operates on the same v
 - Each device optimizes for its own hardware
 
 ### Search Modes
-- **Full-text**: SQLite FTS5 with **ICU tokenizer** for CJK support (title + content + tags, always available, instant)
+- **Full-text**: SQLite FTS5 with **`cjk` tokenizer** ([`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite)) — Apple NLTokenizer for CJK segmentation (title + content + tags, always available, instant)
 - **Semantic**: Vector similarity search (available after local indexing)
 - **Hybrid**: Combine FTS5 score + vector score with RRF (Reciprocal Rank Fusion)
 
@@ -660,10 +660,12 @@ Local CRUD fully functional. No network, no database.
 - [ ] OpenClaw skill (`maho-notes`) for agent guardrails
 
 ### Phase 1b — Full-Text Search
-- [ ] Bundle custom SQLite with ICU support via MahoNotesKit (e.g., GRDB + SQLite source build)
-- [ ] SQLite FTS5 index with **ICU tokenizer** for proper CJK segmentation
+- [ ] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency
+  - Bundles SQLite 3.48.0 with FTS5 + custom `cjk` tokenizer (Apple NLTokenizer for CJK segmentation)
+  - Already has CI (macOS + iOS Simulator) + 19 regression tests
+- [ ] SQLite FTS5 index with `cjk` tokenizer for proper 中英日 full-text search
 - [ ] `mn search` with FTS5 (title + content + tags)
-- [ ] CLI and App share the same MahoNotesKit → same custom SQLite → ICU works everywhere
+- [ ] CLI and App share the same MahoNotesKit → same `swift-cjk-sqlite` → CJK search works everywhere
 
 ### Phase 1c — GitHub Sync
 - [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
@@ -680,7 +682,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] GitHub OAuth via `ASWebAuthenticationSession` (replaces Phase 1c token-based auth)
 - [ ] Conflict resolution (split into two versions + diff view)
 - [ ] Local SQLite metadata + FTS5
-- [ ] ICU tokenizer already available via MahoNotesKit (from Phase 1b)
+- [ ] CJK tokenizer already available via `swift-cjk-sqlite` (from Phase 1b)
 
 ### Phase 3 — Vector Search
 - [ ] On-device embedding (Apple NLEmbedding as default)
@@ -720,7 +722,7 @@ Local CRUD fully functional. No network, no database.
 | Syntax Highlighting | TreeSitter (native), Splash or highlight.js (static site) |
 | Math | WKWebView + KaTeX (native), KaTeX (static site) |
 | Furigana | `{漢字|かんじ}` → `<ruby>` (web) / AttributedString (native) |
-| Database | SQLite + FTS5 + sqlite-vec |
+| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) (SQLite 3.48 + FTS5 + CJK tokenizer) + sqlite-vec |
 | Embeddings | Tiered: Apple NLEmbedding (built-in) / MiniLM (90MB) / e5-small (470MB) / BGE-M3 (2.2GB) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
 | Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
