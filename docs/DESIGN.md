@@ -229,7 +229,8 @@ mn show <path> --body-only            # body content only (no frontmatter, for p
 mn list                               # all notes, grouped by collection
 mn list --collection japanese         # filter by collection
 mn list --tag N5                      # filter by tag
-mn list --series "日語基礎"            # filter by series
+mn list --series                      # list all series across vault
+mn list --series "日語基礎"            # filter notes in that series
 
 # ── Edit ──────────────────────────────────────────
 mn open <path>                        # open in $EDITOR (human use, macOS/Linux)
@@ -271,8 +272,8 @@ mn config auth                        # GitHub OAuth flow
 mn config auth --status               # check auth status
 
 # ── Info ──────────────────────────────────────────
-mn collections                        # list all collections
-mn stats                              # note count, word count, per-collection stats
+mn collections                        # list collections + series within each
+mn stats                              # note/word count, per-collection and per-series breakdown
 ```
 
 ### AI Agent Workflow
