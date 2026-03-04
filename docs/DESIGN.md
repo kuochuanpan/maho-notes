@@ -297,10 +297,20 @@ mn search "query" --json
 ### Global Flags
 | Flag | Description |
 |------|-------------|
-| `--vault <path>` | Vault path (default: `~/maho-vault` or `$MN_VAULT`) |
+| `--vault <path>` | Vault path (overrides auto-detection) |
 | `--json` | Machine-readable JSON output (for AI agents / scripts) |
 | `--quiet` | Suppress non-essential output |
 | `--verbose` | Debug output |
+
+### Vault Location (Resolution Order)
+| Priority | Source | Path |
+|----------|--------|------|
+| 1 | `--vault <path>` flag | Explicit override |
+| 2 | `$MN_VAULT` env var | User-configured |
+| 3 | iCloud container | `~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents/` (macOS) |
+| 4 | Fallback | `~/maho-vault` (non-Apple platforms / CLI-only users) |
+
+The CLI auto-detects the iCloud container on macOS, so it operates on the same vault as the app with zero config. Vault path is **not** managed by `mn config` (chicken-and-egg: config lives inside the vault).
 
 ## Vector Search
 
@@ -420,6 +430,24 @@ No centralized web app. Publishing generates a static site deployed to the user'
 - SEO-friendly static HTML
 
 ## Sync Strategy
+
+### Two Sync Layers
+The vault lives in iCloud by default. GitHub is an optional second layer for power users.
+
+```
+iCloud sync (automatic, transparent)
+├── Handled by OS — app/CLI don't intervene
+├── Same Apple ID devices sync automatically
+└── Default vault location is iCloud container
+
+mn sync (GitHub, explicit)
+├── Cross-Apple-ID bridging (e.g., Maho ↔ Kuo-Chuan)
+├── Version control (git history)
+├── Publishing source
+└── Requires: mn config auth + mn config --set github.repo
+```
+
+`mn sync` syncs the iCloud vault ↔ GitHub repo. iCloud settles first (local), then GitHub sync runs against the settled local state.
 
 ### Multi-Backend Storage
 App must work standalone (App Store requirement). iCloud is default; GitHub is optional.
