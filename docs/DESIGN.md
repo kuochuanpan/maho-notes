@@ -151,29 +151,71 @@ collections:
 
 ## CLI (`mn`)
 
+The CLI is a first-class interface — not just for humans, but for AI agents.
+It must support full CRUD, search, and publishing with scriptable (JSON) output.
+
 ```bash
-# Note management
+# ── CRUD ──────────────────────────────────────────
 mn new "Title" --collection japanese --tags "N5,漢字"
-mn edit japanese/grammar/001-kunyomi-onyomi.md
-mn list --collection japanese
-mn list --tag N5
-mn show japanese/grammar/001-kunyomi-onyomi.md
+mn edit <path>                        # open in $EDITOR
+mn write <path> --content "..."       # write body directly (AI agent use)
+mn write <path> --file input.md       # write body from file
+mn append <path> --content "..."      # append to existing note
+mn delete <path>                      # move to trash / confirm
+mn move <path> --to <collection/dir>  # move note
 
-# Search
-mn search "長音規則"                    # full-text search
-mn search --semantic "how do long vowels work"  # vector search
+# ── Read ──────────────────────────────────────────
+mn show <path>                        # display note with metadata
+mn show <path> --body-only            # content only (for piping)
+mn list                               # all notes, grouped by collection
+mn list --collection japanese         # filter by collection
+mn list --tag N5                      # filter by tag
+mn list --series "日語基礎"            # filter by series
 
-# Publishing
-mn publish japanese/grammar/001-kunyomi-onyomi.md
-mn unpublish japanese/grammar/001-kunyomi-onyomi.md
+# ── Metadata ──────────────────────────────────────
+mn meta <path>                        # show frontmatter
+mn meta <path> --set public=true      # update frontmatter field
+mn meta <path> --add-tag "grammar"    # add tag
+mn meta <path> --remove-tag "draft"   # remove tag
+mn meta <path> --set series="日語基礎" # set series
 
-# Sync
-mn sync                                 # git pull + push + reindex
+# ── Search ────────────────────────────────────────
+mn search "長音規則"                    # full-text search (FTS5)
+mn search --semantic "how do vowels work"  # vector search
+mn search --tag N5                    # search by tag
+mn search --collection japanese "query"    # scoped search
+mn search --semantic "query" --limit 5     # top-K results
 
-# Index
-mn index                                # rebuild SQLite + embeddings
-mn index --collection japanese          # reindex one collection
+# ── Publishing ────────────────────────────────────
+mn publish                            # publish all public notes
+mn publish <path>                     # publish single note
+mn unpublish <path>                   # remove from published site
+mn publish --preview                  # local preview before push
+
+# ── Sync & Index ──────────────────────────────────
+mn sync                               # git pull + push + reindex
+mn index                              # rebuild SQLite + embeddings
+mn index --model bge-m3               # specify embedding model
+mn index --collection japanese        # reindex one collection
+
+# ── Info ──────────────────────────────────────────
+mn collections                        # list all collections
+mn stats                              # note count, word count, per-collection stats
+
+# ── AI Agent / Scripting ──────────────────────────
+mn list --json                        # JSON output for all commands
+mn show <path> --json                 # JSON output
+mn search "query" --json              # JSON output
+mn batch < commands.jsonl             # batch execute from JSONL
 ```
+
+### Global Flags
+| Flag | Description |
+|------|-------------|
+| `--vault <path>` | Vault path (default: `~/maho-vault` or `$MN_VAULT`) |
+| `--json` | Machine-readable JSON output (for AI agents / scripts) |
+| `--quiet` | Suppress non-essential output |
+| `--verbose` | Debug output |
 
 ## Vector Search
 
