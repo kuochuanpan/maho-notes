@@ -4,7 +4,7 @@
 
 ## Overview
 
-Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, **Japanese (日本語)**, and **Korean (한국어)**. It supports multiple collections, on-device multilingual semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
+Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, **Japanese (日本語)**, and **Korean (한국어)**. It supports multiple vaults (personal, work, community reference), multiple collections within each vault, on-device multilingual semantic search across all vaults, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control, sharing, and publishing.
 
 ### Multilingual Support 🌐
 - **UI**: Chinese, English, Japanese, Korean (user-selectable)
@@ -287,7 +287,9 @@ mn delete <path>                      # move to trash / confirm
 # ── Read ──────────────────────────────────────────
 mn show <path>                        # display note with metadata
 mn show <path> --body-only            # body content only (no frontmatter, for piping)
-mn list                               # all notes, grouped by collection
+mn list                               # all notes in primary vault, grouped by collection
+mn list --vault <name>                # list notes in specific vault
+mn list --all                         # list notes across all vaults
 mn list --collection japanese         # filter by collection
 mn list --tag N5                      # filter by tag
 mn list --series                      # list all series across vault
@@ -304,7 +306,8 @@ mn meta <path> --add-tag "grammar"    # add tag
 mn meta <path> --remove-tag "draft"   # remove tag
 
 # ── Search ────────────────────────────────────────
-mn search "長音規則"                    # full-text search (FTS5)
+mn search "長音規則"                    # full-text search across all vaults (FTS5)
+mn search --vault personal "長音規則"   # search within specific vault
 mn search --semantic "how do vowels work"  # vector search
 mn search --collection japanese "query"    # scoped search
 mn search --semantic "query" --limit 5     # top-K results
@@ -319,19 +322,33 @@ mn publish --preview                  # local preview before push
 # Or just: mn publish <path> (marks + deploys in one step)
 # Publishing is incremental by default — uses content hashes to detect changes.
 
+# ── Vault Management (Phase 1d) ───────────────────
+mn vault list                         # list all registered vaults (name, path, access, sync status)
+mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone to ~/.maho/vaults/<name>/)
+mn vault add <name> --github <repo> --readonly  # add as read-only (pull only, no push)
+mn vault add <name> --path <local>    # register existing local directory as vault
+mn vault remove <name>                # unregister vault (does NOT delete files)
+mn vault remove <name> --delete       # unregister + delete local files
+mn vault set-primary <name>           # change default vault
+mn vault info <name>                  # show vault details (path, remote, access, last sync, note count)
+
 # ── Sync & Index ──────────────────────────────────
-mn sync                               # git pull + push (no auto reindex)
-mn sync --reindex                     # git pull + push + rebuild index
+mn sync                               # sync primary vault
+mn sync --vault <name>                # sync specific vault
+mn sync --all                         # sync all vaults
+mn sync --reindex                     # sync + rebuild index
 # First run: if vault is empty + github.repo configured → auto clone from repo
-# New device setup: mn config auth → mn config --set github.repo <repo> → mn sync
+# Read-only vaults: pull only, never push
 mn index                              # rebuild SQLite FTS index (+ embeddings if model configured)
 mn index --model bge-m3               # specify embedding model
+mn index --vault <name>               # index specific vault
+mn index --all                        # index all vaults
 
 # ── Config & Auth ─────────────────────────────────
 mn config                             # show all config
 mn config --set <key> <value>         # set config value
 mn config --set author.name "Name"    # set default author for new notes
-mn config --set github.repo "user/vault"  # set GitHub vault repo for sync
+mn config --set github.repo "user/vault"  # set GitHub repo for primary vault (legacy; prefer mn vault add)
 mn config --set site.domain "notes.example.com"  # set published site domain
 mn config auth                        # GitHub OAuth flow
 mn config auth --status               # check auth status
@@ -362,7 +379,7 @@ mn search "query" --json
 ### Global Flags
 | Flag | Description |
 |------|-------------|
-| `--vault <path>` | Vault path (overrides auto-detection) |
+| `--vault <name>` | Target vault by name (default: primary vault) |
 | `--json` | Machine-readable JSON output (for AI agents / scripts) |
 | `--quiet` | Suppress non-essential output |
 | `--verbose` | Debug output |
@@ -370,12 +387,12 @@ mn search "query" --json
 ### Vault Location (Resolution Order)
 | Priority | Source | Path |
 |----------|--------|------|
-| 1 | `--vault <path>` flag | Explicit override |
-| 2 | `$MN_VAULT` env var | User-configured |
-| 3 | iCloud container | `~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents/` (macOS) |
-| 4 | Fallback | `~/maho-vault` (non-Apple platforms / CLI-only users) |
+| 1 | `--vault <name>` flag | Explicit vault by registered name |
+| 2 | `$MN_VAULT` env var | Vault name or path |
+| 3 | Primary vault | As set in `~/.maho/vaults.yaml` |
+| 4 | Legacy auto-detect | iCloud container → `~/maho-vault` fallback |
 
-The CLI auto-detects the iCloud container on macOS, so it operates on the same vault as the app with zero config. Vault path is **not** managed by `mn config` (chicken-and-egg: config lives inside the vault).
+The vault registry (`~/.maho/vaults.yaml`) is the source of truth for vault locations. On first use (no registry exists), the CLI auto-detects iCloud container on macOS and creates a default registry entry. The registry lives outside any vault to avoid chicken-and-egg problems.
 
 ## Vector Search
 
@@ -497,7 +514,7 @@ No centralized web app. Publishing generates a static site deployed to the user'
 ## Sync Strategy
 
 ### Two Sync Layers
-The vault lives in iCloud by default. GitHub is an optional second layer for power users.
+The primary vault lives in iCloud by default. GitHub is an optional second layer for power users.
 
 ```
 iCloud sync (automatic, transparent)
@@ -509,10 +526,75 @@ mn sync (GitHub, explicit)
 ├── Cross-Apple-ID bridging (e.g., Maho ↔ Kuo-Chuan)
 ├── Version control (git history)
 ├── Publishing source
-└── Requires: mn config auth + mn config --set github.repo
+└── Requires: mn config auth + mn vault add <name> --github <repo>
 ```
 
-`mn sync` syncs the iCloud vault ↔ GitHub repo. iCloud settles first (local), then GitHub sync runs against the settled local state.
+`mn sync` syncs vaults with their configured GitHub remotes. iCloud settles first (local), then GitHub sync runs against the settled local state.
+
+### Multi-Vault Architecture (Phase 1d)
+
+A user can have **multiple vaults** — one primary (iCloud) and any number of additional GitHub-backed vaults. This enables:
+- **Knowledge separation**: personal notes, work notes, reference material in distinct repos
+- **Community content**: add public GitHub markdown repos (cheat sheets, awesome-lists, language guides) as read-only vaults
+- **Sharing**: publish a vault as a public repo so others can add it to their own setup
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Maho Notes                         │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ Primary Vault│  │ Work Vault   │  │ Cheat Sheets │  │
+│  │ (iCloud+Git) │  │ (GitHub)     │  │ (read-only)  │  │
+│  │ read-write   │  │ read-write   │  │ pull-only    │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                 │                 │           │
+│         └────────┬────────┴────────┬────────┘           │
+│                  │                 │                     │
+│            ┌─────▼─────┐   ┌──────▼──────┐              │
+│            │Cross-vault │   │ Per-vault   │              │
+│            │  Search    │   │  FTS index  │              │
+│            └───────────┘   └─────────────┘              │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Vault Types
+| Type | Source | Access | Sync |
+|------|--------|--------|------|
+| **Primary** | iCloud (+ optional GitHub) | read-write | iCloud auto + `mn sync` |
+| **GitHub (owned)** | Your GitHub repo | read-write | `mn sync` (pull + push) |
+| **GitHub (public/read-only)** | Others' public repos | read-only (local changes stay local) | `mn sync` (pull only, never push) |
+
+#### Vault Registry
+Vault registry lives in `~/.maho/vaults.yaml` (global, outside any vault — avoids chicken-and-egg):
+
+```yaml
+# ~/.maho/vaults.yaml
+primary: personal          # default vault for mn new, mn list, etc.
+vaults:
+  - name: personal
+    path: ~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents/
+    github: kuochuanpan/maho-vault     # optional GitHub remote
+    access: read-write
+  - name: work
+    path: ~/.maho/vaults/work
+    github: kuochuanpan/work-notes
+    access: read-write
+  - name: cheatsheets
+    path: ~/.maho/vaults/cheatsheets
+    github: detailyang/awesome-cheatsheet
+    access: read-only
+  - name: rust-guide
+    path: ~/.maho/vaults/rust-guide
+    github: nicenemo/master-rust
+    access: read-only
+```
+
+#### Read-Only Vault Behavior
+- `mn sync` → pull only, never push
+- `mn new`, `mn delete`, `mn meta --set` → blocked with clear error: "This vault is read-only"
+- Local file edits are allowed (user's filesystem) but won't sync back
+- `mn sync` will overwrite local changes with upstream (reset to remote)
+- Search works normally (indexed like any vault)
 
 ### Multi-Backend Storage
 App must work standalone (App Store requirement). iCloud is default; GitHub is optional.
@@ -808,6 +890,67 @@ Local CRUD fully functional. No network, no database.
 - [ ] Conflict: non-fast-forward push → auto pull → retry
 - [ ] `.gitignore`: `.maho/` entry present after init and first sync
 
+### Phase 1d — Multi-Vault
+
+#### Vault Registry
+- [ ] Global registry at `~/.maho/vaults.yaml` (outside any vault)
+- [ ] Schema: `primary` (default vault name) + `vaults[]` (name, path, github, access)
+- [ ] Auto-create registry on first CLI use (detect existing vault → register as primary)
+- [ ] Migration: existing single-vault `github.repo` config → vault registry entry
+
+#### `mn vault` Command
+- [ ] `mn vault list` — show all vaults (name, path, access, last sync, note count)
+- [ ] `mn vault add <name> --github <repo>` — clone repo to `~/.maho/vaults/<name>/`, register
+- [ ] `mn vault add <name> --github <repo> --readonly` — read-only (pull only, no push)
+- [ ] `mn vault add <name> --path <local>` — register existing local directory
+- [ ] `mn vault remove <name>` — unregister (keep files)
+- [ ] `mn vault remove <name> --delete` — unregister + delete local files
+- [ ] `mn vault set-primary <name>` — change default vault
+- [ ] `mn vault info <name>` — vault details (path, remote, access, last sync, stats)
+- [ ] Post-add vault validation (reuse Phase 1c 3-tier check)
+- [ ] Block `mn vault add` if name already exists
+
+#### Multi-Vault Aware Commands
+- [ ] `--vault <name>` flag on: `list`, `show`, `new`, `search`, `sync`, `index`, `stats`, `collections`
+- [ ] `mn list --all` — list notes across all vaults (prefixed with vault name)
+- [ ] `mn new` defaults to primary vault; `mn new --vault work` creates in work vault
+- [ ] `mn sync` syncs primary; `mn sync --vault <name>` syncs one; `mn sync --all` syncs all
+- [ ] `mn index --vault <name>` / `mn index --all`
+
+#### Read-Only Vault Enforcement
+- [ ] `mn new`, `mn delete`, `mn meta --set` → error on read-only vault: "Vault '<name>' is read-only"
+- [ ] `mn sync` on read-only vault → pull only, never push
+- [ ] `mn sync` on read-only vault → overwrite local changes (reset to upstream)
+- [ ] Local file edits allowed but not tracked/synced
+
+#### Cross-Vault Search
+- [ ] Per-vault FTS index (`<vault>/.maho/index.db`)
+- [ ] `mn search <query>` — search across all vaults by default
+- [ ] `mn search --vault <name> <query>` — search within specific vault
+- [ ] Results include vault name prefix: `[personal] japanese/grammar/001-...` vs `[cheatsheets] git/basics.md`
+- [ ] `--collection` flag scoped within vault (or across all if no `--vault`)
+
+#### VaultOption Migration
+- [ ] Current `VaultOption` (single vault path resolution) → `VaultResolver` (multi-vault aware)
+- [ ] Backward compatible: if no registry exists, behave like single-vault (auto-detect)
+- [ ] `$MN_VAULT` env var accepts vault name (registered) or path (legacy)
+
+#### Tests
+- [ ] Registry: create, load, save, validate
+- [ ] `mn vault add` with GitHub repo → clone + register
+- [ ] `mn vault add --readonly` → access set correctly
+- [ ] `mn vault add` with existing name → error
+- [ ] `mn vault remove` → unregister, files remain
+- [ ] `mn vault remove --delete` → unregister + files deleted
+- [ ] `mn vault set-primary` → updates default
+- [ ] `mn vault list` shows all vaults with correct info
+- [ ] `--vault <name>` flag routes to correct vault
+- [ ] Read-only: `mn new` blocked, `mn sync` pull-only
+- [ ] Cross-vault search returns results from multiple vaults
+- [ ] Cross-vault search results include vault name prefix
+- [ ] Migration: single github.repo → vault registry
+- [ ] Backward compat: no registry file → single vault behavior
+
 ### Phase 2 — Universal App (macOS + iPadOS + iOS)
 - [ ] Xcode project with macOS + iOS targets (universal app)
 - [ ] SwiftUI: NavigationSplitView (auto-adapts: sidebar/split/push)
@@ -879,6 +1022,7 @@ Local CRUD fully functional. No network, no database.
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
 11. **Publishing**: User-owned — each user publishes to their own GitHub Pages, we don't host content
+12. **Multi-vault**: Users can register multiple vaults — one primary (iCloud) + unlimited GitHub-backed vaults (read-write or read-only). Registry at `~/.maho/vaults.yaml`. Enables community content (public repos as read-only reference vaults) and knowledge separation.
 
 ---
 
