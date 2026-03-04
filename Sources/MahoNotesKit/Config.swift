@@ -19,7 +19,7 @@ public struct Config: Sendable {
     }
 
     /// Device-level keys live under .maho/config.yaml
-    private static let deviceKeys: Set<String> = ["embed"]
+    private static let deviceKeys: Set<String> = ["embed", "auth"]
 
     public func loadVaultConfig() throws -> [String: Any] {
         let path = mahoYamlPath
@@ -41,11 +41,12 @@ public struct Config: Sendable {
         "github.repo",
         "site.domain", "site.title", "site.theme",
         "embed.model",
+        "auth.github_token",
     ]
 
     /// Section keys (groups, not leaf values)
     private static let sectionKeys: Set<String> = [
-        "author", "github", "site", "embed",
+        "author", "github", "site", "embed", "auth",
     ]
 
     public func setValue(key: String, value: String) throws {

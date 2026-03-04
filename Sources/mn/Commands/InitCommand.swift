@@ -59,6 +59,21 @@ struct InitCommand: ParsableCommand {
             print("Created .maho/")
         }
 
+        // .gitignore with .maho/ entry
+        let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
+        if !fm.fileExists(atPath: gitignorePath) {
+            let gitignoreContent = ".maho/\n"
+            try gitignoreContent.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+            print("Created .gitignore")
+        } else {
+            let existing = try String(contentsOfFile: gitignorePath, encoding: .utf8)
+            if !existing.contains(".maho/") && !existing.contains(".maho\n") {
+                let updated = existing + "\n.maho/\n"
+                try updated.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+                print("Updated .gitignore with .maho/ entry")
+            }
+        }
+
         // getting-started/ collection with tutorial notes
         let gsDir = (vaultPath as NSString).appendingPathComponent("getting-started")
         if !fm.fileExists(atPath: gsDir) {

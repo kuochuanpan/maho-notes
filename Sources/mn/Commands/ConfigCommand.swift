@@ -6,7 +6,8 @@ import Yams
 struct ConfigCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
-        abstract: "Show or set configuration"
+        abstract: "Show or set configuration",
+        subcommands: [AuthSubcommand.self]
     )
 
     @OptionGroup var vaultOption: VaultOption
@@ -40,7 +41,15 @@ struct ConfigCommand: ParsableCommand {
 
             if !deviceConfig.isEmpty {
                 print("\n# Device config (.maho/config.yaml)")
-                printDict(deviceConfig, indent: 0)
+                // Mask auth token in display
+                var masked = deviceConfig
+                if var auth = masked["auth"] as? [String: Any],
+                   let token = auth["github_token"] as? String, !token.isEmpty {
+                    let authToken = AuthToken(token: token, source: .stored)
+                    auth["github_token"] = authToken.masked
+                    masked["auth"] = auth
+                }
+                printDict(masked, indent: 0)
             }
 
             if vaultConfig.isEmpty && deviceConfig.isEmpty {
@@ -58,6 +67,81 @@ struct ConfigCommand: ParsableCommand {
             } else {
                 print("\(prefix)\(key): \(value)")
             }
+        }
+    }
+}
+
+// MARK: - mn config auth
+
+struct AuthSubcommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auth",
+        abstract: "Configure GitHub authentication"
+    )
+
+    @OptionGroup var vaultOption: VaultOption
+
+    @Flag(name: .long, help: "Show current auth status")
+    var status: Bool = false
+
+    func run() throws {
+        try vaultOption.validateVaultExists()
+        let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
+        let auth = Auth(vaultPath: vaultPath)
+
+        if status {
+            showStatus(auth: auth)
+        } else {
+            resolveAndStore(auth: auth)
+        }
+    }
+
+    private func showStatus(auth: Auth) {
+        do {
+            let token = try auth.resolveToken()
+            print("GitHub auth: configured")
+            print("  Source: \(token.source.rawValue)")
+            print("  Token:  \(token.masked)")
+
+            // Validate token
+            do {
+                try auth.validateToken(token.token)
+                print("  Status: valid")
+            } catch {
+                print("  Status: invalid (\(error))")
+            }
+        } catch {
+            print("GitHub auth: not configured")
+            print("\(error)")
+        }
+    }
+
+    private func resolveAndStore(auth: Auth) {
+        do {
+            let token = try auth.resolveToken()
+            print("Found GitHub token from: \(token.source.rawValue)")
+            print("Token: \(token.masked)")
+
+            // Store it if not already stored
+            if token.source != .stored {
+                do {
+                    try auth.storeToken(token.token)
+                    print("Token stored in .maho/config.yaml")
+                } catch {
+                    print("Warning: Could not store token: \(error)")
+                }
+            }
+
+            // Validate
+            do {
+                try auth.validateToken(token.token)
+                print("Token validated successfully.")
+            } catch {
+                print("Warning: Token validation failed: \(error)")
+                print("The token has been stored but may not work. Try re-authenticating.")
+            }
+        } catch {
+            print("\(error)")
         }
     }
 }
