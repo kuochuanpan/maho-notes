@@ -677,6 +677,8 @@ Local CRUD fully functional. No network, no database.
 - [ ] **Migration**: Remove `collection` field from existing note frontmatter (infer from path)
 - [ ] **Migration**: Update `collections.yaml` icons from emoji to SF Symbols
 - [ ] **Migration**: Update `Note` model + `Vault` — collection inferred from `relativePath`, not frontmatter
+- [ ] **Migration**: Remove `SyncCommand` from registered subcommands (sync is Phase 1c; keep source files for later)
+- [ ] **Migration**: Add `_index.md` to existing collection directories (japanese/, astronomy/, etc.)
 - [ ] CLI: `mn init` (create vault + `maho.yaml` + `collections.yaml` + `getting-started/` + `.maho/`)
 - [ ] CLI: open, delete
 - [ ] CLI: meta (frontmatter manipulation)
