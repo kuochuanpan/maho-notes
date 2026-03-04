@@ -752,6 +752,12 @@ Local CRUD fully functional. No network, no database.
 - [ ] `mn config auth --status` — show current auth state (token source, validity)
 - [ ] Token stored device-level only (`.maho/config.yaml`), never synced to GitHub
 - [ ] Clear error when no token found (guides user to set `$GITHUB_TOKEN` or install `gh`)
+- [ ] Handle `gh` installed but not logged in (`gh auth token` exit ≠ 0) — treat as absent, guide user
+- [ ] Token validation: test stored token against GitHub API → clear error + prompt re-auth on 401/403
+
+#### Pre-flight Guards
+- [ ] `git` not installed → friendly error: "Git is required. Install Xcode Command Line Tools: `xcode-select --install`"
+- [ ] Vault path is iCloud container but iCloud Drive not enabled → detect + warn (non-blocking, sync may fail silently)
 
 #### Sync (`mn sync`)
 - [ ] Re-register `SyncCommand` in `MahoNotes.swift` subcommands
@@ -782,6 +788,9 @@ Local CRUD fully functional. No network, no database.
 - [ ] Auth: falls back to `gh auth token` when env var absent
 - [ ] Auth: `--status` shows token source and masked value
 - [ ] Auth: clear error message when no token available
+- [ ] Auth: `gh` installed but not logged in → treated as absent, shows guidance
+- [ ] Auth: stored token invalid (401) → clear error + prompt re-auth
+- [ ] Pre-flight: `git` not found → friendly install guidance
 - [ ] Sync: normal pull + commit + push flow (mock git)
 - [ ] Sync: first-run clone when vault is empty + repo configured
 - [ ] Sync: `--reindex` triggers FTS index rebuild after sync
