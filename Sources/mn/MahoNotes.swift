@@ -11,7 +11,6 @@ struct MahoNotes: ParsableCommand {
             ShowCommand.self,
             NewCommand.self,
             SearchCommand.self,
-            SyncCommand.self,
         ]
     )
 }
