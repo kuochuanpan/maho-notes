@@ -268,6 +268,9 @@ mn index --model bge-m3               # specify embedding model
 # ── Config & Auth ─────────────────────────────────
 mn config                             # show all config
 mn config --set <key> <value>         # set config value
+mn config --set author.name "Name"    # set default author for new notes
+mn config --set github.repo "user/vault"  # set GitHub vault repo for sync
+mn config --set site.domain "notes.example.com"  # set published site domain
 mn config auth                        # GitHub OAuth flow
 mn config auth --status               # check auth status
 
