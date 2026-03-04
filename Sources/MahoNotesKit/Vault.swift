@@ -47,7 +47,7 @@ public struct Vault: Sendable {
     public func listNotes(collection: String? = nil, tag: String? = nil) throws -> [Note] {
         var notes = try allNotes()
         if let collection {
-            notes = notes.filter { $0.collection == collection }
+            notes = notes.filter { $0.relativePath.hasPrefix(collection + "/") }
         }
         if let tag {
             notes = notes.filter { $0.tags.contains(tag) }
@@ -105,7 +105,6 @@ public struct Vault: Sendable {
         let content = """
         ---
         title: \(title)
-        collection: \(collection)
         tags: \(tagsYaml)
         created: \(now)
         updated: \(now)

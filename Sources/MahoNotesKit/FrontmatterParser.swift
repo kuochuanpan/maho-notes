@@ -55,8 +55,6 @@ public func parseNote(at filePath: String, relativeTo vaultPath: String) throws 
         return nil
     }
 
-    let collection = yaml["collection"] as? String ?? ""
-
     let tags: [String]
     if let tagArray = yaml["tags"] as? [String] {
         tags = tagArray
@@ -74,7 +72,6 @@ public func parseNote(at filePath: String, relativeTo vaultPath: String) throws 
     return Note(
         relativePath: relPath,
         title: title,
-        collection: collection,
         tags: tags,
         created: formatDateField(yaml["created"]),
         updated: formatDateField(yaml["updated"]),

@@ -4,7 +4,6 @@ import Foundation
 public struct Note: Sendable {
     public let relativePath: String
     public let title: String
-    public let collection: String
     public let tags: [String]
     public let created: String
     public let updated: String
@@ -16,10 +15,15 @@ public struct Note: Sendable {
     public let series: String?
     public let body: String
 
+    /// Collection inferred from the first path component of relativePath
+    public var collection: String {
+        let components = relativePath.split(separator: "/")
+        return components.count > 1 ? String(components[0]) : ""
+    }
+
     public init(
         relativePath: String,
         title: String,
-        collection: String,
         tags: [String],
         created: String,
         updated: String,
@@ -33,7 +37,6 @@ public struct Note: Sendable {
     ) {
         self.relativePath = relativePath
         self.title = title
-        self.collection = collection
         self.tags = tags
         self.created = created
         self.updated = updated
