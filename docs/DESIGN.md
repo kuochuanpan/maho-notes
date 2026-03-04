@@ -177,24 +177,46 @@ mn index --collection japanese          # reindex one collection
 ## Vector Search
 
 ### Architecture
-App must support vector search **locally** (no server dependency, App Store requirement).
+- **100% on-device** — no server dependency (App Store requirement)
+- Each device has its own local embedding DB (not synced between devices)
+- Markdown files sync via iCloud/GitHub; each device generates its own embeddings locally
+- User can choose embedding model per device (bigger Mac → bigger model, iPhone → smaller model)
 
-### Embedding Pipeline
-1. **Mac mini (build server)**: Run BGE-M3 via MLX, generate embeddings for all notes
-2. **Store**: Embeddings saved in SQLite (sqlite-vec) alongside note metadata
-3. **Sync**: Embedding DB syncs via iCloud or included in GitHub repo (`.maho/index.db`)
-4. **Query**: Local cosine similarity via sqlite-vec + Accelerate (vDSP)
+### Embedding Models (User-Selectable)
 
-### On-Device (iOS/macOS)
-- sqlite-vec for vector operations (pure C, no ML framework needed)
-- Embeddings pre-computed on Mac mini, synced to devices
-- For new notes created on device: queue for embedding on next Mac mini sync, use FTS5 in the meantime
-- Future: CoreML distilled model for on-device embedding (~50MB)
+| Tier | Model | Size | Dim | Quality | Platforms |
+|------|-------|------|-----|---------|-----------|
+| 🟢 Built-in | Apple NLEmbedding | 0 MB | varies | Basic | All (iOS 17+, macOS 14+) |
+| 🟡 Light | all-MiniLM-L6-v2 (multilingual) | ~90 MB | 384 | Good | All |
+| 🟠 Standard | multilingual-e5-small | ~470 MB | 384 | Better | All |
+| 🔴 Pro | BGE-M3 | ~2.2 GB | 1024 | Best | Mac recommended |
+
+- **Default**: Apple NLEmbedding (zero download, works immediately)
+- **Optional**: User downloads preferred model in Settings → Search → Embedding Model
+- **Per-device choice**: iPhone can use Light, Mac can use Pro — independent
+- Models distributed as CoreML packages (downloadable from app or bundled)
+
+### Embedding Pipeline (Per Device)
+1. Note created/updated → markdown syncs to device via iCloud/GitHub
+2. Device detects new/changed notes → queues for local embedding
+3. Background task runs selected model → generates embeddings
+4. Stored in local SQLite (sqlite-vec) — **not synced** (each device has its own)
+5. Query: embed search string locally → cosine similarity → top-K results
+
+### Why Not Sync Embeddings?
+- Different devices may use different models (different dimensions)
+- Embedding DB can be regenerated from markdown anytime
+- Avoids syncing large binary blobs
+- Each device optimizes for its own hardware
 
 ### Search Modes
-- **Full-text**: SQLite FTS5 on title + content + tags (always available)
-- **Semantic**: Vector similarity search (available when embeddings synced)
+- **Full-text**: SQLite FTS5 on title + content + tags (always available, instant)
+- **Semantic**: Vector similarity search (available after local indexing)
 - **Hybrid**: Combine FTS5 score + vector score with RRF (Reciprocal Rank Fusion)
+
+### CLI (`mn index`)
+- CLI uses same model selection: `mn index --model bge-m3` or `mn index --model builtin`
+- Can also use MLX directly for BGE-M3 (faster on Apple Silicon than CoreML for large models)
 
 ## Native Apps (SwiftUI)
 
@@ -349,7 +371,7 @@ App must work standalone (App Store requirement). Git/GitHub is optional power-u
 | Math | KaTeX (web), WKWebView + KaTeX (native) |
 | Furigana | `{漢字|かんじ}` → `<ruby>` (web) / AttributedString (native) |
 | Database | SQLite + FTS5 + sqlite-vec |
-| Embeddings | BGE-M3 (1024d, multilingual 中英日, Mac mini via MLX) |
+| Embeddings | Tiered: Apple NLEmbedding (built-in) / MiniLM (90MB) / e5-small (470MB) / BGE-M3 (2.2GB) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
 | Git | SwiftGit2 (macOS/CLI) / GitHub REST API (iOS, optional) |
 | Auth | GitHub OAuth (web) |
@@ -363,9 +385,9 @@ App must work standalone (App Store requirement). Git/GitHub is optional power-u
 3. **Sync**: **iCloud** (default for app) + **GitHub** (optional, for CLI/power users/publishing)
 4. **Git on iOS**: GitHub REST API (optional); primary sync via iCloud
 5. **Web app**: **Serverless** (Vercel/Cloudflare Pages), no dedicated server
-6. **Vector search**: Pre-computed on Mac mini (BGE-M3 via MLX), sqlite-vec for local queries on all platforms
+6. **Vector search**: 100% on-device, user-selectable model per device (Apple NLEmbedding → BGE-M3), sqlite-vec for local queries
 7. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
-8. **Embedding model**: **BGE-M3** (1024d, ~2.2GB) — best multilingual (中英日) support
+8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); all support 中英日
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
 
