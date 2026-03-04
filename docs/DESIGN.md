@@ -697,13 +697,52 @@ Local CRUD fully functional. No network, no database.
 - [x] OpenClaw skill (`maho-notes`) for agent guardrails
 
 ### Phase 1b — Full-Text Search
+
+#### Design Decisions
+
+**Index location**: `.maho/index.db` (gitignored, not synced via iCloud or Git — each device builds its own)
+
+**Auto-index on search**: When `mn search` is invoked and no `index.db` exists, automatically build the index first and print a one-time notice (`Building search index...`). Users should never need to manually run `mn index` before their first search.
+
+**Incremental indexing**: `mn index` compares each note's file mtime against the last-indexed timestamp stored in a `_meta` table. Only changed/new files are re-indexed; deleted files are pruned. `mn index --full` forces a complete rebuild. This is fast enough for Phase 1b (< 1000 notes); revisit if needed.
+
+**FTS5 content strategy**: Copy content into the FTS5 table (not `content=` external content mode). Simpler to implement, trades ~2× storage for straightforward insert/delete. Phase 3 (vector search) can revisit if `index.db` size becomes a concern.
+
+**Ranking weights**: Use FTS5 `bm25()` with column weights — title (10.0) > tags (5.0) > body (1.0). Results sorted by weighted BM25 score descending.
+
+**Fallback**: If `index.db` is corrupted, missing, or schema version mismatches, fall back to the existing substring search (current `Vault.searchNotes`) and print a warning suggesting `mn index --full`. Never crash on index errors.
+
+#### Checklist
+
 - [ ] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency
   - Bundles SQLite 3.48.0 with FTS5 + custom `cjk` tokenizer (Apple NLTokenizer for CJK segmentation)
   - Already has CI (macOS + iOS Simulator) + 19 regression tests
+- [ ] `SearchIndex` class in MahoNotesKit (FTS5 schema, index/query/prune methods)
+  - Schema: `notes_fts(title, tags, body)` with tokenizer `cjk`
+  - `_meta` table: `(path TEXT PRIMARY KEY, mtime REAL, indexed_at REAL)`
+  - Schema version tracking for future migrations
 - [ ] SQLite FTS5 index with `cjk` tokenizer for proper 中英日韓 full-text search
-- [ ] `mn search` upgrade: FTS5 ranking (title + content + tags)
+- [ ] `mn search` upgrade: FTS5 `bm25()` ranking with column weights (title 10 / tags 5 / body 1)
+  - Auto-build index on first search if `index.db` missing
+  - Graceful fallback to substring search on index errors
 - [ ] `mn index` (build / rebuild FTS5 index from vault content)
+  - Default: incremental (mtime-based diff)
+  - `--full` flag: drop and rebuild from scratch
 - [ ] CLI and App share the same MahoNotesKit → same `swift-cjk-sqlite` → CJK search works everywhere
+
+#### Tests (Phase 1b)
+
+- [ ] Index build: create index from scratch, verify all notes indexed
+- [ ] Index rebuild (`--full`): drop + recreate, same results
+- [ ] Incremental update: modify one note, re-index, verify only that note updated
+- [ ] Incremental delete: remove a note file, re-index, verify pruned from index
+- [ ] CJK search: query in 中文、日本語、한국어、English — all return correct results
+- [ ] Mixed-language note: single note with 中英日韓 content, all four languages searchable
+- [ ] Ranking order: title match ranks above body-only match
+- [ ] Empty vault: `mn index` + `mn search` on empty vault — no crash, sensible output
+- [ ] No match: search for nonexistent term — empty results, not an error
+- [ ] Fallback: corrupt/delete `index.db`, run `mn search` — falls back to substring, prints warning
+- [ ] Auto-index: delete `index.db`, run `mn search` — builds index automatically, returns FTS5 results
 
 ### Phase 1c — GitHub Sync
 - [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
