@@ -78,70 +78,54 @@ Local CRUD fully functional. No network, no database.
 - [x] Fallback: corrupt/delete `index.db` — SearchIndex recovers (deletes and recreates)
 - [x] Auto-index: `SearchIndex.indexExists()` detection for auto-build on first search
 
-## Phase 1c — GitHub Sync
+## Phase 1c — GitHub Sync ✅ complete
 
-### Auth (`mn config auth`)
-- [ ] `mn config auth` — read `$GITHUB_TOKEN` env var → fallback `gh auth token` → store in `~/.maho/config.yaml`
-- [ ] `mn config auth --status` — show current auth state (token source, validity)
-- [ ] Token stored device-level only (`~/.maho/config.yaml`), never synced to GitHub
-- [ ] Clear error when no token found (guides user to set `$GITHUB_TOKEN` or install `gh`)
-- [ ] Handle `gh` installed but not logged in (`gh auth token` exit ≠ 0) — treat as absent, guide user
-- [ ] Token validation: test stored token against GitHub API → clear error + prompt re-auth on 401/403
+Basic GitHub sync working: `mn config auth`, `mn sync` (pull + push + first-run clone), `.gitignore`.
 
-### Pre-flight Guards
-- [ ] `git` not installed → friendly error: "Git is required. Install Xcode Command Line Tools: `xcode-select --install`"
-- [ ] Vault path is iCloud container but iCloud Drive not enabled → detect + warn (non-blocking, sync may fail silently)
+- [x] `mn config auth` — read `$GITHUB_TOKEN` env var → fallback `gh auth token` → store in `~/.maho/config.yaml`
+- [x] `mn config auth --status` — show current auth state
+- [x] Token stored device-level only (`~/.maho/config.yaml`), never synced to GitHub
+- [x] Re-register `SyncCommand` in `MahoNotes.swift` subcommands
+- [x] Normal sync: `git pull --rebase` → `git add -A` → `git commit` → `git push`
+- [x] First-run auto clone: detect empty/non-git vault + `github.repo` configured → `git clone`
+- [x] Existing vault, no remote: `git remote add origin` from `github.repo` config
+- [x] Handle non-fast-forward push (pull + retry)
+- [x] `.gitignore` with `.maho/` entry on `mn init`
 
-### Sync (`mn sync`)
-- [ ] Re-register `SyncCommand` in `MahoNotes.swift` subcommands
-- [ ] Pre-flight checks: auth configured + `github.repo` set → clear errors if missing
-- [ ] Normal sync: `git pull --rebase` → `git add -A` → `git commit` → `git push`
-- [ ] First-run auto clone: detect empty/non-git vault + `github.repo` configured → `git clone` into vault path
+## Phase 1d — Multi-Vault + Sync Hardening
+
+> Combines multi-vault architecture with remaining sync hardening from Phase 1c.
+> Includes migration from single-vault (1a–1c) to multi-vault architecture.
+
+### Single-Vault → Multi-Vault Migration
+- [ ] Detect existing single-vault setup (vault path + `maho.yaml` + optional `github.repo` in config)
+- [ ] Auto-create vault registry with existing vault as primary (`type: icloud` or `type: local`)
+- [ ] Migrate `github.repo` from `maho.yaml` / `.maho/config.yaml` → vault registry `github` field
+- [ ] Migrate `collections.yaml` → merge into `maho.yaml` (see below)
+- [ ] Migrate existing `.maho/index.db` → per-vault index (same location, just registry-aware)
+- [ ] Migrate `getting-started/` embedded dir → read-only vault (optional, don't auto-delete old files)
+- [ ] `VaultOption` → `VaultResolver`: backward compatible — if no registry, behave as single-vault
+- [ ] `$MN_VAULT` env var accepts vault name (registered) or path (legacy)
+- [ ] First `mn` invocation after update: detect old layout → run migration → print summary of changes
+
+### Sync Hardening (from Phase 1c)
+- [ ] `mn config auth --status` — show token source + masked value
+- [ ] Auth: clear error when no token found (guide user to `$GITHUB_TOKEN` or `gh`)
+- [ ] Auth: handle `gh` installed but not logged in → treat as absent, guide user
+- [ ] Auth: token validation against GitHub API → clear error + prompt re-auth on 401/403
+- [ ] Pre-flight: `git` not installed → friendly error with `xcode-select --install` guidance
+- [ ] Pre-flight: iCloud container but iCloud Drive disabled → warn (non-blocking)
+- [ ] `mn sync --reindex` — rebuild FTS index after sync
+- [ ] Auth token injection: `GIT_ASKPASS` or URL-embed for HTTPS remote
 - [ ] Post-clone vault validation (3-tier):
-  - ✅ `maho.yaml` exists and parses → valid vault, proceed
-  - ⚠️ No `maho.yaml` but has `.md` files in subdirectories (not just root README/LICENSE) → warn + suggest `mn init` to convert
-  - ❌ No `.md` content files (only README.md/LICENSE.md/etc. or non-markdown repo) → error, refuse to use as vault
-  - Heuristic: scan for `.md` files excluding common root-only files (`README.md`, `LICENSE.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`)
-- [ ] Existing vault, no remote: `git remote add origin` from `github.repo` config
-- [ ] `mn sync --reindex` — rebuild FTS index after sync (call `SearchIndex.rebuildIndex()`)
-- [ ] Auth token injection: use stored token for HTTPS remote (set `GIT_ASKPASS` or URL-embed token)
-
-### Conflict Handling (minimal for CLI)
-- [ ] Detect rebase conflict → `git rebase --abort`
-- [ ] Fallback to `git pull --no-rebase` (merge)
-- [ ] If merge conflict: save local version as `<note>.conflict-<timestamp>-local.md`, accept remote
-- [ ] Print clear message listing conflicted files + `.conflict-*` paths
-- [ ] No diff UI in CLI — user resolves manually by comparing the two files, then deletes `.conflict-*`
-
-### Rejected Push (non-fast-forward)
-- [ ] Detect non-fast-forward push failure → auto `git pull` → retry push
-- [ ] If pull causes conflict → apply conflict handling above
-
-### `.gitignore`
-- [ ] Ensure `mn init` writes `.gitignore` with `.maho/` entry (DB, embeddings, auth, cache)
-- [ ] `mn sync` first-run: verify `.gitignore` exists, add `.maho/` if missing
-
-### Tests
-- [ ] Auth: reads `$GITHUB_TOKEN` env var correctly
-- [ ] Auth: falls back to `gh auth token` when env var absent
-- [ ] Auth: `--status` shows token source and masked value
-- [ ] Auth: clear error message when no token available
-- [ ] Auth: `gh` installed but not logged in → treated as absent, shows guidance
-- [ ] Auth: stored token invalid (401) → clear error + prompt re-auth
-- [ ] Pre-flight: `git` not found → friendly install guidance
-- [ ] Sync: normal pull + commit + push flow (mock git)
-- [ ] Sync: first-run clone when vault is empty + repo configured
-- [ ] Sync: post-clone valid vault (`maho.yaml` present) → succeeds
-- [ ] Sync: post-clone markdown repo without `maho.yaml` → warning + suggest `mn init`
-- [ ] Sync: post-clone code repo (no content `.md` files, only README) → error, refused
-- [ ] Sync: `--reindex` triggers FTS index rebuild after sync
-- [ ] Sync: error when auth not configured
-- [ ] Sync: error when `github.repo` not set
-- [ ] Conflict: rebase conflict → abort → merge fallback → `.conflict-*` file created
-- [ ] Conflict: non-fast-forward push → auto pull → retry
-- [ ] `.gitignore`: `.maho/` entry present after init and first sync
-
-## Phase 1d — Multi-Vault
+  - ✅ `maho.yaml` exists and parses → valid vault
+  - ⚠️ No `maho.yaml` but has `.md` content files → warn + suggest `mn init`
+  - ❌ No content `.md` files (only README/LICENSE) → error, refuse
+- [ ] Conflict: detect rebase conflict → `git rebase --abort` → merge fallback
+- [ ] Conflict: merge conflict → save local as `<note>.conflict-<timestamp>-local.md`, accept remote
+- [ ] Conflict: non-fast-forward push → auto pull → retry push
+- [ ] Conflict: print clear message listing conflicted files + `.conflict-*` paths
+- [ ] `.gitignore`: verify `.maho/` entry on every `mn sync` (add if missing)
 
 ### Vault Registry
 - [ ] Registry in iCloud container: `iCloud~com.pcca.mahonotes/config/vaults.yaml`
@@ -149,7 +133,6 @@ Local CRUD fully functional. No network, no database.
 - [ ] Type-based path resolution: `icloud` / `github` / `local` → platform-specific paths at runtime
 - [ ] CLI local cache: `~/.maho/vaults-cache.yaml` (for offline access)
 - [ ] Auto-create registry on first CLI use (detect existing vault → register as primary)
-- [ ] Migration: existing single-vault `github.repo` config → vault registry entry
 
 ### `mn vault` Command
 - [ ] `mn vault list` — show all vaults (name, type, access, last sync, note count)
@@ -222,8 +205,32 @@ Local CRUD fully functional. No network, no database.
 - [ ] `mn vault add --path <path>` at registration time → verify path exists, error if not
 - [ ] Primary vault missing → clear error: "Primary vault '<name>' not found. Set a new primary: `mn vault set-primary <name>`"
 
-### Tests (Phase 1d) — 28 tests
+### Tests (Phase 1d) — 46 tests
 
+#### Migration Tests (9)
+- [ ] Migration: detect single-vault layout → auto-create registry with primary
+- [ ] Migration: `github.repo` in config → vault registry `github` field
+- [ ] Migration: `collections.yaml` exists → merge into `maho.yaml` + delete old file
+- [ ] Migration: `getting-started/` embedded dir preserved (no auto-delete)
+- [ ] Migration: `VaultResolver` with no registry → single-vault backward compat
+- [ ] Migration: `$MN_VAULT` with vault name → resolves to registered vault
+- [ ] Migration: `$MN_VAULT` with path (legacy) → resolves directly
+- [ ] Migration: first invocation prints summary of changes
+- [ ] Migration: already-migrated vault → no-op
+
+#### Sync Hardening Tests (10)
+- [ ] Auth: `--status` shows token source and masked value
+- [ ] Auth: clear error when no token available
+- [ ] Auth: `gh` installed but not logged in → treated as absent, shows guidance
+- [ ] Auth: stored token invalid (401) → clear error + prompt re-auth
+- [ ] Pre-flight: `git` not found → friendly install guidance
+- [ ] Sync: post-clone valid vault (`maho.yaml` present) → succeeds
+- [ ] Sync: post-clone markdown repo without `maho.yaml` → warning + suggest `mn init`
+- [ ] Sync: post-clone code repo (no content `.md` files) → error, refused
+- [ ] Conflict: rebase conflict → abort → merge fallback → `.conflict-*` file created
+- [ ] `.gitignore`: `.maho/` entry verified/added on sync
+
+#### Multi-Vault Tests (27)
 - [ ] Registry: create, load, save, validate (iCloud container path)
 - [ ] Registry: type-based path resolution (icloud/github/local → correct platform paths)
 - [ ] Registry: CLI local cache read/write for offline access
@@ -245,9 +252,8 @@ Local CRUD fully functional. No network, no database.
 - [ ] Read-only: `mn new` blocked, `mn sync` pull-only, `mn publish` blocked
 - [ ] Cross-vault search returns results from multiple vaults
 - [ ] Cross-vault search results include vault name prefix
-- [ ] Migration: single github.repo → vault registry
-- [ ] Migration: collections.yaml → maho.yaml merge
-- [ ] Backward compat: no registry file → single vault behavior
+- [ ] `mn sync --reindex` triggers FTS index rebuild
+- [ ] `mn sync --all` syncs all vaults, `mn sync --vault <name>` syncs one
 - [ ] `mn init` interactive wizard creates vault + registry
 - [ ] `mn init` adds getting-started as read-only vault (online)
 - [ ] `mn init --no-tutorial` skips getting-started vault

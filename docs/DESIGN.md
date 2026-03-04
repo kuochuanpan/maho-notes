@@ -24,25 +24,44 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
      ┌─────▼────────────────────────▼──────┐
      │           MahoNotesKit              │
      │  (Markdown, Search, CRUD, Sync)     │
-     └──┬──────────┬──────────┬──────┬─────┘
-        │          │          │      │
-   ┌────▼───┐ ┌───▼────────┐ │ ┌────▼─────┐
-   │ iCloud  │ │swift-cjk-  │ │ │Embeddings│
-   │ (auto)  │ │sqlite      │ │ │(on-device)│
-   └────┬────┘ │FTS5 + CJK  │ │ │CoreML/NL │
-        │      │tokenizer   │ │ └──────────┘
-        │      └──┬─────────┘ │
-        │    ┌────▼────┐  ┌───▼────┐
-        │    │  FTS5    │  │sqlite- │
-        │    │  index   │  │vec     │
-        │    └─────────┘  └────────┘
+     └──┬────────┬──────────┬──────┬───────┘
+        │        │          │      │
+        │   ┌────▼────────┐ │  ┌───▼──────┐
+        │   │swift-cjk-   │ │  │Embeddings│
+        │   │sqlite       │ │  │(on-device)│
+        │   │FTS5 + CJK   │ │  │CoreML/NL │
+        │   │tokenizer    │ │  └──────────┘
+        │   └──┬──────────┘ │
+        │  ┌───▼─────┐  ┌──▼──────┐
+        │  │Per-vault │  │sqlite-  │
+        │  │FTS index │  │vec      │
+        │  └─────────┘  └─────────┘
         │
-   ┌────▼─────┐    ┌──────────────┐
-   │  GitHub   │───→│ GitHub Pages │
-   │  (opt.)   │    │ (published)  │
-   └──────────┘    └──────────────┘
+  ┌─────▼──────────────────────────────────────────────┐
+  │                  Vault Registry                     │
+  │         (iCloud container: vaults.yaml)             │
+  │                                                     │
+  │  ┌──────────────┐ ┌──────────────┐ ┌────────────┐  │
+  │  │ Primary Vault│ │ Work Vault   │ │ Community  │  │
+  │  │ (iCloud+Git) │ │ (GitHub)     │ │ (read-only)│  │
+  │  │ read-write   │ │ read-write   │ │ pull-only  │  │
+  │  └──────┬───────┘ └──────┬───────┘ └──────┬─────┘  │
+  └─────────┼────────────────┼────────────────┼────────┘
+            │                │                │
+    ┌───────▼───┐    ┌──────▼──────┐   ┌─────▼──────┐
+    │  iCloud    │    │   GitHub    │   │   GitHub   │
+    │  (auto)    │    │  (owned)    │   │  (public)  │
+    └───────┬───┘    └──────┬──────┘   └────────────┘
+            │               │
+            │        ┌──────▼──────┐
+            │        │ GitHub Pages│
+            │        │ (published) │
+            │        └─────────────┘
+            │
+  Cross-vault search spans all vaults (FTS5 + vector)
 
-Sync: iCloud (automatic) ←→ Vault ←→ GitHub (explicit, mn sync)
+Sync: iCloud (automatic per vault) + GitHub (explicit, mn sync)
+Vaults: iCloud (multi-vault in container) / GitHub (clone) / Local (macOS CLI)
 Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 ```
 
@@ -50,8 +69,23 @@ Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 
 | Repo | Visibility | Content |
 |------|-----------|---------|
-| `kuochuanpan/maho-notes` | Public | App source code, CLI, design docs (open source) |
-| `kuochuanpan/maho-vault` | Private | Our note content (other users create their own vault) |
+| `kuochuanpan/maho-notes` | Public | App + CLI source code, design docs (open source) |
+| `kuochuanpan/maho-vault` | Private | Our personal vault (other users create their own) |
+| `mahopan/swift-cjk-sqlite` | Public | SQLite 3.48 + FTS5 + CJK tokenizer (SPM dependency) |
+| `kuochuanpan/maho-getting-started` | Public | Tutorial vault — auto-added on `mn init` as read-only vault |
+
+### Importing External Repos
+
+Any public GitHub markdown repo can be added as a **read-only vault** via `mn vault add`:
+
+```bash
+mn vault add cheatsheets --github detailyang/awesome-cheatsheet --readonly
+mn vault add rust-guide --github nicenemo/master-rust --readonly
+```
+
+Non-Maho repos (no `maho.yaml`) are auto-detected and can be imported with `--import`, which generates `maho.yaml` from the directory structure. Read-only vaults pull upstream changes on `mn sync` but never push local edits back.
+
+Other users' **Maho vaults** (repos with `maho.yaml`) work natively — just add them as a vault and they sync like any other.
 
 ## Tech Stack Summary
 
@@ -92,8 +126,8 @@ Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 |-------|-------------|--------|
 | **1a** | CLI Core — local CRUD, vault structure, config | ✅ Complete |
 | **1b** | Full-Text Search — FTS5 with CJK tokenizer | ✅ Complete |
-| **1c** | GitHub Sync — auth, `mn sync`, conflict handling | 🔄 In progress |
-| **1d** | Multi-Vault — vault registry, `mn vault`, cross-vault search | ⬜ Planned |
+| **1c** | GitHub Sync — basic auth, `mn sync` (pull/push/clone) | ✅ Complete |
+| **1d** | Multi-Vault + Sync Hardening — vault registry, `mn vault`, cross-vault search, migration from single-vault, conflict handling, auth improvements | ⬜ Planned |
 | **2** | Universal App — SwiftUI macOS + iPadOS + iOS | ⬜ Planned |
 | **3** | Vector Search — on-device embeddings, CoreML, hybrid search | ⬜ Planned |
 | **4** | Publishing — static site generator, GitHub Pages (all platforms) | ⬜ Planned |
