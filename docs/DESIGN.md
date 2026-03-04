@@ -156,34 +156,33 @@ The CLI is a first-class interface — not just for humans, but for AI agents.
 It must support full CRUD, search, and publishing with scriptable (JSON) output.
 
 ```bash
-# ── CRUD ──────────────────────────────────────────
-mn new "Title" --collection japanese --tags "N5,漢字"  # creates <collection>/<auto-slug>.md
-mn edit <path>                        # open in $EDITOR (macOS/Linux)
-mn write <path> --content "..."       # write body directly (AI agent use)
-mn write <path> --file input.md       # write body from file
-mn append <path> --content "..."      # append to existing note
+# ── Create & Delete ───────────────────────────────
+mn new "Title" --collection japanese --tags "N5,漢字"  # auto-generates frontmatter + slug filename
 mn delete <path>                      # move to trash / confirm
-mn move <path> --to <collection/dir>  # move note
 
 # ── Read ──────────────────────────────────────────
 mn show <path>                        # display note with metadata
-mn show <path> --body-only            # content only (for piping)
+mn show <path> --body-only            # body content only (no frontmatter, for piping)
 mn list                               # all notes, grouped by collection
 mn list --collection japanese         # filter by collection
 mn list --tag N5                      # filter by tag
 mn list --series "日語基礎"            # filter by series
+
+# ── Write & Edit ──────────────────────────────────
+mn write <path> --content "..."       # overwrite body (preserves frontmatter, updates timestamp)
+mn write <path> --file input.md       # overwrite body from file
+mn edit <path> --find "old" --replace "new"  # surgical find/replace in body
+mn open <path>                        # open in $EDITOR (human use, macOS/Linux)
 
 # ── Metadata ──────────────────────────────────────
 mn meta <path>                        # show frontmatter
 mn meta <path> --set public=true      # update frontmatter field
 mn meta <path> --add-tag "grammar"    # add tag
 mn meta <path> --remove-tag "draft"   # remove tag
-mn meta <path> --set series="日語基礎" # set series
 
 # ── Search ────────────────────────────────────────
 mn search "長音規則"                    # full-text search (FTS5)
 mn search --semantic "how do vowels work"  # vector search
-mn search --tag N5                    # search by tag
 mn search --collection japanese "query"    # scoped search
 mn search --semantic "query" --limit 5     # top-K results
 
@@ -197,17 +196,28 @@ mn publish --preview                  # local preview before push
 mn sync                               # git pull + push + reindex
 mn index                              # rebuild SQLite + embeddings
 mn index --model bge-m3               # specify embedding model
-mn index --collection japanese        # reindex one collection
 
 # ── Info ──────────────────────────────────────────
 mn collections                        # list all collections
 mn stats                              # note count, word count, per-collection stats
+```
 
-# ── AI Agent / Scripting ──────────────────────────
-mn list --json                        # JSON output for all commands
-mn show <path> --json                 # JSON output
-mn search "query" --json              # JSON output
-mn batch < commands.jsonl             # batch execute from JSONL
+### AI Agent Workflow
+AI agents should **always use `mn` CLI** to interact with the vault (not raw file I/O).
+This ensures frontmatter validation, automatic timestamps, and prevents accidental publishing.
+
+```bash
+# Typical agent workflow for editing a note:
+body=$(mn show <path> --body-only)    # 1. read current body
+# ... agent modifies body ...
+mn write <path> --content "$new_body" # 2. write back (frontmatter safe)
+
+# Surgical fix:
+mn edit <path> --find "錯字" --replace "正確"
+
+# All commands support --json for scripting:
+mn list --json
+mn search "query" --json
 ```
 
 ### Global Flags
@@ -478,12 +488,13 @@ mn publish --preview                # local preview before pushing
 - [x] Vault directory structure + collections.yaml
 - [x] CLI (`mn`): new, list, show, search (basic text)
 - [x] Initial Japanese notes populated (7 notes)
-- [ ] CLI: full CRUD — edit, write, append, delete, move
+- [ ] CLI: write, edit (find/replace), open, delete
 - [ ] CLI: meta (frontmatter manipulation)
 - [ ] CLI: sync (git pull/push)
-- [ ] CLI: --json output, batch mode
-- [ ] SQLite FTS5 index for faster search
+- [ ] CLI: --json output
+- [ ] SQLite FTS5 index (with ICU tokenizer for CJK)
 - [ ] CLI: collections, stats
+- [ ] OpenClaw skill (`maho-notes`) for agent guardrails
 
 ### Phase 2 — Universal App (macOS + iPadOS + iOS)
 - [ ] Xcode project with macOS + iOS targets (universal app)
