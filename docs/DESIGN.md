@@ -81,10 +81,57 @@ Content here...
 | `order` | number | ❌ | Sort order within collection |
 | `series` | string | ❌ | Group notes into a series (e.g., "日語基礎") |
 
+### Configuration
+
+Two layers of config: **vault-level** (shared across devices) and **device-level** (local only).
+
+```
+maho-vault/
+  maho.yaml              # Vault-level config (synced with vault)
+  .maho/
+    config.yaml           # Device-level config (gitignored)
+```
+
+#### maho.yaml (vault-level, synced)
+```yaml
+author:
+  name: Kuo-Chuan Pan
+  url: https://pcca.dev
+github:
+  repo: kuochuanpan/maho-vault
+site:
+  domain: notes.pcca.dev
+  title: Kuo-Chuan's Notes
+  theme: default
+```
+
+- `author`: default author info for new notes (`mn new` auto-fills frontmatter)
+- `github`: vault repo for sync + publishing
+- `site`: published site settings (domain, title, theme)
+
+#### .maho/config.yaml (device-level, gitignored)
+```yaml
+embed:
+  model: bge-m3           # per-device embedding model choice
+```
+
+- Auth tokens stored securely in `.maho/` (gitignored, never synced)
+- Embedding model is per-device (iPhone → Light, Mac → Pro)
+
+#### CLI (`mn config`)
+```bash
+mn config                              # show all config (vault + device)
+mn config --set author.name "Name"     # set vault-level config
+mn config --set embed.model bge-m3     # set device-level config
+mn config auth                         # interactive GitHub OAuth → store in .maho/
+mn config auth --status                # check auth status
+```
+
 ### Directory Structure (maho-vault)
 
 ```
 maho-vault/
+├── maho.yaml                  # Vault-level config (author, github, site)
 ├── collections.yaml          # Collection definitions
 ├── getting-started/           # Tutorial collection (auto-generated on first vault creation)
 │   ├── _index.md             # Welcome to Maho Notes
@@ -217,6 +264,12 @@ mn index --model bge-m3               # specify embedding model
 
 # ── Import ────────────────────────────────────────
 mn import --from https://github.com/user/vault.git  # one-time import from GitHub
+
+# ── Config & Auth ─────────────────────────────────
+mn config                             # show all config
+mn config --set <key> <value>         # set config value
+mn config auth                        # GitHub OAuth flow
+mn config auth --status               # check auth status
 
 # ── Info ──────────────────────────────────────────
 mn collections                        # list all collections
@@ -527,6 +580,8 @@ mn publish --preview                # local preview before pushing
 - [x] Initial Japanese notes populated (7 notes)
 - [ ] CLI: open, delete
 - [ ] CLI: meta (frontmatter manipulation)
+- [ ] CLI: config (vault + device config, maho.yaml)
+- [ ] CLI: config auth (GitHub OAuth)
 - [ ] CLI: sync (git pull/push)
 - [ ] CLI: --json output
 - [ ] SQLite FTS5 index (with ICU tokenizer for CJK)
