@@ -10,7 +10,7 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
 - **UI**: Chinese, English, Japanese, Korean (user-selectable)
 - **Content**: Full Unicode support, mixed-language notes
 - **Search**: FTS5 + vector search work across all four languages (powered by [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite))
-- **Furigana**: Native `{漢字|かんじ}` rendering for Japanese learners
+- **Ruby annotation**: `{base|annotation}` syntax — works for Japanese furigana (`{漢字|かんじ}`), Taiwanese Tâi-lô (`{台灣|Tâi-oân}`), Chinese Zhuyin/Pinyin (`{漢字|ㄏㄢˋ ㄗˋ}`), Korean Hanja (`{韓國|한국}`), etc.
 - **Embedding models**: Multilingual semantic search across 中英日韓 (built-in tier has limited CJK quality; Light tier and above recommended)
 
 ## Architecture
@@ -150,7 +150,7 @@ maho-vault/
 │   ├── _index.md             # Welcome to Maho Notes
 │   ├── 001-your-first-note.md
 │   ├── 002-collections.md
-│   ├── 003-markdown-features.md  # Math, Mermaid, furigana, callouts
+│   ├── 003-markdown-features.md  # Math, Mermaid, ruby annotation, callouts
 │   ├── 004-search.md
 │   ├── 005-sync-and-github.md
 │   └── 006-publishing.md
@@ -245,7 +245,12 @@ collections:
 - **Admonitions / callouts** — tip, warning, note, info blocks
 - **Table of contents** — auto-generated from headings
 - **Footnotes**
-- **Furigana** — ruby annotation for Japanese (custom syntax or plugin)
+- **Ruby annotation** — `{base|annotation}` syntax for phonetic guides, language-agnostic:
+  - Japanese furigana: `{漢字|かんじ}`
+  - Taiwanese Tâi-lô/POJ: `{台灣|Tâi-oân}`
+  - Chinese Zhuyin: `{漢字|ㄏㄢˋ ㄗˋ}`
+  - Chinese Pinyin: `{漢字|hànzì}`
+  - Korean readings: `{韓國|한국}`
 
 ### Rendering Stack
 - **Native (SwiftUI)**: `swift-markdown` for parsing → custom `AttributedString` renderer, `WKWebView` fallback for complex content (KaTeX, Mermaid)
@@ -451,7 +456,7 @@ One Xcode project, shared SwiftUI codebase. Supports **macOS**, **iOS**, and **i
 - Raw markdown editor with:
   - Syntax highlighting for markdown
   - Live preview (3 view modes on macOS/iPadOS, toggle on iPhone)
-  - Toolbar shortcuts (bold, italic, heading, link, image, code block, table, furigana)
+  - Toolbar shortcuts (bold, italic, heading, link, image, code block, table, ruby annotation)
   - Auto-save on pause
 
 ## Web (Published Sites via GitHub Pages)
@@ -472,7 +477,7 @@ No centralized web app. Publishing generates a static site deployed to the user'
 ```
 
 ### Features
-- Beautiful rendering (syntax highlighting, KaTeX, Mermaid, furigana)
+- Beautiful rendering (syntax highlighting, KaTeX, Mermaid, ruby annotation)
 - Responsive design
 - RSS feed, Open Graph meta tags
 - Custom domain support (user configures in GitHub Pages settings)
@@ -604,7 +609,7 @@ All platforms can publish. No git CLI needed on iOS — pure HTTP API.
 
 ### What Gets Published
 - Only notes with `public: true` in frontmatter
-- Static HTML with beautiful rendering (syntax highlighting, KaTeX, furigana)
+- Static HTML with beautiful rendering (syntax highlighting, KaTeX, ruby annotation)
 - Auto-generated index page, collection pages, RSS feed
 - User's private notes never leave their device/iCloud
 
@@ -640,7 +645,7 @@ mn publish --preview                # local preview before pushing
 
 ### Static Site Features
 - Clean, responsive theme (light/dark mode)
-- Syntax highlighting, KaTeX math, Mermaid diagrams, furigana
+- Syntax highlighting, KaTeX math, Mermaid diagrams, ruby annotation
 - Collection-based navigation
 - RSS feed
 - Open Graph meta tags for social sharing
@@ -704,14 +709,14 @@ Local CRUD fully functional. No network, no database.
 ### Phase 4 — Publishing (All Platforms)
 - [ ] Static site generator in MahoNotesKit
 - [ ] GitHub OAuth via `ASWebAuthenticationSession` (iOS/iPadOS/macOS)
-- [ ] Generate HTML with syntax highlighting, KaTeX, furigana
+- [ ] Generate HTML with syntax highlighting, KaTeX, ruby annotation
 - [ ] Push to user's GitHub repo → GitHub Pages (REST API)
 - [ ] CLI: `mn publish`, `mn publish --preview`
 - [ ] Published site: index page, collection pages, RSS feed
 
 ### Phase 5 — Polish + App Store
 - [ ] Multilingual UI (中文 / English / 日本語 / 한국어)
-- [ ] Furigana rendering (native + published sites)
+- [ ] Ruby annotation rendering (native + published sites) — furigana, Tâi-lô, Zhuyin, etc.
 - [ ] Mermaid diagrams
 - [ ] RSS feed + Open Graph meta tags
 - [ ] Share extension (iOS/iPadOS)
@@ -730,7 +735,7 @@ Local CRUD fully functional. No network, no database.
 | Markdown | swift-markdown (native), Swift HTML templates (static site generator) |
 | Syntax Highlighting | TreeSitter (native), Splash or highlight.js (static site) |
 | Math | WKWebView + KaTeX (native), KaTeX (static site) |
-| Furigana | `{漢字|かんじ}` → `<ruby>` (web) / AttributedString (native) |
+| Ruby Annotation | `{base|annotation}` → `<ruby>` (web) / AttributedString (native) — furigana, Tâi-lô, Zhuyin, Pinyin, etc. |
 | Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) (SQLite 3.48 + FTS5 + CJK tokenizer) + sqlite-vec |
 | Embeddings | Tiered: Apple NLEmbedding (built-in) / MiniLM (90MB) / e5-small (470MB) / BGE-M3 (2.2GB) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
@@ -747,7 +752,7 @@ Local CRUD fully functional. No network, no database.
 4. **Git on iOS**: Not needed — iCloud for sync, GitHub REST API for publishing
 5. **Publishing**: Static site generated by app, deployed to user's GitHub Pages (no centralized web app)
 6. **Vector search**: 100% on-device, user-selectable model per device (Apple NLEmbedding → BGE-M3), sqlite-vec for local queries
-7. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
+7. **Ruby annotation syntax**: `{base|annotation}` → renders to HTML `<ruby>` (web) / `AttributedString` (native). Language-agnostic: works for Japanese furigana, Taiwanese Tâi-lô/POJ, Chinese Zhuyin/Pinyin, Korean readings, etc.
 8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); built-in has limited CJK/Korean, Light+ recommended for 中英日韓
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
