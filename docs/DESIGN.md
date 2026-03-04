@@ -126,22 +126,24 @@ Collections are **entirely user-defined**. The app ships with no hardcoded colle
 ```yaml
 # Example — each user's vault has its own collections.yaml
 # These are NOT built into the app; users create whatever they need.
+# Icons use SF Symbols names (rendered via Image(systemName:) in SwiftUI).
+# Users can pick icons from an SF Symbols picker in the app UI.
 collections:
   - id: japanese
     name: 日本語
-    icon: 🇯🇵
+    icon: character.book.closed
     description: 日語學習筆記
   - id: astronomy
     name: 天文筆記
-    icon: 🔭
+    icon: sparkles
     description: 天文物理研究筆記
   - id: simulation
     name: 模擬日誌
-    icon: 💻
+    icon: terminal
     description: 數值模擬運行紀錄與分析
   - id: software
     name: 軟體開發
-    icon: ⚙️
+    icon: wrench.and.screwdriver
     description: 程式設計與工具筆記
 ```
 
