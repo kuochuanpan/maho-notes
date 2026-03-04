@@ -176,15 +176,24 @@ mn index --collection japanese          # reindex one collection
 
 ## Vector Search
 
+### Architecture
+App must support vector search **locally** (no server dependency, App Store requirement).
+
 ### Embedding Pipeline
-1. On `mn index` or file change: parse markdown → extract text chunks (~500 tokens)
-2. Generate embeddings (local model, e.g., `nomic-embed-text` or `all-MiniLM-L6-v2` via `mlx`)
-3. Store in SQLite with `sqlite-vec` extension
-4. Query: embed search string → cosine similarity → top-K results
+1. **Mac mini (build server)**: Run BGE-M3 via MLX, generate embeddings for all notes
+2. **Store**: Embeddings saved in SQLite (sqlite-vec) alongside note metadata
+3. **Sync**: Embedding DB syncs via iCloud or included in GitHub repo (`.maho/index.db`)
+4. **Query**: Local cosine similarity via sqlite-vec + Accelerate (vDSP)
+
+### On-Device (iOS/macOS)
+- sqlite-vec for vector operations (pure C, no ML framework needed)
+- Embeddings pre-computed on Mac mini, synced to devices
+- For new notes created on device: queue for embedding on next Mac mini sync, use FTS5 in the meantime
+- Future: CoreML distilled model for on-device embedding (~50MB)
 
 ### Search Modes
-- **Full-text**: SQLite FTS5 on title + content + tags
-- **Semantic**: Vector similarity search
+- **Full-text**: SQLite FTS5 on title + content + tags (always available)
+- **Semantic**: Vector similarity search (available when embeddings synced)
 - **Hybrid**: Combine FTS5 score + vector score with RRF (Reciprocal Rank Fusion)
 
 ## Native Apps (SwiftUI)
@@ -219,35 +228,64 @@ mn index --collection japanese          # reindex one collection
   - Toolbar shortcuts (bold, italic, heading, link, image, code block)
   - Auto-save on pause
 
-## Web App (Next.js)
+## Web App (Next.js — Serverless)
+
+Deployed as serverless (Vercel or Cloudflare Pages). No dedicated server.
+
+### Architecture
+- **Static generation** for published notes (SSG at build time or ISR)
+- **Serverless functions** for API (search, edit, GitHub webhook)
+- **GitHub as backend** — reads markdown from repo via API or git
+- **Edge functions** for low-latency search (optional)
 
 ### Routes
 ```
 /                           → Dashboard (recent notes, collections)
 /c/:collection              → Collection view
 /c/:collection/:slug        → Note view
-/c/:collection/:slug/edit   → Note editor
+/c/:collection/:slug/edit   → Note editor (authenticated)
 /search                     → Search page
-/public/:collection/:slug   → Published note (no auth)
+/public/:collection/:slug   → Published note (no auth, SSG)
+/api/search                 → Serverless search endpoint
+/api/notes                  → Serverless CRUD endpoint
 ```
 
 ### Features
-- SSR for published notes (SEO)
-- Auth for private notes (GitHub OAuth or simple token)
+- SSG for published notes (SEO, fast, free hosting)
+- GitHub OAuth for private notes
 - Monaco editor or CodeMirror for editing
-- Responsive (serves as iOS fallback)
+- Responsive (serves as mobile web fallback)
+- GitHub webhook: auto-rebuild on push to vault repo
 
 ## Sync Strategy
 
-### GitHub as Source of Truth
-- All notes stored as markdown files in `maho-vault`
-- Native apps + CLI do local git operations
-- Conflict resolution: last-write-wins with backup of conflicting version
-- Auto-sync: on app launch, on save (debounced), on app background (iOS)
+### Multi-Backend Storage
+App must work standalone (App Store requirement). Git/GitHub is optional power-user feature.
+
+| Backend | Use Case | Platforms |
+|---------|----------|-----------|
+| **Local only** | Default, App Store friendly | macOS, iOS |
+| **iCloud** | Seamless Apple device sync, zero config | macOS, iOS |
+| **GitHub** | Version control, collaboration, CLI, publishing | macOS, CLI, Web |
+
+### Sync Priority
+1. **iCloud (primary for app users)** — CloudKit or iCloud Drive
+   - Zero config, just works with Apple ID
+   - Automatic conflict resolution (NSFileVersion)
+   - Background sync on iOS
+   - Works offline, syncs when online
+2. **GitHub (primary for CLI + power users)** — git operations
+   - Version history, branching, collaboration
+   - Required for publishing (web app reads from repo)
+   - CLI uses git directly
+3. **Hybrid** — app can use iCloud locally + push to GitHub on demand
+   - "Export to GitHub" / "Import from GitHub" commands
+   - Or automatic bidirectional sync (advanced, Phase 5)
 
 ### Offline Support
-- Full local clone → works offline
-- Queue changes → sync when online
+- Full local storage → always works offline
+- iCloud: automatic background sync
+- GitHub: manual or on-demand sync
 
 ## Publishing
 
@@ -284,11 +322,12 @@ mn index --collection japanese          # reindex one collection
 - [ ] Markdown rendering (native + WKWebView hybrid)
 - [ ] Editor with live preview
 
-### Phase 4 — iOS App
-- [ ] Shared SwiftUI codebase adaptation
-- [ ] iCloud Keychain for git credentials
+### Phase 4 — iOS App + iCloud Sync
+- [ ] Shared SwiftUI codebase adaptation (universal app)
+- [ ] iCloud Drive or CloudKit sync
 - [ ] Background sync
 - [ ] Share extension (save to vault from Safari etc.)
+- [ ] App Store submission
 
 ### Phase 5 — Polish
 - [ ] Furigana support
@@ -310,19 +349,25 @@ mn index --collection japanese          # reindex one collection
 | Math | KaTeX (web), WKWebView + KaTeX (native) |
 | Furigana | `{漢字|かんじ}` → `<ruby>` (web) / AttributedString (native) |
 | Database | SQLite + FTS5 + sqlite-vec |
-| Embeddings | BGE-M3 (1024d, multilingual 中英日, local via MLX) |
-| Git | SwiftGit2 (macOS/CLI) / GitHub REST API (iOS) |
+| Embeddings | BGE-M3 (1024d, multilingual 中英日, Mac mini via MLX) |
+| Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
+| Git | SwiftGit2 (macOS/CLI) / GitHub REST API (iOS, optional) |
 | Auth | GitHub OAuth (web) |
-| Hosting | Cloudflare Pages or Vercel |
+| Hosting | Vercel or Cloudflare Pages (serverless) |
 | Domain | notes.pcca.dev |
 
 ## Design Decisions
 
 1. **CLI language**: **Swift** — shared codebase with native apps via MahoNotesKit Swift Package
-2. **Git on iOS**: SwiftGit2 (libgit2) for macOS/CLI; GitHub REST API fallback for iOS
-3. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
-4. **Embedding model**: **BGE-M3** (1024d, ~2.2GB) — best multilingual (中英日) support, runs locally on Mac mini via MLX
-5. **Domain**: `notes.pcca.dev`
+2. **Native app**: **Universal app** (one Xcode project, macOS + iOS targets, shared SwiftUI code)
+3. **Sync**: **iCloud** (default for app) + **GitHub** (optional, for CLI/power users/publishing)
+4. **Git on iOS**: GitHub REST API (optional); primary sync via iCloud
+5. **Web app**: **Serverless** (Vercel/Cloudflare Pages), no dedicated server
+6. **Vector search**: Pre-computed on Mac mini (BGE-M3 via MLX), sqlite-vec for local queries on all platforms
+7. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
+8. **Embedding model**: **BGE-M3** (1024d, ~2.2GB) — best multilingual (中英日) support
+9. **Domain**: `notes.pcca.dev`
+10. **App Store**: App must work standalone without server dependency
 
 ---
 
