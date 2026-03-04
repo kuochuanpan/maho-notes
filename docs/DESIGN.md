@@ -203,18 +203,18 @@ mn stats                              # note count, word count, per-collection s
 ```
 
 ### AI Agent Workflow
-AI agents should **always use `mn` CLI** to interact with the vault (not raw file I/O).
-This ensures frontmatter validation, automatic timestamps, and prevents accidental publishing.
+**Rule: metadata via CLI, body content is free.**
+
+| Operation | Method | Why |
+|-----------|--------|-----|
+| Create note | `mn new` | Auto-generates valid frontmatter |
+| Modify metadata | `mn meta` | Validates fields, prevents accidental `public: true` |
+| Delete / Publish | `mn delete` / `mn publish` | Safety confirmation |
+| Read content | Direct file read or `mn show` | No risk, either is fine |
+| Write / edit body | Direct file edit or `mn write` / `mn edit` | Fine as long as frontmatter block (`---`) is untouched |
+| Search | `mn search` | FTS5 / vector index |
 
 ```bash
-# Typical agent workflow for editing a note:
-body=$(mn show <path> --body-only)    # 1. read current body
-# ... agent modifies body ...
-mn write <path> --content "$new_body" # 2. write back (frontmatter safe)
-
-# Surgical fix:
-mn edit <path> --find "錯字" --replace "正確"
-
 # All commands support --json for scripting:
 mn list --json
 mn search "query" --json
