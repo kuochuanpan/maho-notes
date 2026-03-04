@@ -1,4 +1,5 @@
 import Foundation
+import Yams
 
 /// Provides operations on a maho-vault directory
 public struct Vault: Sendable {
@@ -8,9 +9,56 @@ public struct Vault: Sendable {
         self.path = (path as NSString).expandingTildeInPath
     }
 
-    /// Load all collections defined in collections.yaml
+    /// Load all collections: defined in collections.yaml + discovered from filesystem
     public func collections() throws -> [Collection] {
-        try loadCollections(from: path)
+        let defined = try loadCollections(from: path)
+        let definedIds = Set(defined.map { $0.id })
+
+        // Discover collection directories not in collections.yaml
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+        let contents = try fm.contentsOfDirectory(at: vaultURL, includingPropertiesForKeys: [.isDirectoryKey])
+        var discovered: [Collection] = []
+
+        for item in contents {
+            var isDir: ObjCBool = false
+            let name = item.lastPathComponent
+            guard fm.fileExists(atPath: item.path, isDirectory: &isDir),
+                  isDir.boolValue,
+                  !name.hasPrefix("."),
+                  !name.hasPrefix("_"),
+                  !definedIds.contains(name)
+            else { continue }
+
+            // Only count as collection if it has at least one .md file
+            let mdFiles = (try? fm.contentsOfDirectory(atPath: item.path))?.filter {
+                $0.hasSuffix(".md") && $0 != "_index.md"
+            } ?? []
+            guard !mdFiles.isEmpty else { continue }
+
+            // Check _index.md for metadata
+            let indexPath = item.appendingPathComponent("_index.md").path
+            var displayName = name
+            var description = ""
+            if fm.fileExists(atPath: indexPath),
+               let indexContent = try? String(contentsOfFile: indexPath, encoding: .utf8) {
+                let (yamlStr, _) = splitFrontmatter(indexContent)
+                if let yamlStr,
+                   let yaml = try? Yams.load(yaml: yamlStr) as? [String: Any] {
+                    displayName = yaml["title"] as? String ?? name
+                    description = yaml["description"] as? String ?? ""
+                }
+            }
+
+            discovered.append(Collection(
+                id: name,
+                name: displayName,
+                icon: "folder",  // default SF Symbol
+                description: description
+            ))
+        }
+
+        return defined + discovered.sorted(by: { $0.id < $1.id })
     }
 
     /// Find all markdown files in the vault (excluding _index.md files)
