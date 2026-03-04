@@ -1,10 +1,17 @@
 # Maho Notes — Design Document
 
-> A personal knowledge base with beautiful markdown rendering, cross-platform native apps, vector search, and selective publishing.
+> A multilingual personal knowledge base with beautiful markdown rendering, cross-platform native apps, on-device vector search, and selective publishing.
 
 ## Overview
 
-Maho Notes is a markdown-first knowledge management system. It supports multiple collections, on-device semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
+Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, and **Japanese (日本語)**. It supports multiple collections, on-device multilingual semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
+
+### Multilingual Support 🌐
+- **UI**: Chinese, English, Japanese (user-selectable)
+- **Content**: Full Unicode support, mixed-language notes
+- **Search**: FTS5 + vector search work across all three languages
+- **Furigana**: Native `{漢字|かんじ}` rendering for Japanese learners
+- **Embedding models**: All tiers support 中英日 multilingual semantic search
 
 ## Architecture
 
