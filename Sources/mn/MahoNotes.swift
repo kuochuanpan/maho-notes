@@ -18,6 +18,7 @@ struct MahoNotes: ParsableCommand {
             ConfigCommand.self,
             CollectionsCommand.self,
             StatsCommand.self,
+            IndexCommand.self,
         ]
     )
 }
