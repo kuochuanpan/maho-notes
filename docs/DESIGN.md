@@ -660,9 +660,10 @@ Local CRUD fully functional. No network, no database.
 - [ ] OpenClaw skill (`maho-notes`) for agent guardrails
 
 ### Phase 1b — Full-Text Search
-- [ ] SQLite FTS5 index (`unicode61` tokenizer — built-in, no extra deps)
+- [ ] Bundle custom SQLite with ICU support via MahoNotesKit (e.g., GRDB + SQLite source build)
+- [ ] SQLite FTS5 index with **ICU tokenizer** for proper CJK segmentation
 - [ ] `mn search` with FTS5 (title + content + tags)
-- [ ] Note: `unicode61` has limited CJK quality; upgrade to ICU tokenizer in Phase 2 (app can bundle custom SQLite with ICU support)
+- [ ] CLI and App share the same MahoNotesKit → same custom SQLite → ICU works everywhere
 
 ### Phase 1c — GitHub Sync
 - [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
@@ -679,7 +680,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] GitHub OAuth via `ASWebAuthenticationSession` (replaces Phase 1c token-based auth)
 - [ ] Conflict resolution (split into two versions + diff view)
 - [ ] Local SQLite metadata + FTS5
-- [ ] Upgrade FTS5 to ICU tokenizer (app bundles custom SQLite with ICU for proper CJK segmentation)
+- [ ] ICU tokenizer already available via MahoNotesKit (from Phase 1b)
 
 ### Phase 3 — Vector Search
 - [ ] On-device embedding (Apple NLEmbedding as default)
