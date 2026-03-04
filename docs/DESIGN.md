@@ -200,10 +200,12 @@ mn search --collection japanese "query"    # scoped search
 mn search --semantic "query" --limit 5     # top-K results
 
 # ── Publishing ────────────────────────────────────
-mn publish                            # publish all public notes
-mn publish <path>                     # publish single note
-mn unpublish <path>                   # remove from published site
+mn publish                            # generate + push all public:true notes to GitHub Pages
+mn publish <path>                     # set public:true + generate + push (one-step)
+mn unpublish <path>                   # set public:false + remove from published site
 mn publish --preview                  # local preview before push
+# Workflow: mn meta --set public=true (mark only) → mn publish (deploy later)
+# Or just: mn publish <path> (marks + deploys in one step)
 
 # ── Sync & Index ──────────────────────────────────
 mn sync                               # git pull + push + reindex
