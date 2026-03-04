@@ -259,11 +259,10 @@ mn publish --preview                  # local preview before push
 
 # ── Sync & Index ──────────────────────────────────
 mn sync                               # git pull + push + reindex
+# First run: if vault is empty + github.repo configured → auto clone from repo
+# New device setup: mn config auth → mn config --set github.repo <repo> → mn sync
 mn index                              # rebuild SQLite + embeddings
 mn index --model bge-m3               # specify embedding model
-
-# ── Import ────────────────────────────────────────
-mn import --from https://github.com/user/vault.git  # one-time import from GitHub
 
 # ── Config & Auth ─────────────────────────────────
 mn config                             # show all config
@@ -479,12 +478,14 @@ Real-world example (our setup):
 - **What syncs**: Only markdown files + collections.yaml + assets
 - **What doesn't sync**: `.maho/` (local DB, embeddings, cache)
 
-### Import from GitHub
-One-time import for new devices or switching from CLI-only workflow:
+### New Device Setup
+No separate import command — `mn sync` handles first-time clone automatically:
 ```bash
-mn import --from https://github.com/user/vault.git
+mn config auth                                        # GitHub OAuth
+mn config --set github.repo kuochuanpan/maho-vault    # set vault repo
+mn sync                                               # detects empty vault → clones from repo
 ```
-In app: Settings → Sync → Import from GitHub Repository
+In app: Settings → Sync → Connect GitHub Repository → syncs automatically.
 
 ### Offline Support
 - Full local storage → always works offline
@@ -596,7 +597,6 @@ mn publish --preview                # local preview before pushing
 - [ ] iCloud sync (default)
 - [ ] GitHub sync (optional, for cross-Apple-ID / AI agent use)
 - [ ] Conflict resolution (split into two versions + diff view)
-- [ ] Import from GitHub repository
 - [ ] Local SQLite metadata + FTS5
 
 ### Phase 3 — Vector Search
