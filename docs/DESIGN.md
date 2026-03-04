@@ -113,8 +113,11 @@ maho-vault/
 
 ### collections.yaml
 
+Collections are **entirely user-defined**. The app ships with no hardcoded collections — a fresh vault starts empty, and users create their own via the app UI or by editing `collections.yaml` directly. The following is just an example:
+
 ```yaml
-# Example collections (user-defined)
+# Example — each user's vault has its own collections.yaml
+# These are NOT built into the app; users create whatever they need.
 collections:
   - id: japanese
     name: 日本語
