@@ -4,35 +4,46 @@
 
 ## Overview
 
-Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, and **Japanese (日本語)**. It supports multiple collections, on-device multilingual semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
+Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, **Japanese (日本語)**, and **Korean (한국어)**. It supports multiple collections, on-device multilingual semantic search, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control and publishing.
 
 ### Multilingual Support 🌐
-- **UI**: Chinese, English, Japanese (user-selectable)
+- **UI**: Chinese, English, Japanese, Korean (user-selectable)
 - **Content**: Full Unicode support, mixed-language notes
-- **Search**: FTS5 + vector search work across all three languages
+- **Search**: FTS5 + vector search work across all four languages (powered by [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite))
 - **Furigana**: Native `{漢字|かんじ}` rendering for Japanese learners
-- **Embedding models**: Multilingual semantic search across 中英日 (built-in tier has limited CJK quality; Light tier and above recommended)
+- **Embedding models**: Multilingual semantic search across 中英日韓 (built-in tier has limited CJK quality; Light tier and above recommended)
 
 ## Architecture
 
 ```
-┌──────────────────────────┐  ┌──────────┐
-│   Universal App (SwiftUI) │  │   CLI    │
-│  macOS + iPadOS + iOS     │  │  (mn)    │
-└──────────┬───────────────┘  └────┬─────┘
-           │                       │
-     ┌─────▼───────────────────────▼─────┐
-     │         MahoNotesKit              │
-     │  (Markdown, Search, CRUD, Sync)   │
-     └──┬──────────┬──────────┬──────────┘
-        │          │          │
-   ┌────▼───┐ ┌───▼────┐ ┌──▼───────┐
-   │ iCloud  │ │ SQLite  │ │Embeddings│
-   │ / Git   │ │ (FTS+vec)│ │(on-device)│
-   └────────┘ └────────┘ └──────────┘
+┌───────────────────────────┐  ┌──────────┐
+│   Universal App (SwiftUI)  │  │   CLI    │
+│  macOS + iPadOS + iOS      │  │  (mn)    │
+└──────────┬────────────────┘  └────┬─────┘
+           │                        │
+     ┌─────▼────────────────────────▼──────┐
+     │           MahoNotesKit              │
+     │  (Markdown, Search, CRUD, Sync)     │
+     └──┬──────────┬──────────┬──────┬─────┘
+        │          │          │      │
+   ┌────▼───┐ ┌───▼────────┐ │ ┌────▼─────┐
+   │ iCloud  │ │swift-cjk-  │ │ │Embeddings│
+   │ (auto)  │ │sqlite      │ │ │(on-device)│
+   └────┬────┘ │FTS5 + CJK  │ │ │CoreML/NL │
+        │      │tokenizer   │ │ └──────────┘
+        │      └──┬─────────┘ │
+        │    ┌────▼────┐  ┌───▼────┐
+        │    │  FTS5    │  │sqlite- │
+        │    │  index   │  │vec     │
+        │    └─────────┘  └────────┘
+        │
+   ┌────▼─────┐    ┌──────────────┐
+   │  GitHub   │───→│ GitHub Pages │
+   │  (opt.)   │    │ (published)  │
+   └──────────┘    └──────────────┘
 
-Publishing (optional):
-   App → generates static HTML → pushes to user's GitHub repo → GitHub Pages
+Sync: iCloud (automatic) ←→ Vault ←→ GitHub (explicit, mn sync)
+Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 ```
 
 ## Repositories (Our Instance)
@@ -169,15 +180,13 @@ maho-vault/
     └── cache/                 # Rendered HTML cache
 ```
 
-### collections.yaml
-
 #### Why Two Config Files?
 - `maho.yaml` — vault-level settings (author, GitHub, site). Rarely changes.
 - `collections.yaml` — content organization. Changes often (add/rename/reorder collections).
 
 Keeping them separate reduces merge conflict risk when syncing via GitHub.
 
-### Nested Directories
+### Nested Directories (Unlimited Depth)
 
 Collections support **unlimited nesting**. The filesystem hierarchy IS the organization:
 
@@ -369,7 +378,7 @@ The CLI auto-detects the iCloud container on macOS, so it operates on the same v
 | 🟠 Standard | multilingual-e5-small | ~470 MB | 384 | Better | All |
 | 🔴 Pro | BGE-M3 | ~2.2 GB | 1024 | Best | Mac recommended |
 
-- **Default**: Apple NLEmbedding (zero download, works immediately; note: CJK quality is limited — for serious multilingual search, recommend Light tier or above)
+- **Default**: Apple NLEmbedding (zero download, works immediately; note: CJK/Korean quality is limited — for serious multilingual search, recommend Light tier or above)
 - **Optional**: User downloads preferred model in Settings → Search → Embedding Model
 - **Per-device choice**: iPhone can use Light, Mac can use Pro — independent
 - Models distributed as CoreML packages via:
@@ -663,7 +672,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency
   - Bundles SQLite 3.48.0 with FTS5 + custom `cjk` tokenizer (Apple NLTokenizer for CJK segmentation)
   - Already has CI (macOS + iOS Simulator) + 19 regression tests
-- [ ] SQLite FTS5 index with `cjk` tokenizer for proper 中英日 full-text search
+- [ ] SQLite FTS5 index with `cjk` tokenizer for proper 中英日韓 full-text search
 - [ ] `mn search` with FTS5 (title + content + tags)
 - [ ] CLI and App share the same MahoNotesKit → same `swift-cjk-sqlite` → CJK search works everywhere
 
@@ -701,7 +710,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] Published site: index page, collection pages, RSS feed
 
 ### Phase 5 — Polish + App Store
-- [ ] Multilingual UI (中文 / English / 日本語)
+- [ ] Multilingual UI (中文 / English / 日本語 / 한국어)
 - [ ] Furigana rendering (native + published sites)
 - [ ] Mermaid diagrams
 - [ ] RSS feed + Open Graph meta tags
@@ -739,11 +748,11 @@ Local CRUD fully functional. No network, no database.
 5. **Publishing**: Static site generated by app, deployed to user's GitHub Pages (no centralized web app)
 6. **Vector search**: 100% on-device, user-selectable model per device (Apple NLEmbedding → BGE-M3), sqlite-vec for local queries
 7. **Furigana syntax**: `{漢字|かんじ}` → renders to HTML `<ruby>` (web) / `AttributedString` ruby annotation (native)
-8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); built-in has limited CJK, Light+ recommended for 中英日
+8. **Embedding model**: User-selectable per device; 4 tiers from Apple NLEmbedding (0MB) to BGE-M3 (2.2GB); built-in has limited CJK/Korean, Light+ recommended for 中英日韓
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
 11. **Publishing**: User-owned — each user publishes to their own GitHub Pages, we don't host content
 
 ---
 
-*Design by 真帆 🔭 — 2026-03-03*
+*Design by 真帆 🔭 — 2026-03-04*
