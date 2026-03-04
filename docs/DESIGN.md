@@ -51,7 +51,6 @@ Each note is a markdown file with YAML frontmatter:
 ```markdown
 ---
 title: 訓讀 vs 音讀
-collection: japanese
 tags: [漢字, 読み方, N5]
 created: 2026-03-03T09:18:00-05:00
 updated: 2026-03-03T09:44:00-05:00
@@ -65,21 +64,24 @@ author: maho
 Content here...
 ```
 
+> Collection is inferred from the file path: `japanese/grammar/001-kunyomi-onyomi.md` → collection: `japanese`
+
 ### Frontmatter Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `title` | string | ✅ | Display title |
-| `collection` | string | ✅ | Collection id |
 | `tags` | string[] | ❌ | Searchable tags |
 | `created` | datetime | ✅ | Creation timestamp |
 | `updated` | datetime | ✅ | Last modified |
 | `public` | boolean | ❌ | If true, publishable as web page (default: false) |
 | `slug` | string | ❌ | URL slug for published notes |
-| `author` | string | ❌ | `maho` or `kuochuan` |
+| `author` | string | ❌ | `maho` or `kuochuan` (default from `maho.yaml`) |
 | `draft` | boolean | ❌ | Draft status (default: false) |
 | `order` | number | ❌ | Sort order within collection |
 | `series` | string | ❌ | Group notes into a series (e.g., "日語基礎") |
+
+> **Note:** Collection is determined by the note's directory path, not by a frontmatter field. A note at `japanese/grammar/001-xxx.md` belongs to the `japanese` collection. This avoids redundancy and prevents path/metadata inconsistency.
 
 ### Configuration
 
@@ -169,6 +171,34 @@ maho-vault/
 
 ### collections.yaml
 
+#### Why Two Config Files?
+- `maho.yaml` — vault-level settings (author, GitHub, site). Rarely changes.
+- `collections.yaml` — content organization. Changes often (add/rename/reorder collections).
+
+Keeping them separate reduces merge conflict risk when syncing via GitHub.
+
+### Nested Directories
+
+Collections support **unlimited nesting**. The filesystem hierarchy IS the organization:
+
+```
+japanese/                  ← collection (top-level = defined in collections.yaml)
+  grammar/                 ← subdirectory (any depth)
+    basics/                ← deeper nesting is fine
+      001-particles.md
+    advanced/
+      001-keigo.md
+  vocabulary/
+    001-star.md
+```
+
+- Top-level directories are collections (must be listed in `collections.yaml`)
+- Subdirectories within a collection are free-form — create whatever hierarchy makes sense
+- `_index.md` can appear at any level as a directory overview page
+- App UI renders the tree structure; CLI uses path-based navigation
+
+### collections.yaml
+
 Collections are **entirely user-defined**. The app ships with no hardcoded collections — when a fresh vault is created, it includes a `getting-started` tutorial collection with a few example notes (usage, markdown features, sync & GitHub, publishing, etc.). These are real markdown files that users can edit or delete. Beyond that, users create their own collections via the app UI or by editing `collections.yaml` directly. The following is just an example:
 
 ```yaml
@@ -219,6 +249,12 @@ The CLI is a first-class interface — not just for humans, but for AI agents.
 It must support full CRUD, search, and publishing with scriptable (JSON) output.
 
 ```bash
+# ── Init ──────────────────────────────────────────
+mn init                               # create vault: maho.yaml + collections.yaml + getting-started/
+mn init --vault <path>                # create at specific path
+# Idempotent: safe to run on existing vault (only adds missing files)
+# Universal app reuses the same init logic for first-launch setup
+
 # ── Create & Delete ───────────────────────────────
 mn new "Title" --collection japanese --tags "N5,漢字"  # auto-generates frontmatter + slug filename
 mn delete <path>                      # move to trash / confirm
@@ -259,10 +295,11 @@ mn publish --preview                  # local preview before push
 # Publishing is incremental by default — uses content hashes to detect changes.
 
 # ── Sync & Index ──────────────────────────────────
-mn sync                               # git pull + push + reindex
+mn sync                               # git pull + push (no auto reindex)
+mn sync --reindex                     # git pull + push + rebuild index
 # First run: if vault is empty + github.repo configured → auto clone from repo
 # New device setup: mn config auth → mn config --set github.repo <repo> → mn sync
-mn index                              # rebuild SQLite + embeddings
+mn index                              # rebuild SQLite FTS index (+ embeddings if model configured)
 mn index --model bge-m3               # specify embedding model
 
 # ── Config & Auth ─────────────────────────────────
@@ -607,29 +644,42 @@ mn publish --preview                # local preview before pushing
 
 ## Development Phases
 
-### Phase 1 — Foundation (CLI MVP) ← current
+### Phase 1a — CLI Core ← current
+Local CRUD fully functional. No network, no database.
 - [x] Vault directory structure + collections.yaml
-- [x] CLI (`mn`): new, list, show, search (basic text)
+- [x] CLI (`mn`): new, list, show, search (basic grep)
 - [x] Initial Japanese notes populated (7 notes)
+- [ ] CLI: `mn init` (create vault + maho.yaml + collections.yaml + getting-started/)
 - [ ] CLI: open, delete
 - [ ] CLI: meta (frontmatter manipulation)
-- [ ] CLI: config (vault + device config, maho.yaml)
-- [ ] CLI: config auth (GitHub OAuth)
-- [ ] CLI: sync (git pull/push)
-- [ ] CLI: --json output
-- [ ] SQLite FTS5 index (with ICU tokenizer for CJK)
-- [ ] CLI: collections, stats
+- [ ] CLI: config (vault-level maho.yaml + device-level .maho/config.yaml)
+- [ ] CLI: collections, stats (including series)
+- [ ] CLI: `--json` output for all commands
+- [ ] Nested directory support (unlimited depth within collections)
+- [ ] Remove `collection` field from existing note frontmatter (infer from path)
 - [ ] OpenClaw skill (`maho-notes`) for agent guardrails
+
+### Phase 1b — Full-Text Search
+- [ ] SQLite FTS5 index (`unicode61` tokenizer — built-in, no extra deps)
+- [ ] `mn search` with FTS5 (title + content + tags)
+- [ ] Note: `unicode61` has limited CJK quality; upgrade to ICU tokenizer in Phase 2 (app can bundle custom SQLite with ICU support)
+
+### Phase 1c — GitHub Sync
+- [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
+- [ ] `mn sync` (git pull + push, first-run auto clone)
+- [ ] `mn index` (rebuild FTS index, separate from sync)
 
 ### Phase 2 — Universal App (macOS + iPadOS + iOS)
 - [ ] Xcode project with macOS + iOS targets (universal app)
 - [ ] SwiftUI: NavigationSplitView (auto-adapts: sidebar/split/push)
 - [ ] Markdown rendering (swift-markdown + WKWebView for KaTeX/Mermaid)
 - [ ] Editor with live preview (split on macOS/iPad, toggle on iPhone)
-- [ ] iCloud sync (default)
+- [ ] iCloud sync (default, vault in iCloud container)
 - [ ] GitHub sync (optional, for cross-Apple-ID / AI agent use)
+- [ ] GitHub OAuth via `ASWebAuthenticationSession` (replaces Phase 1c token-based auth)
 - [ ] Conflict resolution (split into two versions + diff view)
 - [ ] Local SQLite metadata + FTS5
+- [ ] Upgrade FTS5 to ICU tokenizer (app bundles custom SQLite with ICU for proper CJK segmentation)
 
 ### Phase 3 — Vector Search
 - [ ] On-device embedding (Apple NLEmbedding as default)
