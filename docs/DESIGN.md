@@ -304,7 +304,7 @@ One Xcode project, shared SwiftUI codebase. Supports **macOS**, **iOS**, and **i
 - Raw markdown editor with:
   - Syntax highlighting for markdown
   - Live preview (side-by-side on macOS, toggle on iOS)
-  - Toolbar shortcuts (bold, italic, heading, link, image, code block)
+  - Toolbar shortcuts (bold, italic, heading, link, image, code block, table, furigana)
   - Auto-save on pause
 
 ## Web (Published Sites via GitHub Pages)
