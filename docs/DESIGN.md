@@ -331,32 +331,64 @@ No centralized web app. Publishing generates a static site deployed to the user'
 ## Sync Strategy
 
 ### Multi-Backend Storage
-App must work standalone (App Store requirement). Git/GitHub is optional power-user feature.
+App must work standalone (App Store requirement). iCloud is default; GitHub is optional.
 
 | Backend | Use Case | Platforms |
 |---------|----------|-----------|
-| **Local only** | Default, App Store friendly | macOS, iOS |
-| **iCloud** | Seamless Apple device sync, zero config | macOS, iOS |
-| **GitHub** | Version control, collaboration, CLI, publishing | macOS, CLI, Web |
+| **Local only** | Default, App Store friendly | macOS, iPadOS, iOS |
+| **iCloud** | Seamless Apple device sync, zero config | macOS, iPadOS, iOS |
+| **GitHub** | Cross-Apple-ID sync, version control, collaboration, publishing | All |
 
-### Sync Priority
-1. **iCloud (primary for app users)** — CloudKit or iCloud Drive
-   - Zero config, just works with Apple ID
-   - Automatic conflict resolution (NSFileVersion)
-   - Background sync on iOS
-   - Works offline, syncs when online
-2. **GitHub (primary for CLI + power users)** — git operations
-   - Version history, branching, collaboration
-   - Required for publishing (web app reads from repo)
-   - CLI uses git directly
-3. **Hybrid** — app can use iCloud locally + push to GitHub on demand
-   - "Export to GitHub" / "Import from GitHub" commands
-   - Or automatic bidirectional sync (advanced, Phase 5)
+### Sync Modes
+
+#### Mode 1: iCloud Only (Default)
+For most users. Zero config, just works.
+```
+iPhone ←──iCloud──→ iPad ←──iCloud──→ Mac
+         (same Apple ID)
+```
+
+#### Mode 2: iCloud + GitHub (Power User / Cross-Apple-ID)
+Enable GitHub sync in Settings. GitHub acts as a bridge between different Apple IDs or between human and AI agent.
+
+```
+Apple ID A                   GitHub                Apple ID B
+┌──────────┐   auto sync    ┌────────┐  auto sync  ┌──────────┐
+│ Device A │ ←────────────→ │  repo  │ ←─────────→ │ Device B │
+│ (iCloud A)│               │        │              │ (iCloud B)│
+└──────────┘               └────────┘   iCloud     └─────┬────┘
+                                         sync       ┌────▼────┐
+                                                     │Device B2│
+                                                     │(iCloud B)│
+                                                     └─────────┘
+```
+
+Real-world example (our setup):
+- Maho (Mac mini, Apple ID A) → writes notes via CLI → auto push to GitHub
+- GitHub repo → auto pull to Kuo-Chuan's MacBook (Apple ID B)
+- MacBook iCloud → syncs to Kuo-Chuan's iPhone/iPad
+
+#### GitHub Sync Behavior (When Enabled)
+- **Auto push**: On note save, debounced (e.g., 30s after last edit)
+- **Auto pull**: On app launch + periodic (e.g., every 5 min) + pull-to-refresh
+- **Conflict resolution**: 
+  - Same file edited on both sides → keep both versions (`.conflict` suffix)
+  - Notify user to resolve manually
+  - iCloud conflicts use NSFileVersion (automatic)
+- **What syncs**: Only markdown files + collections.yaml + assets
+- **What doesn't sync**: `.maho/` (local DB, embeddings, cache)
+
+### Import from GitHub
+One-time import for new devices or switching from CLI-only workflow:
+```bash
+mn import --from https://github.com/user/vault.git
+```
+In app: Settings → Sync → Import from GitHub Repository
 
 ### Offline Support
 - Full local storage → always works offline
-- iCloud: automatic background sync
-- GitHub: manual or on-demand sync
+- iCloud: automatic background sync when online
+- GitHub: queues changes, syncs when online
 
 ## Publishing
 
