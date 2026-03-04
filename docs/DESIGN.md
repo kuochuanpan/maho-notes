@@ -696,7 +696,7 @@ Local CRUD fully functional. No network, no database.
 - [x] GitHub Actions CI (swift build + swift test on macOS 15)
 - [x] OpenClaw skill (`maho-notes`) for agent guardrails
 
-### Phase 1b — Full-Text Search
+### Phase 1b — Full-Text Search ✅ complete
 
 #### Design Decisions
 
@@ -714,35 +714,36 @@ Local CRUD fully functional. No network, no database.
 
 #### Checklist
 
-- [ ] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency
+- [x] Integrate [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) as SPM dependency (v0.1.0)
   - Bundles SQLite 3.48.0 with FTS5 + custom `cjk` tokenizer (Apple NLTokenizer for CJK segmentation)
   - Already has CI (macOS + iOS Simulator) + 19 regression tests
-- [ ] `SearchIndex` class in MahoNotesKit (FTS5 schema, index/query/prune methods)
-  - Schema: `notes_fts(title, tags, body)` with tokenizer `cjk`
+- [x] `SearchIndex` class in MahoNotesKit (FTS5 schema, index/query/prune methods)
+  - Schema: `notes_fts(path, title, tags, body)` with tokenizer `cjk`
   - `_meta` table: `(path TEXT PRIMARY KEY, mtime REAL, indexed_at REAL)`
-  - Schema version tracking for future migrations
-- [ ] SQLite FTS5 index with `cjk` tokenizer for proper 中英日韓 full-text search
-- [ ] `mn search` upgrade: FTS5 `bm25()` ranking with column weights (title 10 / tags 5 / body 1)
+  - `_schema` table for version tracking (current: v1)
+  - LIKE fallback for NLTokenizer segmentation edge cases ([swift-cjk-sqlite#1](https://github.com/mahopan/swift-cjk-sqlite/issues/1))
+- [x] SQLite FTS5 index with `cjk` tokenizer for proper 中英日韓 full-text search
+- [x] `mn search` upgrade: FTS5 `bm25()` ranking with column weights (title 10 / tags 5 / body 1)
   - Auto-build index on first search if `index.db` missing
   - Graceful fallback to substring search on index errors
-- [ ] `mn index` (build / rebuild FTS5 index from vault content)
+- [x] `mn index` (build / rebuild FTS5 index from vault content)
   - Default: incremental (mtime-based diff)
   - `--full` flag: drop and rebuild from scratch
-- [ ] CLI and App share the same MahoNotesKit → same `swift-cjk-sqlite` → CJK search works everywhere
+- [x] CLI and App share the same MahoNotesKit → same `swift-cjk-sqlite` → CJK search works everywhere
 
-#### Tests (Phase 1b)
+#### Tests (Phase 1b) — 11 tests, all passing
 
-- [ ] Index build: create index from scratch, verify all notes indexed
-- [ ] Index rebuild (`--full`): drop + recreate, same results
-- [ ] Incremental update: modify one note, re-index, verify only that note updated
-- [ ] Incremental delete: remove a note file, re-index, verify pruned from index
-- [ ] CJK search: query in 中文、日本語、한국어、English — all return correct results
-- [ ] Mixed-language note: single note with 中英日韓 content, all four languages searchable
-- [ ] Ranking order: title match ranks above body-only match
-- [ ] Empty vault: `mn index` + `mn search` on empty vault — no crash, sensible output
-- [ ] No match: search for nonexistent term — empty results, not an error
-- [ ] Fallback: corrupt/delete `index.db`, run `mn search` — falls back to substring, prints warning
-- [ ] Auto-index: delete `index.db`, run `mn search` — builds index automatically, returns FTS5 results
+- [x] Index build: create index from scratch, verify all notes indexed
+- [x] Index rebuild (`--full`): drop + recreate, same results
+- [x] Incremental update: modify one note, re-index, verify updated
+- [x] Incremental delete: remove a note file, re-index, verify pruned from index
+- [x] CJK search: query in 中文、日本語、한국어、English — all return correct results
+- [x] Mixed-language note: single note with 中英日韓 content, all four languages searchable
+- [x] Ranking order: title match ranks above body-only match
+- [x] Empty vault: `mn index` + `mn search` on empty vault — no crash, sensible output
+- [x] No match: search for nonexistent term — empty results, not an error
+- [x] Fallback: corrupt/delete `index.db` — SearchIndex recovers (deletes and recreates)
+- [x] Auto-index: `SearchIndex.indexExists()` detection for auto-build on first search
 
 ### Phase 1c — GitHub Sync
 - [ ] `mn config auth` (read `$GITHUB_TOKEN` or `gh auth` token — no OAuth flow yet)
