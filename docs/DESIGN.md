@@ -764,6 +764,11 @@ Local CRUD fully functional. No network, no database.
 - [ ] Pre-flight checks: auth configured + `github.repo` set → clear errors if missing
 - [ ] Normal sync: `git pull --rebase` → `git add -A` → `git commit` → `git push`
 - [ ] First-run auto clone: detect empty/non-git vault + `github.repo` configured → `git clone` into vault path
+- [ ] Post-clone vault validation (3-tier):
+  - ✅ `maho.yaml` exists and parses → valid vault, proceed
+  - ⚠️ No `maho.yaml` but has `.md` files in subdirectories (not just root README/LICENSE) → warn + suggest `mn init` to convert
+  - ❌ No `.md` content files (only README.md/LICENSE.md/etc. or non-markdown repo) → error, refuse to use as vault
+  - Heuristic: scan for `.md` files excluding common root-only files (`README.md`, `LICENSE.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`)
 - [ ] Existing vault, no remote: `git remote add origin` from `github.repo` config
 - [ ] `mn sync --reindex` — rebuild FTS index after sync (call `SearchIndex.rebuildIndex()`)
 - [ ] Auth token injection: use stored token for HTTPS remote (set `GIT_ASKPASS` or URL-embed token)
@@ -793,6 +798,9 @@ Local CRUD fully functional. No network, no database.
 - [ ] Pre-flight: `git` not found → friendly install guidance
 - [ ] Sync: normal pull + commit + push flow (mock git)
 - [ ] Sync: first-run clone when vault is empty + repo configured
+- [ ] Sync: post-clone valid vault (`maho.yaml` present) → succeeds
+- [ ] Sync: post-clone markdown repo without `maho.yaml` → warning + suggest `mn init`
+- [ ] Sync: post-clone code repo (no content `.md` files, only README) → error, refused
 - [ ] Sync: `--reindex` triggers FTS index rebuild after sync
 - [ ] Sync: error when auth not configured
 - [ ] Sync: error when `github.repo` not set
