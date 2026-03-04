@@ -135,8 +135,8 @@ embed:
 ```bash
 # Phase 1a — basic config read/write
 mn config                              # show all config (vault + device)
-mn config --set author.name "Name"     # set vault-level config (maho.yaml)
-mn config --set embed.model bge-m3     # set device-level config (.maho/config.yaml)
+mn config set author.name "Name"     # set vault-level config (maho.yaml)
+mn config set embed.model bge-m3     # set device-level config (.maho/config.yaml)
 
 # Phase 1c — GitHub auth
 mn config auth                         # read $GITHUB_TOKEN or `gh auth` token → store in .maho/
@@ -338,10 +338,10 @@ mn index --all                        # index all vaults
 
 # ── Config & Auth ─────────────────────────────────
 mn config                             # show all config
-mn config --set <key> <value>         # set config value
-mn config --set author.name "Name"    # set default author for new notes
-mn config --set github.repo "user/vault"  # set GitHub repo for primary vault (legacy; prefer mn vault add)
-mn config --set site.domain "notes.example.com"  # set published site domain
+mn config set <key> <value>         # set config value
+mn config set author.name "Name"    # set default author for new notes
+mn config set github.repo "user/vault"  # set GitHub repo for primary vault (legacy; prefer mn vault add)
+mn config set site.domain "notes.example.com"  # set published site domain
 mn config auth                        # GitHub OAuth flow
 mn config auth --status               # check auth status
 
@@ -650,7 +650,7 @@ Real-world example (our setup):
 No separate import command — `mn sync` handles first-time clone automatically:
 ```bash
 mn config auth                                        # GitHub OAuth
-mn config --set github.repo kuochuanpan/maho-vault    # set vault repo
+mn config set github.repo kuochuanpan/maho-vault    # set vault repo
 mn sync                                               # detects empty vault → clones from repo
 ```
 In app: Settings → Sync → Connect GitHub Repository → syncs automatically.

@@ -7,52 +7,59 @@ struct ConfigCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
         abstract: "Show or set configuration",
-        subcommands: [AuthSubcommand.self]
+        subcommands: [ConfigShowSubcommand.self, ConfigSetSubcommand.self, AuthSubcommand.self],
+        defaultSubcommand: ConfigShowSubcommand.self
+    )
+}
+
+// MARK: - mn config (show)
+
+struct ConfigShowSubcommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show",
+        abstract: "Show all configuration"
     )
 
     @OptionGroup var vaultOption: VaultOption
-
-    @Flag(name: .long, help: "Set a config value (usage: --set key value)")
-    var set: Bool = false
-
-    @Argument(help: "Key and value (when using --set)")
-    var args: [String] = []
 
     func run() throws {
         try vaultOption.validateVaultExists()
         let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
         let config = Config(vaultPath: vaultPath)
 
-        if set {
-            guard args.count == 2 else {
-                print("Usage: mn config --set <key> <value>")
-                throw ExitCode.failure
-            }
-            try config.setValue(key: args[0], value: args[1])
-            print("Set \(args[0]) = \(args[1])")
-        } else {
-            let vaultConfig = try config.loadVaultConfig()
-            let deviceConfig = try config.loadDeviceConfig()
+        let vaultConfig = try config.loadVaultConfig()
+        let deviceConfig = try config.loadDeviceConfig()
 
-            if !vaultConfig.isEmpty {
-                print("# Vault config (maho.yaml)")
-                printDict(vaultConfig, indent: 0)
-            }
+        if !vaultConfig.isEmpty {
+            print("# Vault config (maho.yaml)")
+            printDict(vaultConfig, indent: 0)
+        }
 
-            if !deviceConfig.isEmpty {
-                print("\n# Device config (.maho/config.yaml)")
-                // Mask auth token in display
-                var masked = deviceConfig
-                if var auth = masked["auth"] as? [String: Any],
-                   let token = auth["github_token"] as? String, !token.isEmpty {
-                    let authToken = AuthToken(token: token, source: .stored)
-                    auth["github_token"] = authToken.masked
-                    masked["auth"] = auth
-                }
-                printDict(masked, indent: 0)
+        if !deviceConfig.isEmpty {
+            print("\n# Device config (.maho/config.yaml)")
+            // Mask auth token in display
+            var masked = deviceConfig
+            if var auth = masked["auth"] as? [String: Any],
+               let token = auth["github_token"] as? String, !token.isEmpty {
+                let authToken = AuthToken(token: token, source: .stored)
+                auth["github_token"] = authToken.masked
+                masked["auth"] = auth
             }
+            printDict(masked, indent: 0)
+        }
 
-            if vaultConfig.isEmpty && deviceConfig.isEmpty {
+        // Also show global auth if available
+        let globalAuth = Auth()
+        if let token = try? globalAuth.resolveToken() {
+            if deviceConfig.isEmpty && vaultConfig.isEmpty {
+                print("# No vault config found")
+            }
+            print("\n# Global auth (~/.maho/config.yaml)")
+            print("  github_token: \(token.masked)")
+        }
+
+        if vaultConfig.isEmpty && deviceConfig.isEmpty {
+            if (try? globalAuth.resolveToken()) == nil {
                 print("No configuration found. Run `mn init` to create a vault.")
             }
         }
@@ -71,6 +78,31 @@ struct ConfigCommand: ParsableCommand {
     }
 }
 
+// MARK: - mn config --set <key> <value>
+
+struct ConfigSetSubcommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "set",
+        abstract: "Set a configuration value"
+    )
+
+    @OptionGroup var vaultOption: VaultOption
+
+    @Argument(help: "Config key (e.g., author.name, github.repo)")
+    var key: String
+
+    @Argument(help: "Value to set")
+    var value: String
+
+    func run() throws {
+        try vaultOption.validateVaultExists()
+        let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
+        let config = Config(vaultPath: vaultPath)
+        try config.setValue(key: key, value: value)
+        print("Set \(key) = \(value)")
+    }
+}
+
 // MARK: - mn config auth
 
 struct AuthSubcommand: ParsableCommand {
@@ -85,8 +117,12 @@ struct AuthSubcommand: ParsableCommand {
     var status: Bool = false
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
+        // Auth does NOT require a vault to exist — tokens are device-level (stored in ~/.maho/config.yaml)
+        // If vault exists, also check vault's .maho/config.yaml as fallback
+        let vaultPath: String? = {
+            let expanded = (vaultOption.resolvedPath as NSString).expandingTildeInPath
+            return FileManager.default.fileExists(atPath: expanded) ? expanded : nil
+        }()
         let auth = Auth(vaultPath: vaultPath)
 
         if status {

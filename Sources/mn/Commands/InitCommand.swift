@@ -189,7 +189,7 @@ struct InitCommand: ParsableCommand {
 
              ```bash
              mn config auth                    # set up GitHub auth
-             mn config --set github.repo user/vault  # set repo
+             mn config set github.repo user/vault  # set repo
              mn sync                           # pull + push
              ```
              """),

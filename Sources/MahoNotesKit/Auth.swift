@@ -1,4 +1,5 @@
 import Foundation
+import Yams
 
 /// Token source describes where a GitHub token was found
 public enum TokenSource: String, Sendable {
@@ -76,13 +77,19 @@ public enum AuthError: Error, CustomStringConvertible {
 
 /// Resolve a GitHub token from multiple sources
 public struct Auth: Sendable {
-    private let vaultPath: String
+    private let vaultPath: String?
 
-    public init(vaultPath: String) {
-        self.vaultPath = (vaultPath as NSString).expandingTildeInPath
+    /// Global config directory (~/.maho/) for device-level settings like auth tokens
+    public static var globalConfigDir: String {
+        ("~/.maho" as NSString).expandingTildeInPath
     }
 
-    /// Resolve token in priority order: $GITHUB_TOKEN → gh auth token → stored in .maho/config.yaml
+    /// Initialize with a vault path (optional — auth works without a vault)
+    public init(vaultPath: String? = nil) {
+        self.vaultPath = vaultPath.map { ($0 as NSString).expandingTildeInPath }
+    }
+
+    /// Resolve token in priority order: $GITHUB_TOKEN → gh auth token → stored in ~/.maho/config.yaml (or vault .maho/)
     public func resolveToken() throws -> AuthToken {
         // 1. Environment variable
         if let envToken = ProcessInfo.processInfo.environment["GITHUB_TOKEN"],
@@ -95,8 +102,11 @@ public struct Auth: Sendable {
             return ghToken
         }
 
-        // 3. Stored token in .maho/config.yaml
-        if let stored = try? loadStoredToken(), !stored.isEmpty {
+        // 3. Stored token — check global ~/.maho/config.yaml first, then vault .maho/config.yaml
+        if let stored = try? loadStoredTokenGlobal(), !stored.isEmpty {
+            return AuthToken(token: stored, source: .stored)
+        }
+        if let vaultPath, let stored = try? loadStoredTokenVault(vaultPath: vaultPath), !stored.isEmpty {
             return AuthToken(token: stored, source: .stored)
         }
 
@@ -133,21 +143,62 @@ public struct Auth: Sendable {
         return AuthToken(token: output, source: .ghCLI)
     }
 
-    /// Load stored token from .maho/config.yaml
-    private func loadStoredToken() throws -> String? {
-        let config = Config(vaultPath: vaultPath)
-        let deviceConfig = try config.loadDeviceConfig()
-        guard let auth = deviceConfig["auth"] as? [String: Any],
+    /// Load stored token from global ~/.maho/config.yaml
+    private func loadStoredTokenGlobal() throws -> String? {
+        let configPath = "\(Auth.globalConfigDir)/config.yaml"
+        return try loadTokenFromYaml(path: configPath)
+    }
+
+    /// Load stored token from vault's .maho/config.yaml
+    private func loadStoredTokenVault(vaultPath: String) throws -> String? {
+        let configPath = "\(vaultPath)/.maho/config.yaml"
+        return try loadTokenFromYaml(path: configPath)
+    }
+
+    private func loadTokenFromYaml(path: String) throws -> String? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: path),
+              let data = fm.contents(atPath: path),
+              let content = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        // Simple YAML parsing for auth.github_token
+        // Reuse Config if vault path is available, otherwise parse directly
+        guard let yaml = try Yams.load(yaml: content) as? [String: Any],
+              let auth = yaml["auth"] as? [String: Any],
               let token = auth["github_token"] as? String else {
             return nil
         }
         return token
     }
 
-    /// Store token in .maho/config.yaml under auth.github_token
+    /// Store token in global ~/.maho/config.yaml under auth.github_token
     public func storeToken(_ token: String) throws {
-        let config = Config(vaultPath: vaultPath)
-        try config.setValue(key: "auth.github_token", value: token)
+        let configDir = Auth.globalConfigDir
+        let configPath = "\(configDir)/config.yaml"
+        let fm = FileManager.default
+
+        // Ensure ~/.maho/ exists
+        if !fm.fileExists(atPath: configDir) {
+            try fm.createDirectory(atPath: configDir, withIntermediateDirectories: true)
+        }
+
+        // Load existing config or start fresh
+        var yaml: [String: Any] = [:]
+        if let data = fm.contents(atPath: configPath),
+           let content = String(data: data, encoding: .utf8),
+           let existing = try Yams.load(yaml: content) as? [String: Any] {
+            yaml = existing
+        }
+
+        // Set auth.github_token
+        var auth = yaml["auth"] as? [String: Any] ?? [:]
+        auth["github_token"] = token
+        yaml["auth"] = auth
+
+        // Write back
+        let output = try Yams.dump(object: yaml)
+        try output.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
     /// Validate a token against GitHub API (GET /user)
