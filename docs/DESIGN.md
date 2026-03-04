@@ -561,7 +561,7 @@ Real-world example (our setup):
      - `note.md` ← newer version
      - `note.conflict-{timestamp}-{source}.md` ← older version
   3. App shows ⚠️ badge on conflicted notes
-  4. User opens → side-by-side diff view → pick one or merge manually
+  4. User opens both files → compares manually → keeps preferred version
   5. Resolving deletes the `.conflict-*` file
   - iCloud layer: hook into `NSFileVersion` to detect iCloud-level conflicts
   - GitHub layer: detect diverged commits on pull
@@ -773,7 +773,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] Fallback to `git pull --no-rebase` (merge)
 - [ ] If merge conflict: save local version as `<note>.conflict-<timestamp>-local.md`, accept remote
 - [ ] Print clear message listing conflicted files + `.conflict-*` paths
-- [ ] Side-by-side diff view deferred to Phase 2 app
+- [ ] No diff UI in CLI — user resolves manually by comparing the two files, then deletes `.conflict-*`
 
 #### Rejected Push (non-fast-forward)
 - [ ] Detect non-fast-forward push failure → auto `git pull` → retry push
@@ -808,7 +808,7 @@ Local CRUD fully functional. No network, no database.
 - [ ] iCloud sync (default, vault in iCloud container)
 - [ ] GitHub sync (optional, for cross-Apple-ID / AI agent use)
 - [ ] GitHub OAuth via `ASWebAuthenticationSession` (replaces Phase 1c token-based auth)
-- [ ] Conflict resolution (split into two versions + diff view)
+- [ ] Conflict UI: ⚠️ badge on conflicted notes, user opens both files to resolve, deleting `.conflict-*` clears badge
 - [ ] Local SQLite metadata + FTS5
 - [ ] CJK tokenizer already available via `swift-cjk-sqlite` (from Phase 1b)
 
