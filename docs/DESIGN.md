@@ -100,27 +100,49 @@ Two layers of config: **vault-level** (shared across devices) and **device-level
 
 ```
 maho-vault/
-  maho.yaml              # Vault-level config (synced with vault)
+  maho.yaml              # Vault-level config (synced with vault) — the ONE config file per vault
   .maho/
     config.yaml           # Device-level config (gitignored)
 ```
 
-#### maho.yaml (vault-level, synced)
+#### maho.yaml (vault-level, synced — single source of truth per vault)
+
+`maho.yaml` is the **only** config file per vault. It contains vault metadata, author info, collections, and optional GitHub/site settings. Its presence identifies a directory as a Maho Notes vault.
+
 ```yaml
+# maho.yaml — the single config file per vault
+title: "Kuo-Chuan's Notes"
 author:
   name: Kuo-Chuan Pan
   url: https://pcca.dev
+collections:
+  - id: japanese
+    name: 日本語
+    icon: character.book.closed
+    description: 日語學習筆記
+  - id: astronomy
+    name: 天文筆記
+    icon: sparkles
+    description: 天文物理研究筆記
+  - id: simulation
+    name: 模擬日誌
+    icon: terminal
+    description: 數值模擬運行紀錄與分析
 github:
-  repo: kuochuanpan/maho-vault
+  repo: kuochuanpan/maho-vault         # optional, only if synced to GitHub
 site:
   domain: notes.pcca.dev
   title: Kuo-Chuan's Notes
   theme: default
 ```
 
+- `title`: vault display name
 - `author`: default author info for new notes (`mn new` auto-fills frontmatter)
-- `github`: vault repo for sync + publishing
-- `site`: published site settings (domain, title, theme)
+- `collections`: content organization — add/rename/reorder as needed
+- `github`: vault repo for sync + publishing (optional)
+- `site`: published site settings (optional)
+
+> **Why one file?** `collections.yaml` was originally separate to reduce merge conflict risk. In practice, having two config files creates UX confusion and cognitive overhead. One file per vault = one source of truth = cleaner.
 
 #### .maho/config.yaml (device-level, gitignored)
 ```yaml
@@ -128,8 +150,8 @@ embed:
   model: bge-m3           # per-device embedding model choice
 ```
 
-- Auth tokens stored securely in `.maho/` (gitignored, never synced)
 - Embedding model is per-device (iPhone → Light, Mac → Pro)
+- Auth tokens stored in `~/.maho/config.yaml` (global, device-level — not in vault)
 
 #### CLI (`mn config`)
 ```bash
@@ -138,8 +160,8 @@ mn config                              # show all config (vault + device)
 mn config set author.name "Name"     # set vault-level config (maho.yaml)
 mn config set embed.model bge-m3     # set device-level config (.maho/config.yaml)
 
-# Phase 1c — GitHub auth
-mn config auth                         # read $GITHUB_TOKEN or `gh auth` token → store in .maho/
+# Phase 1c — GitHub auth (device-level, works without vault)
+mn config auth                         # read $GITHUB_TOKEN or `gh auth` token → store in ~/.maho/
 mn config auth --status                # check auth status
 ```
 
@@ -147,8 +169,7 @@ mn config auth --status                # check auth status
 
 ```
 maho-vault/
-├── maho.yaml                  # Vault-level config (author, github, site) — synced
-├── collections.yaml           # Collection definitions — synced
+├── maho.yaml                  # Vault config + collections — the ONE config file (synced)
 ├── japanese/                  # Collection: 日本語
 │   ├── _index.md              # Collection overview (optional at any directory level)
 │   ├── vocabulary/
@@ -176,12 +197,6 @@ maho-vault/
     └── cache/                 # Rendered HTML cache
 ```
 
-#### Why Two Config Files?
-- `maho.yaml` — vault-level settings (author, GitHub, site). Rarely changes.
-- `collections.yaml` — content organization. Changes often (add/rename/reorder collections).
-
-Keeping them separate reduces merge conflict risk when syncing via GitHub.
-
 ### Nested Directories (Unlimited Depth)
 
 Collections support **unlimited nesting**. The filesystem hierarchy IS the organization:
@@ -202,35 +217,11 @@ japanese/                  ← collection (top-level = defined in collections.ya
 - `_index.md` can appear at any level as a directory overview page
 - App UI renders the tree structure; CLI uses path-based navigation
 
-### collections.yaml
+### Collections (in maho.yaml)
 
-Collections are **entirely user-defined**. The app ships with no hardcoded collections. On first `mn init`, a getting-started tutorial is added as a **separate read-only vault** (cloned from `kuochuanpan/maho-getting-started`), keeping the user's primary vault clean. Users can remove it anytime with `mn vault remove getting-started`. Beyond that, users create their own collections via the app UI or by editing `collections.yaml` directly. The following is just an example:
+Collections are **entirely user-defined** via the `collections` section in `maho.yaml`. The app ships with no hardcoded collections. On first `mn init`, a getting-started tutorial is added as a **separate read-only vault** (cloned from `kuochuanpan/maho-getting-started`), keeping the user's primary vault clean. Users can remove it anytime with `mn vault remove getting-started`. Beyond that, users create their own collections via the app UI or by editing `maho.yaml` directly.
 
-```yaml
-# Example — each user's vault has its own collections.yaml
-# These are NOT built into the app; users create whatever they need.
-# Icons use SF Symbols names (rendered via Image(systemName:) in SwiftUI).
-# Users can pick icons from an SF Symbols picker in the app UI.
-# getting-started tutorial lives in a separate read-only vault (not in this file)
-# Users can remove it: mn vault remove getting-started
-collections:
-  - id: japanese
-    name: 日本語
-    icon: character.book.closed
-    description: 日語學習筆記
-  - id: astronomy
-    name: 天文筆記
-    icon: sparkles
-    description: 天文物理研究筆記
-  - id: simulation
-    name: 模擬日誌
-    icon: terminal
-    description: 數值模擬運行紀錄與分析
-  - id: software
-    name: 軟體開發
-    icon: wrench.and.screwdriver
-    description: 程式設計與工具筆記
-```
+Icons use SF Symbols names (rendered via `Image(systemName:)` in SwiftUI). See the `maho.yaml` example above for the `collections` field format.
 
 ## Markdown Rendering
 
@@ -261,14 +252,17 @@ The CLI is a first-class interface — not just for humans, but for AI agents.
 It must support full CRUD, search, and publishing with scriptable (JSON) output.
 
 ```bash
-# ── Init ──────────────────────────────────────────
-mn init                               # create vault: maho.yaml + collections.yaml + .maho/ + .gitignore
-mn init --vault <path>                # create at specific path
+# ── Init (Onboarding Wizard) ──────────────────────
+mn init                               # interactive first-run setup: ~/.maho/ + first vault
 mn init --no-tutorial                 # skip tutorial vault clone
-# Creates: maho.yaml, collections.yaml, .maho/, .gitignore
+# First-time: creates global config (~/.maho/), sets up vault registry, guides user through:
+#   1. Where to store notes? (iCloud / Local / GitHub)
+#   2. Optional GitHub sync? (repo URL)
+#   3. Author info?
+# Creates: maho.yaml + .maho/ + .gitignore in chosen vault path
 # Also: auto-adds getting-started tutorial as read-only vault (cloned from kuochuanpan/maho-getting-started)
 # Offline: tutorial vault skipped gracefully, user can add later via mn vault add
-# Idempotent: safe to run on existing vault (only adds missing files, never overwrites)
+# Idempotent: safe to run again (only adds missing config, never overwrites)
 # Universal app reuses the same init logic for first-launch setup
 
 # ── Create & Delete ───────────────────────────────
@@ -315,14 +309,16 @@ mn publish --preview                  # local preview before push
 # Publishing is incremental by default — uses content hashes to detect changes.
 
 # ── Vault Management (Phase 1d) ───────────────────
-mn vault list                         # list all registered vaults (name, path, access, sync status)
-mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone to ~/.maho/vaults/<name>/)
+mn vault list                         # list all registered vaults (name, type, access, sync status)
+mn vault add <name> --icloud          # create new iCloud vault (stored in iCloud container)
+mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone)
 mn vault add <name> --github <repo> --readonly  # add as read-only (pull only, no push)
-mn vault add <name> --path <local>    # register existing local directory as vault
+mn vault add <name> --github <repo> --import    # add non-Maho repo (auto-generate maho.yaml from structure)
+mn vault add <name> --path <local>    # register existing local directory as vault (macOS only)
 mn vault remove <name>                # unregister vault (does NOT delete files)
 mn vault remove <name> --delete       # unregister + delete local files
 mn vault set-primary <name>           # change default vault
-mn vault info <name>                  # show vault details (path, remote, access, last sync, note count)
+mn vault info <name>                  # show vault details (type, path, remote, access, last sync, note count)
 
 # ── Sync & Index ──────────────────────────────────
 mn sync                               # sync primary vault
@@ -381,10 +377,10 @@ mn search "query" --json
 |----------|--------|------|
 | 1 | `--vault <name>` flag | Explicit vault by registered name |
 | 2 | `$MN_VAULT` env var | Vault name or path |
-| 3 | Primary vault | As set in `~/.maho/vaults.yaml` |
+| 3 | Primary vault | As set in vault registry |
 | 4 | Legacy auto-detect | iCloud container → `~/maho-vault` fallback |
 
-The vault registry (`~/.maho/vaults.yaml`) is the source of truth for vault locations. On first use (no registry exists), the CLI auto-detects iCloud container on macOS and creates a default registry entry. The registry lives outside any vault to avoid chicken-and-egg problems.
+The vault registry (in iCloud container `config/vaults.yaml`) is the source of truth for vault registrations. On first use (no registry exists), the CLI auto-detects iCloud container on macOS and creates a default registry entry. CLI also maintains a local cache of the registry at `~/.maho/vaults-cache.yaml` for offline access.
 
 ## Vector Search
 
@@ -557,29 +553,79 @@ A user can have **multiple vaults** — one primary (iCloud) and any number of a
 | **GitHub (public/read-only)** | Others' public repos | read-only (local changes stay local) | `mn sync` (pull only, never push) |
 
 #### Vault Registry
-Vault registry lives in `~/.maho/vaults.yaml` (global, outside any vault — avoids chicken-and-egg):
+
+The vault registry lives in the **iCloud container** so it syncs across all Apple devices automatically:
+
+```
+iCloud~com.pcca.mahonotes/
+├── config/
+│   └── vaults.yaml          # Vault registry (synced to all devices)
+└── vaults/
+    ├── personal/             # iCloud vault 1
+    │   ├── maho.yaml
+    │   └── japanese/
+    ├── work/                 # iCloud vault 2
+    │   ├── maho.yaml
+    │   └── meetings/
+    └── journal/              # iCloud vault 3
+        ├── maho.yaml
+        └── 2026/
+```
+
+Registry uses **type-based resolution** instead of absolute paths (paths differ per platform):
 
 ```yaml
-# ~/.maho/vaults.yaml
-primary: personal          # default vault for mn new, mn list, etc.
+# iCloud~com.pcca.mahonotes/config/vaults.yaml
+primary: personal                  # default vault for mn new, mn list, etc.
 vaults:
   - name: personal
-    path: ~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents/
-    github: kuochuanpan/maho-vault     # optional GitHub remote
+    type: icloud                   # path resolved per-platform at runtime
+    github: kuochuanpan/maho-vault # optional GitHub remote for backup/sync
     access: read-write
   - name: work
-    path: ~/.maho/vaults/work
-    github: kuochuanpan/work-notes
+    type: icloud
+    access: read-write
+  - name: journal
+    type: icloud
     access: read-write
   - name: cheatsheets
-    path: ~/.maho/vaults/cheatsheets
+    type: github
     github: detailyang/awesome-cheatsheet
     access: read-only
   - name: rust-guide
-    path: ~/.maho/vaults/rust-guide
+    type: github
     github: nicenemo/master-rust
     access: read-only
+  - name: local-notes
+    type: local
+    path: ~/Documents/my-notes     # only for type:local — macOS CLI only
+    access: read-write
 ```
+
+#### Vault Type Path Resolution
+
+Each platform resolves vault paths at runtime based on `type`:
+
+| Type | macOS CLI | macOS App | iOS/iPadOS |
+|------|-----------|-----------|------------|
+| `icloud` | `~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/vaults/<name>/` | Same | App's iCloud container |
+| `github` | `~/.maho/vaults/<name>/` | App Support | App container |
+| `local` | User-specified path | Same | ❌ Not supported |
+
+- **iCloud vaults** can be created freely (multiple!) — each is a subdirectory in the iCloud container
+- **GitHub vaults** are cloned to platform-appropriate local storage
+- **Local vaults** are macOS-only (for existing Obsidian/Zettelkasten dirs, etc.)
+
+#### Device-Level Config (NOT synced)
+
+Auth tokens and device-specific settings are stored **per-device**, never in iCloud:
+
+| Platform | Location | Contents |
+|----------|----------|----------|
+| macOS CLI | `~/.maho/config.yaml` | Auth tokens, embed model, cache |
+| macOS/iOS App | Keychain + UserDefaults | Auth tokens (Keychain), preferences (UserDefaults) |
+
+The `~/.maho/` directory on macOS CLI also serves as cache for GitHub vault clones.
 
 #### Read-Only Vault Behavior
 - `mn sync` → pull only, never push
@@ -643,17 +689,18 @@ Real-world example (our setup):
   - **iCloud ↔ GitHub ordering**: iCloud settles first (local), then GitHub sync runs against the settled local state. GitHub sync is debounced (30s) to avoid racing with iCloud.
   - **No auto-merge** — markdown content is hard to merge safely
   - **No lock mechanism** — too complex, doesn't work offline
-- **What syncs**: Markdown files + `maho.yaml` + `collections.yaml` + `_assets/`
+- **What syncs**: Markdown files + `maho.yaml` + `_assets/`
 - **What doesn't sync**: `.maho/` (local DB, embeddings, cache, auth tokens)
 
 ### New Device Setup
-No separate import command — `mn sync` handles first-time clone automatically:
+**CLI (new Mac):**
 ```bash
-mn config auth                                        # GitHub OAuth
-mn config set github.repo kuochuanpan/maho-vault    # set vault repo
-mn sync                                               # detects empty vault → clones from repo
+mn config auth                   # GitHub auth (device-level, no vault needed)
+mn init                          # interactive: set up primary vault (iCloud or GitHub)
+# Vault registry syncs via iCloud — existing vaults appear automatically
+# GitHub vaults need: mn sync --all (clone remotes)
 ```
-In app: Settings → Sync → Connect GitHub Repository → syncs automatically.
+**App (new iPhone/iPad):** Sign in with same Apple ID → iCloud vaults appear automatically. GitHub vaults: Settings → Sync → pull.
 
 ### Offline Support
 - Full local storage → always works offline
@@ -745,7 +792,7 @@ mn publish --preview                # local preview before pushing
 
 ### Phase 1a — CLI Core ✅ complete
 Local CRUD fully functional. No network, no database.
-- [x] Vault directory structure + collections.yaml
+- [x] Vault directory structure + collections (in maho.yaml)
 - [x] CLI (`mn`): new, list, show, search (basic grep)
 - [x] Initial Japanese notes populated (7 notes)
 - [x] **Migration**: Remove `collection` field from existing note frontmatter (infer from path)
@@ -753,7 +800,7 @@ Local CRUD fully functional. No network, no database.
 - [x] **Migration**: Update `Note` model + `Vault` — collection inferred from `relativePath`, not frontmatter
 - [x] **Migration**: Remove `SyncCommand` from registered subcommands (sync is Phase 1c; keep source files for later)
 - [x] **Migration**: Add `_index.md` to existing collection directories (japanese/, astronomy/, etc.)
-- [x] CLI: `mn init` (create vault + `maho.yaml` + `collections.yaml` + `getting-started/` + `.maho/`)
+- [x] CLI: `mn init` (create vault + `maho.yaml` + `.maho/`)
 - [x] CLI: open, delete
 - [x] CLI: meta (frontmatter manipulation — key whitelist, blocked keys, public=true warning)
 - [x] CLI: config (vault-level `maho.yaml` + device-level `.maho/config.yaml` — key validation)
@@ -885,22 +932,38 @@ Local CRUD fully functional. No network, no database.
 ### Phase 1d — Multi-Vault
 
 #### Vault Registry
-- [ ] Global registry at `~/.maho/vaults.yaml` (outside any vault)
-- [ ] Schema: `primary` (default vault name) + `vaults[]` (name, path, github, access)
+- [ ] Registry in iCloud container: `iCloud~com.pcca.mahonotes/config/vaults.yaml`
+- [ ] Schema: `primary` (default vault name) + `vaults[]` (name, type, github, access)
+- [ ] Type-based path resolution: `icloud` / `github` / `local` → platform-specific paths at runtime
+- [ ] CLI local cache: `~/.maho/vaults-cache.yaml` (for offline access)
 - [ ] Auto-create registry on first CLI use (detect existing vault → register as primary)
 - [ ] Migration: existing single-vault `github.repo` config → vault registry entry
 
 #### `mn vault` Command
-- [ ] `mn vault list` — show all vaults (name, path, access, last sync, note count)
-- [ ] `mn vault add <name> --github <repo>` — clone repo to `~/.maho/vaults/<name>/`, register
+- [ ] `mn vault list` — show all vaults (name, type, access, last sync, note count)
+- [ ] `mn vault add <name> --icloud` — create new iCloud vault (subdirectory in iCloud container)
+- [ ] `mn vault add <name> --github <repo>` — clone repo, register as GitHub vault
 - [ ] `mn vault add <name> --github <repo> --readonly` — read-only (pull only, no push)
-- [ ] `mn vault add <name> --path <local>` — register existing local directory
+- [ ] `mn vault add <name> --github <repo> --import` — non-Maho repo: auto-generate `maho.yaml` from directory structure
+- [ ] `mn vault add <name> --path <local>` — register existing local directory (macOS only)
 - [ ] `mn vault remove <name>` — unregister (keep files)
 - [ ] `mn vault remove <name> --delete` — unregister + delete local files
 - [ ] `mn vault set-primary <name>` — change default vault
-- [ ] `mn vault info <name>` — vault details (path, remote, access, last sync, stats)
+- [ ] `mn vault info <name>` — vault details (type, path, remote, access, last sync, stats)
 - [ ] Post-add vault validation (reuse Phase 1c 3-tier check)
 - [ ] Block `mn vault add` if name already exists
+
+#### `mn init` (Onboarding Wizard)
+- [ ] Creates global config (`~/.maho/`) + vault registry
+- [ ] Interactive first-vault setup: iCloud (default) / Local / GitHub
+- [ ] Prompts for author info, optional GitHub sync
+- [ ] Non-interactive mode: `mn init --icloud` / `mn init --path <dir>` for scripting
+
+#### Merge `collections.yaml` into `maho.yaml`
+- [ ] Move `collections` section into `maho.yaml` (single config file per vault)
+- [ ] Remove `collections.yaml` loading from `Vault` / `Config`
+- [ ] Migration: if `collections.yaml` exists, merge into `maho.yaml` and delete
+- [ ] Update `mn init` to generate unified `maho.yaml` with collections section
 
 #### Multi-Vault Aware Commands
 - [ ] `--vault <name>` flag on: `list`, `show`, `new`, `search`, `sync`, `index`, `stats`, `collections`
@@ -948,9 +1011,13 @@ Local CRUD fully functional. No network, no database.
 - [ ] Primary vault missing → clear error: "Primary vault '<name>' not found. Set a new primary: `mn vault set-primary <name>`"
 
 #### Tests
-- [ ] Registry: create, load, save, validate
+- [ ] Registry: create, load, save, validate (iCloud container path)
+- [ ] Registry: type-based path resolution (icloud/github/local → correct platform paths)
+- [ ] Registry: CLI local cache read/write for offline access
+- [ ] `mn vault add --icloud` → creates iCloud vault subdirectory + registers
 - [ ] `mn vault add` with GitHub repo → clone + register
 - [ ] `mn vault add --readonly` → access set correctly
+- [ ] `mn vault add --import` → auto-generates maho.yaml for non-Maho repo
 - [ ] `mn vault add` with existing name → error
 - [ ] `mn vault add --path` with nonexistent path → error at registration
 - [ ] `mn vault remove` → unregister, files remain
@@ -966,7 +1033,9 @@ Local CRUD fully functional. No network, no database.
 - [ ] Cross-vault search returns results from multiple vaults
 - [ ] Cross-vault search results include vault name prefix
 - [ ] Migration: single github.repo → vault registry
+- [ ] Migration: collections.yaml → maho.yaml merge
 - [ ] Backward compat: no registry file → single vault behavior
+- [ ] `mn init` interactive wizard creates vault + registry
 - [ ] `mn init` adds getting-started as read-only vault (online)
 - [ ] `mn init --no-tutorial` skips getting-started vault
 - [ ] `mn init` offline → tutorial skipped gracefully, primary vault still created
@@ -1042,7 +1111,11 @@ Local CRUD fully functional. No network, no database.
 9. **Domain**: `notes.pcca.dev`
 10. **App Store**: App must work standalone without server dependency
 11. **Publishing**: User-owned — each user publishes to their own GitHub Pages, we don't host content
-12. **Multi-vault**: Users can register multiple vaults — one primary (iCloud) + unlimited GitHub-backed vaults (read-write or read-only). Registry at `~/.maho/vaults.yaml`. Enables community content (public repos as read-only reference vaults) and knowledge separation.
+12. **Multi-vault**: Users can register multiple vaults — multiple iCloud vaults + unlimited GitHub-backed vaults (read-write or read-only). Enables community content (public repos as read-only reference vaults) and knowledge separation.
+13. **Single config file per vault**: `maho.yaml` is the ONE config file per vault (vault metadata + collections + optional GitHub/site settings). Originally `collections.yaml` was separate to reduce merge conflicts, but one file = one source of truth = cleaner UX.
+14. **Vault registry in iCloud**: Registry lives in iCloud container (`config/vaults.yaml`), not `~/.maho/`, so it syncs across all Apple devices automatically. Uses type-based resolution (no absolute paths — each platform resolves paths at runtime). Device-specific config (auth tokens, cache) stays in `~/.maho/` (macOS) or Keychain (iOS).
+15. **`mn init` as onboarding wizard**: First-run interactive setup (choose vault type, set author, optional GitHub). After init, all vault management via `mn vault add/remove/list`. Supports non-interactive mode (`--icloud`, `--path`) for scripting.
+16. **`--import` for non-Maho repos**: `mn vault add --import` auto-generates `maho.yaml` from a repo's directory structure (scanning `.md` files into collections). Generated config stored locally, not pushed to the source repo.
 
 ---
 
