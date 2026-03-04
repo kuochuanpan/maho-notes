@@ -17,6 +17,7 @@ struct ListCommand: ParsableCommand {
     var tag: String?
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let collections = try vault.collections()
         let notes = try vault.listNotes(collection: collection, tag: tag)

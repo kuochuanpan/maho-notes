@@ -19,4 +19,24 @@ struct VaultOption: ParsableArguments {
     func makeVault() -> Vault {
         Vault(path: resolvedPath)
     }
+
+    /// Validate that the vault exists. Call this from commands that need an existing vault.
+    /// Returns a user-friendly error message if the vault is not found.
+    func validateVaultExists() throws {
+        let expanded = (resolvedPath as NSString).expandingTildeInPath
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: expanded) else {
+            throw ValidationError("""
+                Vault not found at: \(expanded)
+
+                To fix this, either:
+                  1. Set the MN_VAULT environment variable:
+                     export MN_VAULT=~/path/to/your/vault
+                  2. Use the --vault flag:
+                     mn list --vault ~/path/to/your/vault
+                  3. Create a new vault:
+                     mn init --vault ~/path/to/your/vault
+                """)
+        }
+    }
 }

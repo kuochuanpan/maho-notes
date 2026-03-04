@@ -20,6 +20,7 @@ struct CollectionsCommand: ParsableCommand {
     }
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let collections = try vault.collections()
         let notes = try vault.allNotes()

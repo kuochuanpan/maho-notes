@@ -17,6 +17,7 @@ struct DeleteCommand: ParsableCommand {
     var force: Bool = false
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let filePath = (vault.path as NSString).appendingPathComponent(path)
         let fm = FileManager.default

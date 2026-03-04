@@ -18,6 +18,7 @@ struct ConfigCommand: ParsableCommand {
     var args: [String] = []
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
         let config = Config(vaultPath: vaultPath)
 

@@ -14,6 +14,7 @@ struct SearchCommand: ParsableCommand {
     var query: String
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let results = try vault.searchNotes(query: query)
 

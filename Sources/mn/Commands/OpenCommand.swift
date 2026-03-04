@@ -14,6 +14,7 @@ struct OpenCommand: ParsableCommand {
     var path: String
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let filePath = (vault.path as NSString).appendingPathComponent(path)
 

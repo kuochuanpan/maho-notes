@@ -14,6 +14,7 @@ struct ShowCommand: ParsableCommand {
     var path: String
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         guard let note = try vault.showNote(relativePath: path) else {
             print("Note not found: \(path)")

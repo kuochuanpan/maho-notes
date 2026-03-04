@@ -23,6 +23,7 @@ struct NewCommand: ParsableCommand {
     var author: String = "kuochuan"
 
     func run() throws {
+        try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let tagList = tags?
             .components(separatedBy: ",")
