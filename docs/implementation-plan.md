@@ -140,14 +140,33 @@
 **Dependencies:** Phase 0, swift-cjk-sqlite compatibility  
 **Tests:** 19 new tests (8 VectorIndex + 5 Chunker + 3 Hybrid + 3 Embedding)
 
-### Phase 2b (Future): Additional Embedding Tiers
-> Deferred to Phase 4 (native app) where model selection has a proper UI.
+### Phase 2b-CLI: Model Management + BGE-M3
+> CLI-side model improvements. No dependency on native app.
 
-- [ ] Standard tier: multilingual-e5-small (470MB, 384 dim)
-- [ ] Pro tier: BGE-M3 (2.2GB, 1024 dim) — Mac recommended
-- [ ] Model download manager with progress UI
-- [ ] Model switching in Settings → Search → Embedding Model
-- [ ] On-Demand Resources (ODR) for App Store distribution
+#### 2b.1 — BGE-M3 Model Tier
+- [ ] Add `EmbeddingModel.bgeM3` case (`BAAI/bge-m3`, 1024 dim, ~2.2GB)
+- [ ] Change `dimensions` from shared computed property to per-case (384 for minilm/e5-small, 1024 for bge-m3)
+- [ ] `VectorIndex`: dynamic dimension from model (currently hardcoded `float[384]` at table creation)
+- [ ] Handle dimension mismatch on model switch (detect + prompt full rebuild)
+- [ ] Verify XLMRoberta loading works for BGE-M3 (may need different `loadConfig`)
+
+#### 2b.2 — `mn model` Subcommand
+- [ ] `mn model list` — show available models with: name, HuggingFace ID, dimensions, size, downloaded status
+- [ ] `mn model download <name>` — pre-download model to `~/.maho/models/` (avoid download-during-index for large models)
+- [ ] `mn model remove <name>` — delete cached model files
+- [ ] Download progress: stderr output during download (at minimum percentage or bytes)
+
+#### Already Done
+- [x] Standard tier: multilingual-e5-small — implemented in Phase 2.2 (`EmbeddingModel.e5small`)
+- [x] Model selection: `mn index --model <name>` + `mn config set embed.model <name>`
+- [x] Model auto-download from HuggingFace Hub on first `mn index`
+
+### Phase 2b-App (Deferred to Phase 4)
+> Native app model management — requires SwiftUI.
+
+- [ ] Settings UI: Search → Embedding Model picker with download status
+- [ ] Visual download progress bar (ProgressView)
+- [ ] On-Demand Resources (ODR) for App Store distribution (Apple-managed CDN, lazy download)
 
 ---
 
@@ -336,15 +355,17 @@
 | **0** | Code ↔ Design alignment | ✅ done (1 session) | None |
 | **1** | Multi-Vault | ✅ done (1 session) | Phase 0 |
 | **2** | Vector Search | ✅ done (1 session) | Phase 0, CJKSQLite compat |
+| **2b-CLI** | BGE-M3 + `mn model` | 1–2 sessions | Phase 2 |
+| **2b-App** | Model management UI + ODR | deferred | Phase 4 |
 | **3** | Publishing | 4–5 sessions | Phase 0, 1 |
 | **4** | Native App (macOS) | 8–12 sessions | Phase 0, 1, 2 |
 | **5** | iCloud Sync | 4–6 sessions | Phase 4 |
 | **6** | iOS / iPadOS | 3–4 sessions | Phase 4, 5 |
 
-**Total estimated: ~28–39 sessions**
+**Total estimated: ~27–38 sessions**
 
 ### Parallelizable Work
-- Phase 2 (Vector Search) and Phase 3 (Publishing) can run in parallel — no dependency between them
+- Phase 2b-CLI, Phase 3 (Publishing) can run in parallel — no dependency between them
 - Phase 1 (Multi-Vault) must complete before Phase 3 and Phase 4
 - Phase 0 must complete first (everything depends on correct config model)
 
