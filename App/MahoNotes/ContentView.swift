@@ -88,6 +88,25 @@ struct MacContentView: View {
                 handleAutoCollapse(width: newWidth)
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    appState.toggleNavigator()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Toggle Navigator (⌘⇧B)")
+
+                Spacer()
+
+                Button {
+                    appState.toggleSearch()
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .help("Search Notes (⌘K)")
+            }
+        }
     }
 
     // MARK: - Edge Handle
