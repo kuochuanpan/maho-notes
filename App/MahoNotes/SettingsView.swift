@@ -1,6 +1,7 @@
 import SwiftUI
 import MahoNotesKit
 
+#if os(macOS)
 struct SettingsView: View {
     var body: some View {
         TabView {
@@ -22,6 +23,7 @@ struct SettingsView: View {
         .frame(width: 450, height: 340)
     }
 }
+#endif
 
 // MARK: - Vaults Tab
 
@@ -36,7 +38,9 @@ struct VaultsSettingsTab: View {
                     vaultRow(entry)
                 }
             }
+            #if os(macOS)
             .listStyle(.inset(alternatesRowBackgrounds: true))
+            #endif
 
             HStack {
                 Image(systemName: "info.circle")

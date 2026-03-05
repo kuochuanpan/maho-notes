@@ -2,7 +2,7 @@ import Foundation
 import Yams
 
 /// A collection definition from maho.yaml
-public struct Collection: Sendable, Codable {
+public struct Collection: Sendable, Codable, Hashable {
     public let id: String
     public let name: String
     public let icon: String

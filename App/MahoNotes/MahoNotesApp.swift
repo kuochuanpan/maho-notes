@@ -10,6 +10,7 @@ struct MahoNotesApp: App {
             ContentView()
                 .environment(appState)
         }
+        #if os(macOS)
         .commands {
             CommandGroup(after: .sidebar) {
                 Button("Toggle Vault Rail") {
@@ -47,6 +48,7 @@ struct MahoNotesApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
+        #endif
 
         #if os(macOS)
         Settings {

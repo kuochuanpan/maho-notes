@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Root content view — A+B+C three-zone layout with collapsible panels.
-/// A: VaultRailView (48pt) | B: NavigatorView (240pt) | C: NoteContentView (flexible)
+/// Root content view — routes to platform-specific layouts.
 struct ContentView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("appTheme") private var appTheme: String = "system"
@@ -13,6 +12,32 @@ struct ContentView: View {
         default: return nil
         }
     }
+
+    var body: some View {
+        Group {
+            #if os(macOS)
+            MacContentView()
+            #else
+            iPhoneContentView()
+            #endif
+        }
+        .preferredColorScheme(colorScheme)
+        .task {
+            appState.loadRegistry()
+        }
+        .onChange(of: appState.selectedVaultName) {
+            appState.loadSelectedVault()
+        }
+    }
+}
+
+// MARK: - macOS Layout
+
+#if os(macOS)
+/// A+B+C three-zone layout with collapsible panels.
+/// A: VaultRailView (48pt) | B: NavigatorView (240pt) | C: NoteContentView (flexible)
+struct MacContentView: View {
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         GeometryReader { geo in
@@ -63,13 +88,6 @@ struct ContentView: View {
                 handleAutoCollapse(width: newWidth)
             }
         }
-        .preferredColorScheme(colorScheme)
-        .task {
-            appState.loadRegistry()
-        }
-        .onChange(of: appState.selectedVaultName) {
-            appState.loadSelectedVault()
-        }
     }
 
     // MARK: - Edge Handle
@@ -114,6 +132,7 @@ struct ContentView: View {
         }
     }
 }
+#endif
 
 #Preview {
     ContentView()

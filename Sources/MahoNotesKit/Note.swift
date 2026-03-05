@@ -1,7 +1,15 @@
 import Foundation
 
 /// A parsed note with frontmatter metadata and content
-public struct Note: Sendable, Codable {
+public struct Note: Sendable, Codable, Hashable {
+    public static func == (lhs: Note, rhs: Note) -> Bool {
+        lhs.relativePath == rhs.relativePath
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relativePath)
+    }
+
     public let relativePath: String
     public let title: String
     public let tags: [String]

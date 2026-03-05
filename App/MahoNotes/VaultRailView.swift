@@ -47,6 +47,7 @@ struct VaultRailView: View {
             if let vault = appState.selectedVault {
                 Divider()
                     .padding(.horizontal, 6)
+                #if os(macOS)
                 SettingsLink {
                     Text(initials(for: vault.name))
                         .font(.system(size: 13, weight: .medium))
@@ -56,6 +57,14 @@ struct VaultRailView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
+                #else
+                Text(initials(for: vault.name))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.bottom, 8)
+                #endif
             }
         }
         .frame(width: 48)
