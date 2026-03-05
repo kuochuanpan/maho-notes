@@ -64,7 +64,7 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         case .e5small:
             xlmBundle = try await XLMRoberta.loadModelBundle(
                 from: model.huggingFaceId,
-                loadConfig: .addWeightKeyPrefix("roberta.")
+                loadConfig: .init()
             )
         case .bgeM3:
             xlmBundle = try await XLMRoberta.loadModelBundle(

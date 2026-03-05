@@ -82,6 +82,13 @@ public final class VectorIndex: @unchecked Sendable {
             CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)
         """)
 
+        // Migration: add dimensions column if missing (upgrade from v1 schema without it)
+        let colInfo = try db.query("PRAGMA table_info(_vec_schema)")
+        let hasCol = colInfo.contains { $0["name"] == "dimensions" }
+        if !hasCol {
+            try db.execute("ALTER TABLE _vec_schema ADD COLUMN dimensions INTEGER")
+        }
+
         let rows = try db.query("SELECT version, dimensions FROM _vec_schema LIMIT 1")
         let existingVersion = rows.first.flatMap { $0["version"] }.flatMap { Int($0) }
         let storedDimensions = rows.first.flatMap { $0["dimensions"] }.flatMap { Int($0) }
@@ -90,6 +97,10 @@ public final class VectorIndex: @unchecked Sendable {
             // Check dimension mismatch on existing index
             if let stored = storedDimensions, stored != dimensions {
                 throw VectorIndexError.dimensionMismatch(stored: stored, requested: dimensions)
+            }
+            // Backfill dimensions if missing (upgraded from old schema)
+            if storedDimensions == nil {
+                try db.execute("UPDATE _vec_schema SET dimensions = \(dimensions)")
             }
             return
         }
