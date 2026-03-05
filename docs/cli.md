@@ -89,8 +89,8 @@ mn config                             # show all config (vault + device + global
 mn config set <key> <value>           # set vault-level config (maho.yaml)
 mn config set author.name "Name"      # vault-level: default author for new notes
 mn config set site.domain "notes.example.com"  # vault-level: published site domain
-mn config set --device embed.model bge-m3       # per-vault device config (.maho/config.yaml)
-mn config set --global embed.default_model minilm  # global device config (~/.maho/config.yaml)
+mn config set --device <key> <value>             # per-vault device config (.maho/config.yaml)
+mn config set --global embed.model bge-m3        # global: embedding model (applies to ALL vaults on this device)
 mn config auth                        # GitHub auth (stored in ~/.maho/config.yaml — global, not per-vault)
 mn config auth --status               # check auth status (token source, validity)
 

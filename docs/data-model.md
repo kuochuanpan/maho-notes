@@ -102,9 +102,10 @@ site:
 Per-vault settings that differ between devices. Lives inside the vault but is never synced.
 
 ```yaml
-embed:
-  model: bge-m3           # per-device embedding model choice for this vault
+# Reserved for future per-vault device settings (e.g., local cache preferences)
 ```
+
+> **Note:** Embedding model is NOT per-vault — it's global (Layer 3). Cross-vault vector search requires consistent dimensions across all vaults on the same device.
 
 ### Layer 3: ~/.maho/config.yaml (global, device-level)
 
@@ -114,11 +115,11 @@ Shared across all vaults on this device. Not synced anywhere.
 auth:
   github_token: ghp_xxx   # GitHub auth (from $GITHUB_TOKEN or gh auth)
 embed:
-  default_model: minilm    # fallback if vault doesn't specify
+  model: bge-m3            # embedding model for this device (applies to ALL vaults)
 ```
 
 - Auth tokens live here, **never** in a vault (would leak to GitHub/iCloud)
-- Global defaults that individual vaults can override
+- Embedding model is per-device, not per-vault — cross-vault search needs consistent vector dimensions
 - On iOS/iPadOS: auth tokens stored in Keychain, preferences in UserDefaults
 
 ### Layer 4: vaults.yaml (vault registry, synced via iCloud)
@@ -149,7 +150,7 @@ When a setting exists at multiple layers, the most specific wins:
 Per-vault .maho/config.yaml  >  Global ~/.maho/config.yaml  >  Defaults
 ```
 
-For example, `embed.model` in vault's `.maho/config.yaml` overrides the global `embed.default_model`.
+Exception: `embed.model` is **global only** (Layer 3) — cross-vault search requires all vaults on the same device to share the same embedding model and vector dimensions.
 
 For CLI config commands, see [CLI Reference](cli.md#config--auth).
 
