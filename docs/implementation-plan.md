@@ -239,128 +239,146 @@
 
 ---
 
-## Phase 4: Native App — macOS
+## Phase 4: Native App (Universal — macOS + iPadOS + iOS)
 
-> SwiftUI universal app, starting with macOS. Share MahoNotesKit with CLI.
+> One Xcode project, one SwiftUI codebase, three platforms. Share MahoNotesKit with CLI.
+> iCloud is infrastructure (not an add-on) — the app needs it from day one for vault registry.
 
-### 4.1 — Xcode Project Setup
-- [ ] Create Xcode project (Universal App: macOS + iOS + iPadOS)
+### 4a — Xcode Project + iCloud Container + Vault Registry Sync
+
+> Foundation: the app can launch, read vaults, and sync registry across devices.
+
+- [ ] Create Xcode project (Universal App: macOS + iOS + iPadOS targets)
 - [ ] Add MahoNotesKit as local SPM dependency
 - [ ] App target: `Maho Notes.app`
 - [ ] Bundle identifier: `com.pcca.mahonotes`
+- [ ] Entitlements: iCloud (CloudKit / iCloud Documents), App Sandbox
 - [ ] iCloud container: `iCloud~com.pcca.mahonotes`
-- [ ] Entitlements: iCloud, App Sandbox
+  - Vault registry in container: `config/vaults.yaml`
+  - iCloud vaults stored in container: `vaults/<name>/`
+- [ ] `NSFileCoordinator` for safe reads/writes of vault registry
+- [ ] App reads vault registry on launch → resolves vault paths (iCloud / local / GitHub)
+- [ ] Basic `@main` App struct with empty NavigationSplitView shell
+- [ ] Tests: vault registry load/save via iCloud container mock
 
-### 4.2 — Sidebar & Navigation (macOS)
-- [ ] Three-column NavigationSplitView:
+### 4b — Core UI: Sidebar, Navigation, Note List
+
+> The app can browse vaults, collections, and notes. Adaptive layout across platforms.
+
+- [ ] Three-column `NavigationSplitView` (adaptive: 3-col macOS/iPad landscape, 2-col iPad portrait, push iPhone)
   - Column 1: Vault picker + collection tree
   - Column 2: Note list (filtered by collection)
-  - Column 3: Note content (preview / editor / split)
-- [ ] Vault picker: list all vaults, "All Vaults" option
-- [ ] Collection tree: nested directories rendered as expandable tree
+  - Column 3: Note content (preview placeholder initially)
+- [ ] Vault picker: list all vaults from registry, "All Vaults" option
+- [ ] Collection tree: nested directories as expandable `DisclosureGroup`
 - [ ] Read-only badge (🔒) on read-only vaults
-- [ ] Note list: sort by updated, title, order
+- [ ] Note list: sort by updated / title / custom order
+- [ ] iPhone: single-column push navigation, vault picker as section headers
+- [ ] iPad: two/three-column split view, Stage Manager multi-window support
+- [ ] Tests: navigation state, vault/collection filtering
 
-### 4.3 — Markdown Rendering
-- [ ] swift-markdown parser → custom `AttributedString` renderer
-- [ ] Heading styles, bold, italic, code, links
+### 4c — Markdown Rendering + Editor
+
+> The heaviest sub-phase. The app can display and edit notes with full markdown support.
+
+#### Rendering
+- [ ] `swift-markdown` parser → custom `AttributedString` renderer
+- [ ] Heading styles, bold, italic, code, links, blockquotes
 - [ ] Code blocks with TreeSitter syntax highlighting
-- [ ] Ruby annotation rendering: `{base|annotation}` → custom AttributedString attribute → custom SwiftUI view
-- [ ] Images: load from relative path (`_assets/`) or URL
-- [ ] Math: WKWebView + KaTeX (fallback for complex rendering)
-- [ ] Mermaid: WKWebView
-- [ ] Admonitions / callouts: styled blocks
+- [ ] Ruby annotation: `{base|annotation}` → custom AttributedString attribute → custom SwiftUI view
+- [ ] Images: load from relative path (`_assets/`) or remote URL
+- [ ] Math: `WKWebView` + KaTeX (inline `$...$` and block `$$...$$`)
+- [ ] Mermaid diagrams: `WKWebView`
+- [ ] Admonitions / callouts: styled blocks (tip, warning, note, info)
 - [ ] Table of contents: auto-generated from headings
+- [ ] Footnotes, GFM tables, task lists, strikethrough
 
-### 4.4 — Editor
+#### Editor
 - [ ] Raw markdown text editor with syntax highlighting
 - [ ] Three view modes (toolbar toggle + keyboard shortcut):
   - Preview only (default) — rendered view
   - Editor only — raw markdown
-  - Split view — editor left, preview right
+  - Split view — editor left, preview right (macOS/iPad); toggle on iPhone
 - [ ] Toolbar shortcuts: bold, italic, heading, link, image, code block, table, ruby annotation
 - [ ] Auto-save on pause (debounced)
-- [ ] Keyboard shortcuts: Cmd+N, Cmd+S, Cmd+F, Cmd+Shift+F, Cmd+E
+- [ ] Keyboard shortcuts: ⌘N (new), ⌘S (save), ⌘F (search), ⌘⇧F (global search), ⌘E (toggle edit mode)
+- [ ] Tests: markdown rendering correctness, view mode switching
 
-### 4.5 — Search (App)
-- [ ] Global search bar (Cmd+Shift+F): FTS5 search across all vaults
-- [ ] In-note search (Cmd+F)
-- [ ] Semantic search toggle (when vector index available)
-- [ ] Search results: show vault name + collection + title + snippet
+### 4d — Search UI + Settings
 
-### 4.6 — Settings
-- [ ] Vault management: add/remove/reorder vaults, set primary
-- [ ] GitHub auth: ASWebAuthenticationSession
-- [ ] Embedding model selection + download
+> In-app search (FTS5 + semantic) and app configuration.
+
+#### Search
+- [ ] Global search bar (⌘⇧F): FTS5 search across all vaults
+- [ ] In-note search (⌘F)
+- [ ] Semantic / hybrid search toggle (when vector index available)
+- [ ] Search results: vault name + collection + title + snippet
+- [ ] Cross-vault search by default
+
+#### Settings
+- [ ] Vault management: add / remove / reorder vaults, set primary
+- [ ] GitHub auth: `ASWebAuthenticationSession`
+- [ ] Embedding model: picker with download status + progress (`ProgressView`)
 - [ ] Publishing configuration
 - [ ] Appearance: theme, font size
+- [ ] Tests: search result display, settings persistence
 
-**Estimated effort:** 8–12 sessions (largest phase)  
-**Dependencies:** Phase 0, Phase 1 (multi-vault), Phase 2 (vector search for semantic toggle)  
-**Tests:** UI tests + unit tests via MahoNotesKit
+### 4e — iCloud Sync: File Coordination + Conflict Resolution
 
----
+> Full iCloud Documents sync for vault content (not just registry). Cross-device real-time sync.
 
-## Phase 5: iCloud Sync
-
-> Make vaults sync across Apple devices via iCloud container.
-
-### 5.1 — iCloud Container Setup
-- [ ] Enable iCloud entitlement with `iCloud~com.pcca.mahonotes` container
-- [ ] Vault registry in iCloud container: `config/vaults.yaml`
-- [ ] iCloud vaults stored in container: `vaults/<name>/`
-- [ ] File coordination: `NSFileCoordinator` for safe reads/writes
-
-### 5.2 — Sync Detection
-- [ ] `NSMetadataQuery` to monitor iCloud changes
-- [ ] Detect new/modified/deleted files → update UI
-- [ ] Download on-demand files (lazy download from iCloud)
+- [ ] `NSMetadataQuery` to monitor iCloud changes (new / modified / deleted files)
+- [ ] Detect download status → trigger on-demand download for lazy iCloud files
+- [ ] UI updates on file change detection (reactive via Combine / `@Observable`)
 - [ ] Conflict detection via `NSFileVersion`
+- [ ] Conflict handling:
+  - Keep remote version as `note.md`, save local as `note.conflict-{timestamp}-local.md`
+  - ⚠️ badge on conflicted notes in sidebar
+  - Conflict resolution UI: side-by-side compare, keep one, manual merge
+  - Resolving deletes the `.conflict-*` file
+- [ ] GitHub sync from app (no git CLI on iOS):
+  - GitHub REST API integration
+  - Auto push: debounced (30s after last edit)
+  - Auto pull: on app launch + periodic (5 min) + pull-to-refresh
+  - iCloud settles first → then GitHub sync
+- [ ] Tests: conflict detection, resolution flow, sync ordering
 
-### 5.3 — Conflict Handling
-- [ ] On conflict: keep remote version as `note.md`, save local as `note.conflict-{timestamp}-local.md`
-- [ ] ⚠️ badge on conflicted notes in sidebar
-- [ ] Conflict resolution UI: side-by-side compare, keep one, merge manual
-- [ ] Resolving deletes the `.conflict-*` file
+### 4f — Platform Polish + iOS Extras
 
-### 5.4 — GitHub Sync from App
-- [ ] GitHub REST API integration (no git CLI on iOS)
-- [ ] Auto push: debounced (30s after last edit)
-- [ ] Auto pull: on app launch + periodic (5 min) + pull-to-refresh
-- [ ] iCloud settles first → then GitHub sync
+> From "it works" to "it's good." Platform-specific features and final polish.
 
-**Estimated effort:** 4–6 sessions  
-**Dependencies:** Phase 4 (app exists)  
-**Tests:** Integration tests with mock iCloud
+#### iOS / iPadOS
+- [ ] Share Extension: create new note from other apps (Safari, PDF reader, etc.)
+- [ ] Pull-to-refresh: trigger sync gesture
+- [ ] Keychain: auth token storage (iOS has no `~/.maho/config.yaml`)
+- [ ] `UserDefaults` for preferences (instead of file-based config on iOS)
+- [ ] On-Demand Resources (ODR): embedding models via Apple CDN (App Store binary size limits)
 
----
+#### macOS
+- [ ] Menu bar integration (if needed)
+- [ ] Drag & drop refinements (macOS vs iPadOS behavior differences)
 
-## Phase 6: iOS / iPadOS
+#### Universal
+- [ ] Accessibility: VoiceOver, Dynamic Type
+- [ ] App icon + launch screen
+- [ ] First launch onboarding
+- [ ] Offline mode: graceful fallback when iCloud / GitHub unavailable
+- [ ] iPad: keyboard shortcuts (same as macOS with external keyboard)
+- [ ] iPad: drag & drop support
 
-> Platform adaptations for mobile.
+**Estimated effort:** 15–20 sessions total  
+**Dependencies:** Phase 0, Phase 1 (multi-vault), Phase 2 (vector search for semantic toggle)  
+**Tests:** UI tests + unit tests via MahoNotesKit  
 
-### 6.1 — iPhone UI
-- [ ] Single-column push navigation
-- [ ] Vault picker as section headers
-- [ ] Toggle view/edit mode
-- [ ] Pull to sync
-- [ ] Share sheet integration
-
-### 6.2 — iPad UI
-- [ ] Two/three-column split view (same 3 view modes as macOS)
-- [ ] Stage Manager: multiple windows
-- [ ] Keyboard shortcuts (external keyboard)
-- [ ] Drag & drop support
-
-### 6.3 — iOS-Specific Features
-- [ ] ASWebAuthenticationSession for GitHub OAuth
-- [ ] Keychain for auth token storage (instead of `~/.maho/config.yaml`)
-- [ ] UserDefaults for preferences (instead of file-based config)
-- [ ] On-Demand Resources (ODR) for embedding model distribution
-- [ ] Share extension for quick note creation
-
-**Estimated effort:** 3–4 sessions  
-**Dependencies:** Phase 4 (macOS app), Phase 5 (iCloud sync)
+**Sub-phase estimates:**
+| Sub-phase | Effort | Notes |
+|-----------|--------|-------|
+| 4a | 1–2 sessions | Xcode setup + iCloud container |
+| 4b | 2–3 sessions | Core navigation, adaptive layout |
+| 4c | 4–6 sessions | Largest: rendering + editor |
+| 4d | 2–3 sessions | Search UI + settings |
+| 4e | 3–4 sessions | iCloud sync + conflict resolution |
+| 4f | 2–3 sessions | Polish, share extension, ODR |
 
 ---
 
@@ -371,23 +389,19 @@
 | **0** | Code ↔ Design alignment | ✅ done (1 session) | None |
 | **1** | Multi-Vault | ✅ done (1 session) | Phase 0 |
 | **2** | Vector Search | ✅ done (1 session) | Phase 0, CJKSQLite compat |
-| **2b-CLI** | BGE-M3 + `mn model` | 1–2 sessions | Phase 2 |
-| **2b-App** | Model management UI + ODR | deferred | Phase 4 |
+| **2b-CLI** | Model management + `mn model` | ✅ done (1 session) | Phase 2 |
 | **3** | Publishing | 4–5 sessions | Phase 0, 1 |
-| **4** | Native App (macOS) | 8–12 sessions | Phase 0, 1, 2 |
-| **5** | iCloud Sync | 4–6 sessions | Phase 4 |
-| **6** | iOS / iPadOS | 3–4 sessions | Phase 4, 5 |
+| **4** | Native App (Universal) | 15–20 sessions | Phase 0, 1, 2 |
 
-**Total estimated: ~27–38 sessions**
+**Total estimated: ~22–28 sessions remaining (Phase 3 + 4)**
 
 ### Parallelizable Work
-- Phase 2b-CLI, Phase 3 (Publishing) can run in parallel — no dependency between them
-- Phase 1 (Multi-Vault) must complete before Phase 3 and Phase 4
-- Phase 0 must complete first (everything depends on correct config model)
+- Phase 3 (Publishing) can run in parallel with Phase 4a–4c — no dependency between them
+- Phase 4 sub-phases must be done in order (each builds on the previous)
 
 ### Heartbeat-Friendly Tasks
-Each sub-item (e.g., 0.1, 1.2, 2.3) is scoped to be completable in a single session. Sub-items within a phase should be done in order (they build on each other). Phases can overlap where dependency arrows allow.
+Each sub-item (e.g., 0.1, 4b, 2.3) is scoped to be completable in a single session. Sub-items within a phase should be done in order (they build on each other). Phases can overlap where dependency arrows allow.
 
 ---
 
-*Plan by 真帆 🔭 — 2026-03-04*
+*Plan by 真帆 🔭 — 2026-03-05*
