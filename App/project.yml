@@ -1,0 +1,45 @@
+name: MahoNotes
+options:
+  bundleIdPrefix: com.pcca
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+  xcodeVersion: "26.3"
+  createIntermediateGroups: true
+
+packages:
+  MahoNotesPackage:
+    path: ..
+
+targets:
+  MahoNotes:
+    type: application
+    platform: [macOS, iOS]
+    sources:
+      - MahoNotes
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pcca.mahonotes
+        PRODUCT_NAME: Maho Notes
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_KEY_CFBundleDisplayName: Maho Notes
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
+        CODE_SIGN_ENTITLEMENTS: MahoNotes/MahoNotes.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_EMIT_LOC_STRINGS: YES
+        CODE_SIGN_STYLE: Automatic
+        # Leave DEVELOPMENT_TEAM empty — user sets in Xcode
+        DEVELOPMENT_TEAM: ""
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: -O
+    dependencies:
+      - package: MahoNotesPackage
+        product: MahoNotesKit
+    entitlements:
+      path: MahoNotes/MahoNotes.entitlements

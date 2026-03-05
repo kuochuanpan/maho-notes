@@ -128,6 +128,7 @@ func writeVaultFiles(
             let urlsToTry = sshURL != tutorialRepoURL ? [sshURL, tutorialRepoURL] : [tutorialRepoURL]
 
             var cloneSucceeded = false
+            #if os(macOS)
             for url in urlsToTry {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -148,6 +149,7 @@ func writeVaultFiles(
                     }
                 } catch {}
             }
+            #endif
 
             if cloneSucceeded {
                 let gitDir = (gsDir as NSString).appendingPathComponent(".git")
@@ -243,6 +245,7 @@ public func cloneGitHubVault(
         ]
 
         var cloneSucceeded = false
+        #if os(macOS)
         for url in urls {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -263,6 +266,7 @@ public func cloneGitHubVault(
                 }
             } catch {}
         }
+        #endif
 
         if !cloneSucceeded {
             throw VaultInitError.cloneFailed(repo)

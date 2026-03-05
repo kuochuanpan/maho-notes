@@ -39,7 +39,8 @@ public struct SyncResult: Sendable, Codable {
 
 // MARK: - Git Sync
 
-/// Full GitHub sync for the vault
+#if os(macOS)
+/// Full GitHub sync for the vault (macOS only — iOS uses GitHub REST API instead of git CLI)
 public struct GitSync: Sendable {
     private let vaultPath: String
     private let auth: Auth
@@ -443,6 +444,7 @@ public struct GitSync: Sendable {
         print("⚠ \(message)")
     }
 }
+#endif
 
 // MARK: - Sync Errors
 
@@ -471,6 +473,7 @@ public enum SyncError: Error, CustomStringConvertible {
 
 // MARK: - Git Helpers
 
+#if os(macOS)
 @discardableResult
 func runGit(_ args: [String], in directory: String, label: String, env: [String: String]? = nil) throws -> String {
     let process = Process()
@@ -514,6 +517,7 @@ func runGitCapture(_ args: [String], in directory: String) throws -> Int32 {
     process.waitUntilExit()
     return process.terminationStatus
 }
+#endif
 
 public enum GitError: Error, CustomStringConvertible {
     case commandFailed(label: String, output: String)

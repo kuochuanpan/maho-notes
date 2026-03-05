@@ -113,8 +113,9 @@ public struct Auth: Sendable {
         throw AuthError.noTokenFound
     }
 
-    /// Try to get token from `gh auth token`
+    /// Try to get token from `gh auth token` (macOS only — iOS has no CLI)
     private func resolveFromGhCLI() throws -> AuthToken {
+        #if os(macOS)
         let ghPath = findExecutable("gh")
         guard let ghPath else { throw AuthError.ghNotInstalled }
 
@@ -141,6 +142,9 @@ public struct Auth: Sendable {
 
         guard !output.isEmpty else { throw AuthError.ghNotLoggedIn(message: "empty token") }
         return AuthToken(token: output, source: .ghCLI)
+        #else
+        throw AuthError.ghNotInstalled
+        #endif
     }
 
     /// Load stored token from global ~/.maho/config.yaml
@@ -238,11 +242,15 @@ public struct Auth: Sendable {
 // MARK: - Pre-flight Checks
 
 public struct PreflightCheck: Sendable {
-    /// Check that git is installed and available
+    /// Check that git is installed and available (macOS only)
     public static func checkGitInstalled() throws {
+        #if os(macOS)
         guard findExecutable("git") != nil else {
             throw AuthError.gitNotInstalled
         }
+        #else
+        // iOS: git CLI not available, GitHub REST API used instead
+        #endif
     }
 
     /// Check if the vault path is inside an iCloud container
@@ -262,6 +270,7 @@ public struct PreflightCheck: Sendable {
 }
 
 /// Find an executable in PATH
+#if os(macOS)
 func findExecutable(_ name: String) -> String? {
     // Check common paths first
     let commonPaths = [
@@ -283,3 +292,4 @@ func findExecutable(_ name: String) -> String? {
     }
     return nil
 }
+#endif

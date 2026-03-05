@@ -5,3 +5,6 @@ Package.resolved
 xcuserdata/
 DerivedData/
 .DS_Store
+
+# App build artifacts (project regenerated via: cd App && xcodegen generate)
+App/MahoNotes.xcodeproj/
