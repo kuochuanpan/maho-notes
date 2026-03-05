@@ -94,6 +94,44 @@ public enum ConfigError: Error, CustomStringConvertible {
     }
 }
 
+// MARK: - Global config (~/.maho/config.yaml)
+
+/// Read a nested value from a YAML dictionary using dot-separated key path.
+private func getNestedValue(_ dict: [String: Any], keyPath: String) -> String? {
+    let parts = keyPath.split(separator: ".").map(String.init)
+    if parts.count == 1 {
+        return dict[parts[0]] as? String
+    }
+    guard let nested = dict[parts[0]] as? [String: Any] else { return nil }
+    let subKey = parts.dropFirst().joined(separator: ".")
+    return getNestedValue(nested, keyPath: subKey)
+}
+
+extension Config {
+    /// Resolve embed.model: vault device config > global ~/.maho/config.yaml > nil
+    public static func resolveEmbedModel(vaultPath: String) -> String? {
+        // 1. Vault device config
+        let config = Config(vaultPath: vaultPath)
+        if let device = try? config.loadDeviceConfig(),
+           let model = getNestedValue(device, keyPath: "embed.model"),
+           !model.isEmpty {
+            return model
+        }
+
+        // 2. Global config
+        let globalPath = Auth.globalConfigDir + "/config.yaml"
+        if FileManager.default.fileExists(atPath: globalPath),
+           let content = try? String(contentsOfFile: globalPath, encoding: .utf8),
+           let yaml = try? Yams.load(yaml: content) as? [String: Any],
+           let model = getNestedValue(yaml, keyPath: "embed.model"),
+           !model.isEmpty {
+            return model
+        }
+
+        return nil
+    }
+}
+
 private func setNestedValue(_ dict: inout [String: Any], keyPath: String, value: String) {
     let parts = keyPath.split(separator: ".").map(String.init)
     if parts.count == 1 {

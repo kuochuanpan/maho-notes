@@ -1,7 +1,7 @@
 import ArgumentParser
 
 @main
-struct MahoNotes: ParsableCommand {
+struct MahoNotes: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mn",
         abstract: "Maho Notes — personal knowledge base CLI",

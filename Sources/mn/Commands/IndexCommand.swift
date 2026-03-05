@@ -46,8 +46,17 @@ struct IndexCommand: AsyncParsableCommand {
             print("Indexed \(stats.total) notes (\(stats.added) new, \(stats.updated) updated, \(stats.deleted) deleted)")
         }
 
-        if let modelName = model {
-            try await buildVectorIndex(vault: vault, notes: notes, modelName: modelName)
+        // Resolve model: --model flag > vault device config > global config
+        let resolvedModel = model ?? Config.resolveEmbedModel(vaultPath: vault.path)
+        if let modelName = resolvedModel {
+            if #available(macOS 15.0, *) {
+                try await buildVectorIndex(vault: vault, notes: notes, modelName: modelName)
+                // Persist model choice to vault device config
+                let config = Config(vaultPath: vault.path)
+                try config.setValue(key: "embed.model", value: modelName)
+            } else {
+                throw ValidationError("Vector indexing requires macOS 15+")
+            }
         }
     }
 

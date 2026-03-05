@@ -23,6 +23,9 @@ struct SearchCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Hybrid search combining keyword + semantic (RRF)")
     var hybrid = false
 
+    @Option(name: .long, help: "Maximum number of results (default 10)")
+    var limit: Int = 10
+
     func run() async throws {
         if semantic || hybrid {
             try vaultOption.validateVaultExists()
@@ -65,8 +68,32 @@ struct SearchCommand: AsyncParsableCommand {
 
     @available(macOS 15.0, *)
     private func runSemanticOrHybrid(vault: Vault) async throws {
+        if hybrid {
+            // Hybrid: run FTS always, vector if available
+            let ftsResults = try ftsSearch(vault: vault)
+
+            if VectorIndex.vectorIndexExists(vaultPath: vault.path),
+               let vecIndex = try? VectorIndex(vaultPath: vault.path),
+               let modelName = try? vecIndex.currentModel(),
+               let embeddingModel = EmbeddingModel(rawValue: modelName ?? "") {
+                let provider = SwiftEmbeddingsProvider(model: embeddingModel)
+                let queryVector = try await provider.embed(query)
+                let vecResults = try vecIndex.search(queryVector: queryVector, limit: 50)
+                let ftsTop50 = Array(ftsResults.prefix(50))
+                let merged = HybridSearch.merge(ftsResults: ftsTop50, vectorResults: vecResults, limit: limit)
+                outputHybridResults(merged)
+            } else {
+                FileHandle.standardError.write(
+                    "⚠️  No vector index found; falling back to keyword search only.\n".data(using: .utf8)!
+                )
+                outputResults(Array(ftsResults.prefix(limit)), vaultName: nil, fts: true)
+            }
+            return
+        }
+
+        // Semantic only
         guard VectorIndex.vectorIndexExists(vaultPath: vault.path) else {
-            throw ValidationError("No vector index found. Run `mn index --model minilm` first.")
+            throw ValidationError("No vector index found. Run `mn index --model <name>` first.")
         }
 
         let vecIndex = try VectorIndex(vaultPath: vault.path)
@@ -77,17 +104,8 @@ struct SearchCommand: AsyncParsableCommand {
 
         let provider = SwiftEmbeddingsProvider(model: embeddingModel)
         let queryVector = try await provider.embed(query)
-
-        if semantic {
-            let results = try vecIndex.search(queryVector: queryVector, limit: 10)
-            outputVectorResults(results)
-        } else {
-            // hybrid
-            let ftsResults = try ftsSearch(vault: vault)
-            let vecResults = try vecIndex.search(queryVector: queryVector, limit: 20)
-            let merged = HybridSearch.merge(ftsResults: ftsResults, vectorResults: vecResults, limit: 10)
-            outputHybridResults(merged)
-        }
+        let results = try vecIndex.search(queryVector: queryVector, limit: limit)
+        outputVectorResults(results)
     }
 
     private func outputVectorResults(_ results: [VectorSearchResult]) {
