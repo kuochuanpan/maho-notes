@@ -11,13 +11,23 @@ One Xcode project, shared SwiftUI codebase. Supports **macOS**, **iOS**, and **i
 - Collection/note CRUD
 - Static site generator (for publishing)
 
+## Multi-Vault UI
+
+The sidebar shows all registered vaults. Users can switch between vaults or browse across all.
+
+- **Vault picker** at the top of the sidebar (or section headers per vault)
+- **"All Vaults"** view: browse/search across all vaults, results prefixed with vault name
+- **Per-vault view**: scoped to a single vault's collections
+- **Read-only badge**: 🔒 icon on read-only vaults (no create/edit/delete actions)
+- **Vault management**: Settings → Vaults → add/remove/reorder/set primary
+
 ## Platform Adaptation (NavigationSplitView)
 
 | Platform | Layout | Notes |
 |----------|--------|-------|
-| **macOS** | Three-column sidebar | 3 view modes: preview / editor / split (default: preview) |
+| **macOS** | Three-column sidebar | Vault picker + collections; 3 view modes: preview / editor / split (default: preview) |
 | **iPadOS** | Two/three-column split view | Same 3 view modes in landscape; Stage Manager multi-window |
-| **iPhone** | Single-column push navigation | Compact UI, toggle view/edit |
+| **iPhone** | Single-column push navigation | Compact UI, vault picker as section headers, toggle view/edit |
 
 ## macOS
 

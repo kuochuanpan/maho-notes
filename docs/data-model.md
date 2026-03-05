@@ -41,21 +41,28 @@ Content here...
 
 ## Configuration
 
-Two layers of config: **vault-level** (shared across devices) and **device-level** (local only).
+Four layers of config, from most specific to most global:
 
 ```
-maho-vault/
-  maho.yaml              # Vault-level config (synced with vault) — the ONE config file per vault
-  .maho/
-    config.yaml           # Device-level config (gitignored)
+Layer 1: Per-vault config (synced)
+  <vault>/maho.yaml             # Vault identity + collections + optional github/site
+
+Layer 2: Per-vault device config (local only)
+  <vault>/.maho/config.yaml     # Device-specific vault settings (gitignored)
+
+Layer 3: Global device config (local only)
+  ~/.maho/config.yaml           # Auth tokens, default embed model, device preferences
+
+Layer 4: Vault registry (synced via iCloud)
+  iCloud~com.pcca.mahonotes/config/vaults.yaml  # Which vaults exist, types, access
 ```
 
-### maho.yaml (vault-level, synced — single source of truth per vault)
+### Layer 1: maho.yaml (per vault, synced)
 
-`maho.yaml` is the **only** config file per vault. It contains vault metadata, author info, collections, and optional GitHub/site settings. Its presence identifies a directory as a Maho Notes vault.
+`maho.yaml` is the **single config file per vault**. Its presence identifies a directory as a Maho Notes vault.
 
 ```yaml
-# maho.yaml — the single config file per vault
+# maho.yaml — single source of truth per vault
 title: "Kuo-Chuan's Notes"
 author:
   name: Kuo-Chuan Pan
@@ -90,23 +97,102 @@ site:
 
 > **Why one file?** `collections.yaml` was originally separate to reduce merge conflict risk. In practice, having two config files creates UX confusion and cognitive overhead. One file per vault = one source of truth = cleaner. See [Design Decision #13](decisions.md#13-single-config-file-per-vault).
 
-### .maho/config.yaml (device-level, gitignored)
+### Layer 2: .maho/config.yaml (per vault, device-level, gitignored)
+
+Per-vault settings that differ between devices. Lives inside the vault but is never synced.
 
 ```yaml
 embed:
-  model: bge-m3           # per-device embedding model choice
+  model: bge-m3           # per-device embedding model choice for this vault
 ```
 
-- Embedding model is per-device (iPhone → Light, Mac → Pro)
-- Auth tokens stored in `~/.maho/config.yaml` (global, device-level — not in vault)
+### Layer 3: ~/.maho/config.yaml (global, device-level)
+
+Shared across all vaults on this device. Not synced anywhere.
+
+```yaml
+auth:
+  github_token: ghp_xxx   # GitHub auth (from $GITHUB_TOKEN or gh auth)
+embed:
+  default_model: minilm    # fallback if vault doesn't specify
+```
+
+- Auth tokens live here, **never** in a vault (would leak to GitHub/iCloud)
+- Global defaults that individual vaults can override
+- On iOS/iPadOS: auth tokens stored in Keychain, preferences in UserDefaults
+
+### Layer 4: vaults.yaml (vault registry, synced via iCloud)
+
+Lives in the iCloud container so it syncs across all Apple devices automatically. See [Sync Strategy](sync-strategy.md#vault-registry) for full details.
+
+```yaml
+# iCloud~com.pcca.mahonotes/config/vaults.yaml
+primary: personal
+vaults:
+  - name: personal
+    type: icloud
+    github: kuochuanpan/maho-vault
+    access: read-write
+  - name: cheatsheets
+    type: github
+    github: detailyang/awesome-cheatsheet
+    access: read-only
+```
+
+CLI also maintains a local cache at `~/.maho/vaults-cache.yaml` for offline access.
+
+### Config Precedence
+
+When a setting exists at multiple layers, the most specific wins:
+
+```
+Per-vault .maho/config.yaml  >  Global ~/.maho/config.yaml  >  Defaults
+```
+
+For example, `embed.model` in vault's `.maho/config.yaml` overrides the global `embed.default_model`.
 
 For CLI config commands, see [CLI Reference](cli.md#config--auth).
 
-## Directory Structure (maho-vault)
+## Directory Structure
+
+### Multi-Vault Layout (iCloud container)
 
 ```
-maho-vault/
-├── maho.yaml                  # Vault config + collections — the ONE config file (synced)
+iCloud~com.pcca.mahonotes/           # iCloud container (synced across Apple devices)
+├── config/
+│   └── vaults.yaml                  # Vault registry (which vaults exist)
+└── vaults/
+    ├── personal/                    # iCloud vault (read-write)
+    │   ├── maho.yaml
+    │   ├── japanese/
+    │   ├── astronomy/
+    │   └── .maho/                   # Per-vault local metadata (gitignored)
+    ├── work/                        # iCloud vault (read-write)
+    │   ├── maho.yaml
+    │   └── meetings/
+    └── journal/                     # iCloud vault (read-write)
+        ├── maho.yaml
+        └── 2026/
+
+~/.maho/                             # Global device config (NOT synced)
+├── config.yaml                      # Auth tokens, global defaults
+├── vaults-cache.yaml                # Offline copy of vault registry
+└── vaults/                          # GitHub-cloned vaults
+    ├── cheatsheets/                 # GitHub vault (read-only)
+    │   ├── maho.yaml
+    │   └── ...
+    └── rust-guide/                  # GitHub vault (read-only)
+        ├── maho.yaml
+        └── ...
+```
+
+### Single Vault Layout
+
+Each vault has the same internal structure, regardless of type (iCloud / GitHub / local):
+
+```
+<vault>/
+├── maho.yaml                  # Vault config + collections (synced)
 ├── japanese/                  # Collection: 日本語
 │   ├── _index.md              # Collection overview (optional at any directory level)
 │   ├── vocabulary/
@@ -127,8 +213,8 @@ maho-vault/
 │   └── ...
 ├── _assets/                   # Shared images/attachments (referenced via relative paths)
 │   └── ...
-└── .maho/                     # Local-only metadata (gitignored, NOT synced)
-    ├── config.yaml            # Device-level config (embed model, etc.)
+└── .maho/                     # Per-vault local metadata (gitignored, NOT synced)
+    ├── config.yaml            # Device-level config for this vault (embed model, etc.)
     ├── index.db               # SQLite: metadata + FTS5 + vector embeddings
     ├── publish-manifest.json  # Content hashes for incremental publishing
     └── cache/                 # Rendered HTML cache
