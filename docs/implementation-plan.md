@@ -264,7 +264,7 @@
 - [x] iOS compatibility: `#if os(macOS)` guards on Process/git CLI in Auth, GitSync, VaultInit
 - [ ] Tests: vault registry load/save via iCloud container mock (existing 210 tests pass, app-specific tests in 4b+)
 
-### 4b — Core UI: Layout, Navigation, Tree Explorer
+### 4b — Core UI: Layout, Navigation, Tree Explorer ✅ (2026-03-05)
 
 > The app can browse vaults, collections, and notes. Adaptive layout across all three platforms.
 > Three-zone layout: **A (vault rail) + B (tree navigator) + C (content)** — no separate note list column.
