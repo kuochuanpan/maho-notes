@@ -17,7 +17,7 @@ struct IndexCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Index all registered vaults")
     var all = false
 
-    @Option(name: .long, help: "Embedding model for vector index (minilm, e5-small, bge-m3)")
+    @Option(name: .long, help: "Embedding model for vector index (minilm, e5-small, e5-large)")
     var model: String?
 
     func run() async throws {
@@ -71,7 +71,27 @@ struct IndexCommand: AsyncParsableCommand {
         }
 
         let provider = SwiftEmbeddingsProvider(model: embeddingModel)
-        let vecIndex = try VectorIndex(vaultPath: vault.path, dimensions: embeddingModel.dimensions)
+        let vecIndex: VectorIndex
+        do {
+            vecIndex = try VectorIndex(vaultPath: vault.path, dimensions: embeddingModel.dimensions)
+        } catch let error as VectorIndexError {
+            if case .dimensionMismatch = error, full {
+                // Dimension changed but --full was requested, so reset and recreate
+                let idx = try VectorIndex(vaultPath: vault.path, dimensions: embeddingModel.dimensions, skipDimensionCheck: true)
+                try idx.resetSchema()
+                let stats = try await idx.buildIndex(
+                    notes: notes,
+                    asyncEmbedder: { texts in try await provider.embedBatch(texts) },
+                    model: modelName,
+                    fullRebuild: true
+                )
+                if !outputOption.json {
+                    print("Vector index: \(stats.totalChunks) chunks (\(stats.added) new, \(stats.updated) updated, \(stats.deleted) deleted)")
+                }
+                return
+            }
+            throw error
+        }
 
         let vecStats = try await vecIndex.buildIndex(
             notes: notes,

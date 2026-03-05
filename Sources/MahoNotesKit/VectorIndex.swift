@@ -43,11 +43,13 @@ public final class VectorIndex: @unchecked Sendable {
     private let db: Database
     private let vaultPath: String
     private let dimensions: Int
+    private let skipDimensionCheck: Bool
 
     /// Open or create the vector index at `.maho/index.db` inside the vault.
-    public init(vaultPath: String, dimensions: Int = 384) throws {
+    public init(vaultPath: String, dimensions: Int = 384, skipDimensionCheck: Bool = false) throws {
         self.vaultPath = (vaultPath as NSString).expandingTildeInPath
         self.dimensions = dimensions
+        self.skipDimensionCheck = skipDimensionCheck
         let mahoDir = (self.vaultPath as NSString).appendingPathComponent(".maho")
         let fm = FileManager.default
 
@@ -72,10 +74,17 @@ public final class VectorIndex: @unchecked Sendable {
         self.db = database
         self.vaultPath = vaultPath
         self.dimensions = dimensions
+        self.skipDimensionCheck = false
         try ensureSchema()
     }
 
     // MARK: - Schema Management
+
+    /// Drop all vector tables and recreate with current dimensions. Used for full rebuild when dimensions change.
+    public func resetSchema() throws {
+        try dropVecTables()
+        try createSchema()
+    }
 
     private func ensureSchema() throws {
         try db.execute("""
@@ -95,7 +104,7 @@ public final class VectorIndex: @unchecked Sendable {
 
         if let v = existingVersion, v == currentVecSchemaVersion {
             // Check dimension mismatch on existing index
-            if let stored = storedDimensions, stored != dimensions {
+            if !skipDimensionCheck, let stored = storedDimensions, stored != dimensions {
                 throw VectorIndexError.dimensionMismatch(stored: stored, requested: dimensions)
             }
             // Backfill dimensions if missing (upgraded from old schema)
@@ -107,8 +116,14 @@ public final class VectorIndex: @unchecked Sendable {
 
         if existingVersion != nil {
             try dropVecTables()
-            try db.execute("CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)")
         }
+        try createSchema()
+    }
+
+    private func createSchema() throws {
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)
+        """)
 
         try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
 
@@ -125,7 +140,9 @@ public final class VectorIndex: @unchecked Sendable {
 
         try db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)")
 
-        if existingVersion == nil {
+        // Upsert schema version + dimensions
+        let existing = try db.query("SELECT version FROM _vec_schema LIMIT 1")
+        if existing.isEmpty {
             try db.execute("INSERT INTO _vec_schema(version, dimensions) VALUES (\(currentVecSchemaVersion), \(dimensions))")
         } else {
             try db.execute("UPDATE _vec_schema SET version = \(currentVecSchemaVersion), dimensions = \(dimensions)")

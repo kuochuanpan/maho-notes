@@ -6,13 +6,13 @@ import Foundation
 public enum EmbeddingModel: String, Sendable, CaseIterable {
     case minilm
     case e5small = "e5-small"
-    case bgeM3 = "bge-m3"
+    case e5large = "e5-large"
 
     public var huggingFaceId: String {
         switch self {
         case .minilm: return "sentence-transformers/all-MiniLM-L6-v2"
         case .e5small: return "intfloat/multilingual-e5-small"
-        case .bgeM3: return "BAAI/bge-m3"
+        case .e5large: return "intfloat/multilingual-e5-large"
         }
     }
 
@@ -20,7 +20,7 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         switch self {
         case .minilm: return 384
         case .e5small: return 384
-        case .bgeM3: return 1024
+        case .e5large: return 1024
         }
     }
 
@@ -28,7 +28,7 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         switch self {
         case .minilm: return "MiniLM-L6-v2"
         case .e5small: return "Multilingual E5 Small"
-        case .bgeM3: return "BGE-M3"
+        case .e5large: return "Multilingual E5 Large"
         }
     }
 
@@ -36,7 +36,7 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         switch self {
         case .minilm: return "~80 MB"
         case .e5small: return "~120 MB"
-        case .bgeM3: return "~2.2 GB"
+        case .e5large: return "~2.2 GB"
         }
     }
 }
@@ -66,7 +66,7 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
                 from: model.huggingFaceId,
                 loadConfig: .init()
             )
-        case .bgeM3:
+        case .e5large:
             xlmBundle = try await XLMRoberta.loadModelBundle(
                 from: model.huggingFaceId,
                 loadConfig: .init()
@@ -81,7 +81,7 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         switch model {
         case .minilm:
             tensor = try bertBundle!.encode(text, maxLength: 512)
-        case .e5small, .bgeM3:
+        case .e5small, .e5large:
             tensor = try xlmBundle!.encode(text, maxLength: 512)
         }
         return await tensor.cast(to: Float.self).shapedArray(of: Float.self).scalars

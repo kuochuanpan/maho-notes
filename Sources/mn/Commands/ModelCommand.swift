@@ -70,7 +70,7 @@ struct ModelCommand: AsyncParsableCommand {
             abstract: "Pre-download an embedding model"
         )
 
-        @Argument(help: "Model name (minilm, e5-small, bge-m3)")
+        @Argument(help: "Model name (minilm, e5-small, e5-large)")
         var name: String
 
         func run() async throws {
@@ -103,7 +103,7 @@ struct ModelCommand: AsyncParsableCommand {
             abstract: "Delete a cached embedding model"
         )
 
-        @Argument(help: "Model name (minilm, e5-small, bge-m3)")
+        @Argument(help: "Model name (minilm, e5-small, e5-large)")
         var name: String
 
         func run() throws {

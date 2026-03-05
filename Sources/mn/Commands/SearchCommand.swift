@@ -82,7 +82,7 @@ struct SearchCommand: AsyncParsableCommand {
             let ftsResults = try ftsSearch(vault: vault)
 
             if VectorIndex.vectorIndexExists(vaultPath: vault.path),
-               let vecIndex = try? VectorIndex(vaultPath: vault.path),
+               let vecIndex = try? VectorIndex(vaultPath: vault.path, skipDimensionCheck: true),
                let modelName = (try? vecIndex.currentModel()) ?? nil,
                let embeddingModel = EmbeddingModel(rawValue: modelName) {
                 let provider = SwiftEmbeddingsProvider(model: embeddingModel)
@@ -105,7 +105,7 @@ struct SearchCommand: AsyncParsableCommand {
             throw ValidationError("No vector index found. Run `mn index --model <name>` first.")
         }
 
-        let vecIndex = try VectorIndex(vaultPath: vault.path)
+        let vecIndex = try VectorIndex(vaultPath: vault.path, skipDimensionCheck: true)
         guard let modelName = try vecIndex.currentModel(),
               let embeddingModel = EmbeddingModel(rawValue: modelName) else {
             throw ValidationError("Could not determine embedding model from vector index.")
