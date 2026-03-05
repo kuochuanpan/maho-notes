@@ -38,7 +38,7 @@
 |------|-------|------|-----|---------|-----------|
 | 🟢 Default | all-MiniLM-L6-v2 (multilingual) | ~90 MB | 384 | Good | All |
 | 🟡 Standard | multilingual-e5-small | ~470 MB | 384 | Better | All |
-| 🔴 Pro | BGE-M3 | ~2.2 GB | 1024 | Best | Mac recommended |
+| 🔴 Pro | multilingual-e5-large | ~2.2 GB | 1024 | Best | Mac recommended |
 
 All models run via `swift-embeddings` (MLTensor). No CoreML conversion needed — models loaded directly from HuggingFace safetensors format.
 
@@ -145,7 +145,7 @@ Final ranking = sort by total rrf_score descending
 ```bash
 mn index                    # incremental (mtime-based diff)
 mn index --full             # drop and rebuild from scratch
-mn index --model bge-m3     # specify embedding model
+mn index --model e5-large     # specify embedding model
 mn index --vault <name>     # index specific vault
 mn index --all              # index all vaults
 ```
@@ -157,7 +157,7 @@ mn index --all              # index all vaults
 - LIKE fallback for NLTokenizer segmentation edge cases
 
 **CLI embedding:**
-- CLI uses same model selection: `mn index --model bge-m3` or `mn index --model minilm`
+- CLI uses same model selection: `mn index --model e5-large` or `mn index --model minilm`
 - Embedding runtime: `swift-embeddings` (MLTensor) — loads HuggingFace models directly, no CoreML conversion needed
 - Model auto-download: first `mn index` with a new model downloads from HuggingFace Hub → cached in `~/.maho/models/`
 - `EmbeddingProvider` protocol: `func embed(_ text: String) async throws -> [Float]` + `func embedBatch(_ texts: [String]) async throws -> [[Float]]` + `var dimensions: Int`
