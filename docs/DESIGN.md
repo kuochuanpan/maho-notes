@@ -76,16 +76,21 @@ Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 
 ### Importing External Repos
 
-Any public GitHub markdown repo can be added as a **read-only vault** via `mn vault add`:
+Any GitHub repo can be added as a vault via `mn vault add`. The CLI **auto-detects** both access level and vault format via GitHub API:
 
 ```bash
-mn vault add cheatsheets --github detailyang/awesome-cheatsheet --readonly
-mn vault add rust-guide --github nicenemo/master-rust --readonly
+mn vault add cheatsheets --github detailyang/awesome-cheatsheet
+# Auto-detects: no push access → read-only, no maho.yaml → auto-import
+
+mn vault add my-notes --github user/my-notes
+# Auto-detects: push access → read-write, has maho.yaml → native Maho vault
 ```
 
-Non-Maho repos (no `maho.yaml`) are auto-detected and can be imported with `--import`, which generates `maho.yaml` from the directory structure. Read-only vaults pull upstream changes on `mn sync` but never push local edits back.
+**Auto-detection logic:**
+1. **Access**: GitHub API `permissions.push` — no push → read-only (pull only, never push), push → read-write
+2. **Format**: Checks for `maho.yaml` in repo root — present → native Maho vault, absent → auto-generate `maho.yaml` from directory structure (stored locally, not pushed to source repo)
 
-Other users' **Maho vaults** (repos with `maho.yaml`) work natively — just add them as a vault and they sync like any other.
+Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection when explicit control is needed. See [Design Decision #17](decisions.md).
 
 ## Tech Stack Summary
 

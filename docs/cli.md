@@ -64,8 +64,13 @@ mn publish --preview                  # local preview before push
 mn vault list                         # list all registered vaults (name, type, access, sync status)
 mn vault add <name> --icloud          # create new iCloud vault (stored in iCloud container)
 mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone)
-mn vault add <name> --github <repo> --readonly  # add as read-only (pull only, no push)
-mn vault add <name> --github <repo> --import    # add non-Maho repo (auto-generate maho.yaml from structure)
+# Auto-detects:
+#   1. Access: checks GitHub API permissions — no push access → read-only, push access → read-write
+#   2. Format: checks for maho.yaml in repo — present → native Maho vault, absent → auto-import
+# Override flags (force behavior, skip auto-detection):
+mn vault add <name> --github <repo> --readonly    # force read-only (even if you have push access)
+mn vault add <name> --github <repo> --readwrite   # force read-write (fails if no push access)
+mn vault add <name> --github <repo> --import      # force import mode (regenerate maho.yaml even if one exists)
 mn vault add <name> --path <local>    # register existing local directory as vault (macOS only)
 mn vault remove <name>                # unregister vault (does NOT delete files)
 mn vault remove <name> --delete       # unregister + delete local files

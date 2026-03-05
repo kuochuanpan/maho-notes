@@ -32,6 +32,8 @@
 
 16. **`--import` for non-Maho repos**: `mn vault add --import` auto-generates `maho.yaml` from a repo's directory structure (scanning `.md` files into collections). Generated config stored locally, not pushed to the source repo.
 
+17. **Auto-detection on `mn vault add --github`**: When adding a GitHub vault, the CLI auto-detects two things via GitHub REST API: (a) **access level** — checks `permissions.push` on the repo; no push → auto-readonly, push → auto-readwrite; (b) **vault format** — checks if `maho.yaml` exists in repo root; present → native Maho vault, absent → auto-import (generate `maho.yaml` from directory structure). The `--readonly`, `--readwrite`, and `--import` flags become overrides that skip auto-detection. This simplifies the default UX to just `mn vault add <name> --github <repo>`.
+
 ---
 
 *Design by 真帆 🔭 — 2026-03-04*
