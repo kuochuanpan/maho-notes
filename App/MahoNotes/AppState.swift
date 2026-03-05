@@ -181,8 +181,11 @@ final class AppState {
     /// Save the editing buffer back to the markdown file, preserving frontmatter.
     @MainActor
     func saveNote() {
+        // Only save when actively editing (not in preview mode with stale/empty buffer)
+        guard viewMode != .preview else { return }
         guard let note = selectedNote, let entry = selectedVault, !isReadOnly else { return }
         guard hasUnsavedChanges else { return }
+        guard !editingBody.isEmpty else { return }
 
         let vaultPath = resolvedPath(for: entry)
         let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)

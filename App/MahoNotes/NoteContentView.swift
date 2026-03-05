@@ -74,8 +74,11 @@ struct NoteContentView: View {
             .padding(12)
             .task(id: appState.editingBody) {
                 // Debounced auto-save: 2s after last keystroke
+                // Guard: only save when in editor/split mode with non-empty buffer
+                guard appState.viewMode != .preview else { return }
+                guard !appState.editingBody.isEmpty else { return }
                 try? await Task.sleep(for: .seconds(2))
-                if !Task.isCancelled {
+                if !Task.isCancelled && appState.viewMode != .preview {
                     appState.saveNote()
                 }
             }
