@@ -48,14 +48,37 @@ extension Vault {
         let fm = FileManager.default
         let vaultURL = URL(fileURLWithPath: path)
 
-        // Build set of all directory paths that contain notes (directly or in subdirs)
+        // Build set of all directory paths that contain content (directly or in subdirs).
+        // Include directories from notes AND from filesystem scan (to catch dirs with only _index.md).
         var allDirs: Set<String> = []
+
+        // 1. Directories inferred from note paths
         for note in allNotes {
             let components = note.relativePath.split(separator: "/").dropLast() // drop filename
             var current = ""
             for comp in components {
                 current = current.isEmpty ? String(comp) : current + "/" + String(comp)
                 allDirs.insert(current)
+            }
+        }
+
+        // 2. Directories from filesystem (catches dirs with only _index.md or empty subdirs)
+        if let enumerator = fm.enumerator(
+            at: vaultURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let dirURL as URL in enumerator {
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue else { continue }
+                let dirName = dirURL.lastPathComponent
+                guard !dirName.hasPrefix("_"), !dirName.hasPrefix(".") else {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                let relativePath = dirURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
+                guard relativePath != dirURL.path else { continue } // safety
+                allDirs.insert(relativePath)
             }
         }
 

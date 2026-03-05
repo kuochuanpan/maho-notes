@@ -145,9 +145,7 @@ private struct TreeNodeView: View {
             Label(node.name, systemImage: node.icon)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
+                    isExpanded.toggle()
                 }
         }
     }
