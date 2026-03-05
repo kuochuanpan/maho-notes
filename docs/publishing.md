@@ -85,7 +85,7 @@ mn publish --preview                # local preview before pushing
 ## Static Site Features
 
 - Clean, responsive theme (light/dark mode)
-- Syntax highlighting, KaTeX math, Mermaid diagrams, ruby annotation
+- Syntax highlighting, KaTeX math, Mermaid diagrams, ruby annotation, admonitions/callouts
 - Collection-based navigation
 - RSS feed
 - Open Graph meta tags for social sharing
@@ -93,6 +93,32 @@ mn publish --preview                # local preview before pushing
 - Custom domain support (user configures in GitHub Pages settings)
 - SEO-friendly static HTML
 - Customizable theme (future: user-selectable themes)
+
+## Multi-Vault Publishing
+
+Each vault can be published independently. A vault's `maho.yaml` contains its own `github.repo` and `site` configuration:
+
+```yaml
+# vault-a/maho.yaml
+github:
+  repo: user/vault-a
+site:
+  domain: notes.alice.dev
+  title: Alice's Notes
+
+# vault-b/maho.yaml
+github:
+  repo: user/vault-b
+site:
+  domain: work.alice.dev
+  title: Work Notes
+```
+
+- `mn publish` publishes from the primary vault by default
+- `mn publish --vault <name>` publishes from a specific vault
+- Read-only vaults cannot be published (blocked with error)
+- Each vault publishes to its own GitHub repo → its own GitHub Pages site
+- Cross-vault links are not supported in published sites (each site is self-contained)
 
 ## Our Instance
 

@@ -81,4 +81,4 @@ mn index --all              # index all vaults
 
 **CLI embedding:**
 - CLI uses same model selection: `mn index --model bge-m3` or `mn index --model builtin`
-- Can also use MLX directly for BGE-M3 (faster on Apple Silicon than CoreML for large models)
+- Embedding runtime: CoreML (default) or MLX (optional, faster on Apple Silicon for large models like BGE-M3)

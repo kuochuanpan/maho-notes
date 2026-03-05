@@ -78,6 +78,6 @@ The sidebar shows all registered vaults. Users can switch between vaults or brow
   - Korean readings: `{韓國|한국}`
 
 ### Rendering Stack
-- **Native (SwiftUI)**: `swift-markdown` for parsing → custom `AttributedString` renderer, `WKWebView` fallback for complex content (KaTeX, Mermaid)
+- **Native (SwiftUI)**: `swift-markdown` for parsing → custom `AttributedString` renderer. Syntax highlighting via TreeSitter (code blocks). `WKWebView` fallback for complex content (KaTeX, Mermaid).
 - **Static Site Generator** (for publishing): Swift-native HTML generation using templates (e.g., `Plot` or custom Swift DSL). Syntax highlighting via `Splash` (Swift) or pre-built highlight.js bundle. KaTeX/Mermaid via bundled JS in the generated HTML.
-- **CLI** (macOS / Linux): terminal-friendly output (no rendering needed, just metadata + search results)
+- **CLI** (macOS): terminal-friendly output (no rendering needed, just metadata + search results)

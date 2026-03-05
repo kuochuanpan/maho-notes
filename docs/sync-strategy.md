@@ -32,7 +32,7 @@ A user can have **multiple vaults** — one primary (iCloud) and any number of a
 │                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
 │  │ Primary Vault│  │ Work Vault   │  │ Cheat Sheets │  │
-│  │ (iCloud+Git) │  │ (GitHub)     │  │ (read-only)  │  │
+│  │ (iCloud+Git) │  │ (iCloud)     │  │ (read-only)  │  │
 │  │ read-write   │  │ read-write   │  │ pull-only    │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
 │         │                 │                 │           │
@@ -133,9 +133,10 @@ The `~/.maho/` directory on macOS CLI also serves as cache for GitHub vault clon
 ## Read-Only Vault Behavior
 
 - `mn sync` → pull only, never push
-- `mn new`, `mn delete`, `mn meta --set` → blocked with clear error: "This vault is read-only"
-- Local file edits are allowed (user's filesystem) but won't sync back
-- `mn sync` will overwrite local changes with upstream (reset to remote)
+- `mn new`, `mn delete`, `mn meta --set`, `mn publish` → blocked with clear error: "Vault '<name>' is read-only"
+- `mn sync` → pull only, never push
+- `mn sync` will overwrite local changes with upstream (reset to remote state)
+- Local file edits are allowed (user's filesystem) but are not tracked or synced back — next `mn sync` will overwrite them
 - Search works normally (indexed like any vault)
 
 ## Multi-Backend Storage
@@ -178,18 +179,23 @@ Real-world example (our setup):
 - MacBook iCloud → syncs to Kuo-Chuan's iPhone/iPad
 
 ### GitHub Sync Behavior (When Enabled)
+
+**App** (automatic):
 - **Auto push**: On note save, debounced (e.g., 30s after last edit)
 - **Auto pull**: On app launch + periodic (e.g., every 5 min) + pull-to-refresh
+
+**CLI** (explicit):
+- GitHub sync only runs when the user invokes `mn sync` — never automatic
 - **What syncs**: Markdown files + `maho.yaml` + `_assets/`
 - **What doesn't sync**: `.maho/` (local DB, embeddings, cache, auth tokens)
 
 ## Conflict Resolution
 
-**Conflict handling (simple: split + manual resolve):**
+**Conflict handling (simple: remote-wins + split for manual resolve):**
 1. Detect: on sync, compare `updated` timestamp + content hash
 2. If both sides changed same file → keep both versions:
-   - `note.md` ← newer version
-   - `note.conflict-{timestamp}-{source}.md` ← older version
+   - `note.md` ← remote version (always wins — consistent, predictable)
+   - `note.conflict-{timestamp}-local.md` ← local version (preserved for manual review)
 3. App shows ⚠️ badge on conflicted notes
 4. User opens both files → compares manually → keeps preferred version
 5. Resolving deletes the `.conflict-*` file

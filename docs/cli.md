@@ -34,7 +34,7 @@ mn list --series                      # list all series across vault
 mn list --series "日語基礎"            # filter notes in that series
 
 # ── Edit ──────────────────────────────────────────
-mn open <path>                        # open in $EDITOR (human use, macOS/Linux)
+mn open <path>                        # open in $EDITOR (human use, macOS)
 # AI agents: edit markdown files directly (don't touch frontmatter block)
 
 # ── Metadata ──────────────────────────────────────
@@ -60,7 +60,7 @@ mn publish --preview                  # local preview before push
 # Or just: mn publish <path> (marks + deploys in one step)
 # Publishing is incremental by default — uses content hashes to detect changes.
 
-# ── Vault Management (Phase 1d) ───────────────────
+# ── Vault Management ──────────────────────────────
 mn vault list                         # list all registered vaults (name, type, access, sync status)
 mn vault add <name> --icloud          # create new iCloud vault (stored in iCloud container)
 mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone)
@@ -79,8 +79,9 @@ mn sync --all                         # sync all vaults
 mn sync --reindex                     # sync + rebuild index
 # First run: if vault is empty + github.repo configured → auto clone from repo
 # Read-only vaults: pull only, never push
-mn index                              # rebuild SQLite FTS index (+ embeddings if model configured)
-mn index --model bge-m3               # specify embedding model
+mn index                              # incremental rebuild (mtime-based diff)
+mn index --full                       # drop and rebuild from scratch
+mn index --model bge-m3               # specify embedding model for vector index
 mn index --vault <name>               # index specific vault
 mn index --all                        # index all vaults
 

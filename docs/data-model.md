@@ -102,10 +102,12 @@ site:
 Per-vault settings that differ between devices. Lives inside the vault but is never synced.
 
 ```yaml
-# Reserved for future per-vault device settings (e.g., local cache preferences)
+# Reserved for future per-vault device settings
+# Examples: local cache preferences, vault-specific display options
+# NOT for auth tokens (Layer 3) or embedding model (Layer 3 — must be global for cross-vault search)
 ```
 
-> **Note:** Embedding model is NOT per-vault — it's global (Layer 3). Cross-vault vector search requires consistent dimensions across all vaults on the same device.
+> **Note:** Embedding model is NOT per-vault — it's global (Layer 3). Cross-vault vector search requires consistent dimensions across all vaults on the same device. Auth tokens also belong in Layer 3, never in a vault directory.
 
 ### Layer 3: ~/.maho/config.yaml (global, device-level)
 
@@ -142,15 +144,19 @@ vaults:
 
 CLI also maintains a local cache at `~/.maho/vaults-cache.yaml` for offline access.
 
+> **Note on `github` field format:** In `maho.yaml` (Layer 1), `github` is a nested object (`github: { repo: "owner/repo" }`) to allow future sub-fields (e.g., branch, auto-sync settings). In `vaults.yaml` (Layer 4), `github` is a flat string (`github: owner/repo`) since the registry only needs the repo identifier. The vault registry is the canonical source for which vaults exist; `maho.yaml` is the canonical source for vault-level config.
+
 ### Config Precedence
 
 When a setting exists at multiple layers, the most specific wins:
 
 ```
-Per-vault .maho/config.yaml  >  Global ~/.maho/config.yaml  >  Defaults
+maho.yaml (Layer 1)  >  Per-vault .maho/config.yaml (Layer 2)  >  Global ~/.maho/config.yaml (Layer 3)  >  Defaults
 ```
 
-Exception: `embed.model` is **global only** (Layer 3) — cross-vault search requires all vaults on the same device to share the same embedding model and vector dimensions.
+Exceptions:
+- `embed.model` is **global only** (Layer 3) — cross-vault search requires all vaults on the same device to share the same embedding model and vector dimensions
+- Auth tokens are **global only** (Layer 3) — never stored in vault directories (would leak to GitHub/iCloud)
 
 For CLI config commands, see [CLI Reference](cli.md#config--auth).
 
@@ -215,7 +221,7 @@ Each vault has the same internal structure, regardless of type (iCloud / GitHub 
 ├── _assets/                   # Shared images/attachments (referenced via relative paths)
 │   └── ...
 └── .maho/                     # Per-vault local metadata (gitignored, NOT synced)
-    ├── config.yaml            # Device-level config for this vault (embed model, etc.)
+    ├── config.yaml            # Device-level config for this vault (reserved for future use)
     ├── index.db               # SQLite: metadata + FTS5 + vector embeddings
     ├── publish-manifest.json  # Content hashes for incremental publishing
     └── cache/                 # Rendered HTML cache
