@@ -46,24 +46,20 @@
 - [x] Core logic extracted to `MahoNotesKit/VaultInit.swift` (testable)
 - [x] 10 new tests (94 total, all passing)
 
-### 0.3 — Tutorial as Separate Vault
-- [ ] Create `kuochuanpan/maho-getting-started` repo with tutorial notes (currently inline in InitCommand)
-- [ ] `mn init`: clone tutorial as read-only vault instead of creating files inline
-- [ ] Offline graceful: skip tutorial if no network, user can `mn vault add` later
-- [ ] Remove hardcoded tutorial notes from `InitCommand.swift`
+### 0.3 — Tutorial as Separate Vault ✅ (2026-03-05)
+- [x] Created `kuochuanpan/maho-getting-started` repo with 7 tutorial notes + maho.yaml
+- [x] `mn init`: clones tutorial via `git clone --depth 1` instead of inline
+- [x] Offline graceful: prints warning + continues if clone fails
+- [x] Removed ~130 lines of inline tutorial content from VaultInit.swift
+- [x] tutorialRepoURL parameter for testability
 
-### 0.4 — `--json` Output
-- [ ] Add `OutputOption` (already exists as file, wire it up) with `--json` flag
-- [ ] `mn list --json`: JSON array of notes
-- [ ] `mn show --json`: JSON object with frontmatter + body
-- [ ] `mn search --json`: JSON array of results with scores
-- [ ] `mn meta --json`: JSON frontmatter
-- [ ] `mn collections --json`, `mn stats --json`, `mn vault list --json`
-- [ ] All error output → JSON `{ "error": "..." }` when `--json` is active
+### 0.4 — `--json` Output ✅ (2026-03-05)
+- [x] Already wired: list, search, show, meta, new, collections, stats
+- [x] Added: config show --json, index --json, sync --json
+- [x] printJSONError helper for consistent error JSON
+- [x] 6 new JSON output tests (100 total, all passing)
 
-**Estimated effort:** 2–3 sessions  
-**Dependencies:** None  
-**Tests:** Update existing 84 + add migration test for collections.yaml → maho.yaml
+**Phase 0 complete! 🎉** 94 → 100 tests, 4 sub-phases done.
 
 ---
 
