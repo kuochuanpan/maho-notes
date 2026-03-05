@@ -95,7 +95,14 @@ struct VaultRailView: View {
                     .frame(width: 36, height: 36)
                     .background(color(for: entry.name), in: RoundedRectangle(cornerRadius: 8))
 
-                if entry.access == .readOnly {
+                if entry.type == .icloud {
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.white)
+                        .padding(2)
+                        .background(.black.opacity(0.5), in: Circle())
+                        .offset(x: 2, y: 2)
+                } else if entry.access == .readOnly {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 8))
                         .foregroundStyle(.white)

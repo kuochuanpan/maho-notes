@@ -18,6 +18,11 @@ struct NoteContentView: View {
 
     private func noteContent(_ note: Note) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Conflict banner
+            if let conflict = appState.conflict(for: note.relativePath) {
+                conflictBanner(conflict)
+            }
+
             // Breadcrumb header
             HStack(spacing: 4) {
                 Text(note.collection)
@@ -48,21 +53,78 @@ struct NoteContentView: View {
         }
     }
 
+    // MARK: - Conflict Banner
+
+    private func conflictBanner(_ conflict: iCloudSyncManager.ConflictInfo) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+            Text("This note has a conflict version")
+                .font(.subheadline)
+            Spacer()
+            Button("Keep Current") {
+                appState.iCloudManager.resolveConflict(conflict, keeping: .keepCurrent)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            if let otherVersion = conflict.versions.first {
+                Button("Keep Other Version") {
+                    appState.iCloudManager.resolveConflict(conflict, keeping: .keepOther(otherVersion))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.yellow.opacity(0.1))
+    }
+
     @ViewBuilder
     private func contentForMode(_ note: Note) -> some View {
-        switch appState.viewMode {
-        case .preview:
-            MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
-        case .editor:
-            editorView
-                .onAppear { appState.startEditing() }
-        case .split:
-            HStack(spacing: 0) {
+        if isCloudOnly(note) {
+            downloadingPlaceholder(note)
+        } else {
+            switch appState.viewMode {
+            case .preview:
+                MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
+            case .editor:
                 editorView
-                Divider()
-                MarkdownWebView(markdown: "# \(note.title)\n\n\(appState.editingBody)")
+                    .onAppear { appState.startEditing() }
+            case .split:
+                HStack(spacing: 0) {
+                    editorView
+                    Divider()
+                    MarkdownWebView(markdown: "# \(note.title)\n\n\(appState.editingBody)")
+                }
+                .onAppear { appState.startEditing() }
             }
-            .onAppear { appState.startEditing() }
+        }
+    }
+
+    /// Check if the note's file is a cloud-only placeholder (not downloaded yet).
+    private func isCloudOnly(_ note: Note) -> Bool {
+        guard let entry = appState.selectedVault, entry.type == .icloud else { return false }
+        let vaultPath = resolvedPath(for: entry)
+        let dir = URL(fileURLWithPath: vaultPath)
+            .appendingPathComponent((note.relativePath as NSString).deletingLastPathComponent)
+        let placeholder = dir.appendingPathComponent(".\(note.relativePath.components(separatedBy: "/").last ?? "").icloud")
+        return FileManager.default.fileExists(atPath: placeholder.path)
+    }
+
+    private func downloadingPlaceholder(_ note: Note) -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Downloading from iCloud...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            guard let entry = appState.selectedVault else { return }
+            let vaultPath = resolvedPath(for: entry)
+            let fileURL = URL(fileURLWithPath: vaultPath).appendingPathComponent(note.relativePath)
+            appState.iCloudManager.downloadFileIfNeeded(at: fileURL)
         }
     }
 

@@ -97,8 +97,15 @@ struct NavigatorView: View {
 
     private func noteRow(_ note: Note) -> some View {
         Label {
-            Text(note.title)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(note.title)
+                    .lineLimit(1)
+                if appState.conflict(for: note.relativePath) != nil {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                }
+            }
         } icon: {
             Image(systemName: "doc.text")
                 .foregroundStyle(.secondary)

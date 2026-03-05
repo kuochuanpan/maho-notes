@@ -286,6 +286,72 @@ final class AppState {
     var githubVaults: [VaultEntry] { vaults.filter { $0.type == .github } }
     var localVaults: [VaultEntry] { vaults.filter { $0.type == .local } }
 
+    // MARK: - iCloud Sync
+
+    var iCloudManager = iCloudSyncManager()
+
+    /// Whether the currently selected vault has any conflicts.
+    var hasConflicts: Bool { !iCloudManager.conflicts.isEmpty }
+
+    /// Find conflict info for a specific note path.
+    func conflict(for notePath: String) -> iCloudSyncManager.ConflictInfo? {
+        iCloudManager.conflicts.first { $0.notePath == notePath }
+    }
+
+    /// Start iCloud monitoring for the given vault entry if it's an iCloud vault.
+    @MainActor
+    private func startICloudMonitoringIfNeeded(for entry: VaultEntry) {
+        iCloudManager.stopMonitoring()
+
+        guard entry.type == .icloud else { return }
+
+        let vaultPath = resolvedPath(for: entry)
+        let vaultURL = URL(fileURLWithPath: vaultPath)
+
+        iCloudManager.startMonitoring(containerURL: vaultURL) { [weak self] in
+            self?.reloadCurrentVault()
+        }
+
+        iCloudManager.checkForConflicts(in: vaultURL)
+    }
+
+    /// Reload the current vault's notes without changing selection.
+    @MainActor
+    func reloadCurrentVault() {
+        guard let entry = selectedVault else { return }
+
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let previousSelection = selectedNotePath
+
+        do {
+            self.collections = try vault.collections()
+            self.allNotes = try vault.allNotes()
+
+            var grouped: [String: [Note]] = [:]
+            for note in allNotes {
+                grouped[note.collection, default: []].append(note)
+            }
+            for key in grouped.keys {
+                grouped[key]?.sort { $0.title < $1.title }
+            }
+            self.notesByCollection = grouped
+        } catch {
+            // Keep existing state on error
+        }
+
+        // Restore selection if the note still exists
+        if let prev = previousSelection, allNotes.contains(where: { $0.relativePath == prev }) {
+            selectedNotePath = prev
+        }
+
+        // Refresh conflict list for iCloud vaults
+        if entry.type == .icloud {
+            let vaultURL = URL(fileURLWithPath: vaultPath)
+            iCloudManager.checkForConflicts(in: vaultURL)
+        }
+    }
+
     // MARK: - Init
 
     init() {}
@@ -361,6 +427,9 @@ final class AppState {
         }
 
         selectedNotePath = nil
+
+        // Start iCloud monitoring if this is an iCloud vault
+        startICloudMonitoringIfNeeded(for: entry)
     }
 
     /// Notes for a given collection id.
