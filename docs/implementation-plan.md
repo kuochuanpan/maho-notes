@@ -30,12 +30,12 @@
 
 > Fix drift between current code and design docs. No new features — just bring code in line with what docs say.
 
-### 0.1 — Merge `collections.yaml` into `maho.yaml`
-- [ ] Update `Config.swift` / `Collection.swift`: read collections from `maho.yaml` instead of separate file
-- [ ] Update `mn init`: write collections into `maho.yaml`, stop creating `collections.yaml`
-- [ ] Migration: if `collections.yaml` exists on load, merge into `maho.yaml` + delete old file + print notice
-- [ ] Update `mn new`: collection validation reads from `maho.yaml`
-- [ ] Update tests
+### 0.1 — Merge `collections.yaml` into `maho.yaml` ✅ (2026-03-04)
+- [x] Update `Collection.swift`: read collections from `maho.yaml` instead of separate file
+- [x] Update `mn init`: write collections into `maho.yaml`, stop creating `collections.yaml`
+- [x] Migration: if `collections.yaml` exists on load, merge into `maho.yaml` + delete old file + print notice
+- [x] Update all tests (4 files + 1 migration test added)
+- [x] 85 tests passing
 
 ### 0.2 — `mn init` Wizard
 - [ ] Interactive mode (default): prompt for vault type (iCloud / Local / GitHub), author name, optional GitHub repo
