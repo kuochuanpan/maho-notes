@@ -11,7 +11,7 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
 - **Content**: Full Unicode support, mixed-language notes
 - **Search**: FTS5 + vector search work across all four languages (powered by [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite))
 - **Ruby annotation**: `{base|annotation}` syntax — works for Japanese furigana (`{漢字|かんじ}`), Taiwanese Tâi-lô (`{台灣|Tâi-oân}`), Chinese Zhuyin/Pinyin (`{漢字|ㄏㄢˋ ㄗˋ}`), Korean Hanja (`{韓國|한국}`), etc.
-- **Embedding models**: Multilingual semantic search across 中英日韓 (built-in tier has limited CJK quality; Light tier and above recommended)
+- **Embedding models**: Multilingual semantic search across 中英日韓 via `swift-embeddings` (MLTensor). Three tiers: MiniLM (80MB, default), E5-Small (120MB), E5-Large (2.2GB, best quality)
 
 ## Architecture
 
@@ -27,14 +27,14 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
      └──┬────────┬──────────┬──────┬───────┘
         │        │          │      │
         │   ┌────▼────────┐ │  ┌───▼──────┐
-        │   │swift-cjk-   │ │  │Embeddings│
-        │   │sqlite       │ │  │(on-device)│
-        │   │FTS5 + CJK   │ │  │CoreML/NL │
-        │   │tokenizer    │ │  └──────────┘
+        │   │swift-cjk-   │ │  │swift-    │
+        │   │sqlite       │ │  │embeddings│
+        │   │FTS5 + CJK + │ │  │(MLTensor)│
+        │   │sqlite-vec   │ │  └──────────┘
         │   └──┬──────────┘ │
         │  ┌───▼─────┐  ┌──▼──────┐
-        │  │Per-vault │  │sqlite-  │
-        │  │FTS index │  │vec      │
+        │  │Per-vault │  │Per-vault│
+        │  │FTS index │  │vec index│
         │  └─────────┘  └─────────┘
         │
   ┌─────▼──────────────────────────────────────────────┐
@@ -104,9 +104,9 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | Syntax Highlighting | TreeSitter (native app, code block highlighting), Splash (Swift-native, static site fallback), highlight.js (static site) |
 | Math | WKWebView + KaTeX (native), KaTeX (static site) |
 | Ruby Annotation | `{base|annotation}` → `<ruby>` (web) / AttributedString (native) — furigana, Tâi-lô, Zhuyin, Pinyin, etc. |
-| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) (SQLite 3.48 + FTS5 + CJK tokenizer) + sqlite-vec (future, for vector search) |
-| Embeddings | Tiered: Apple NLEmbedding (built-in) / all-MiniLM-L6-v2 multilingual (90MB) / multilingual-e5-small (470MB) / BGE-M3 (2.2GB) |
-| Embedding Runtime | CoreML (default), MLX (optional, faster on Apple Silicon for large models like BGE-M3) |
+| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) v0.2.0 (SQLite 3.48 + FTS5 + CJK tokenizer + vendored sqlite-vec v0.1.6) |
+| Embeddings | Tiered: all-MiniLM-L6-v2 (80MB, 384d, default) / multilingual-e5-small (120MB, 384d) / multilingual-e5-large (2.2GB, 1024d) |
+| Embedding Runtime | [`swift-embeddings`](https://github.com/jkrukowski/swift-embeddings) v0.0.26 (MLTensor, macOS 15+ / iOS 18+). Supports Bert + XLMRoberta model families. |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
 | Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
 | Auth | GitHub OAuth via `ASWebAuthenticationSession` (iOS/macOS) / `gh auth` (CLI) |
@@ -123,7 +123,7 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | [Search](search.md) | FTS5, vector search, embedding models, search modes |
 | [Native App](app.md) | SwiftUI universal app, markdown rendering, editor, platform adaptation |
 | [Publishing](publishing.md) | Static site generation, GitHub Pages, incremental publishing |
-| [Design Decisions](decisions.md) | Decision log (#1–#20) |
+| [Design Decisions](decisions.md) | Decision log (#1–#24) |
 
 ## Implementation
 
@@ -131,4 +131,4 @@ These docs describe the **target state** — what Maho Notes will look like when
 
 ---
 
-*Design by 真帆 🔭 — 2026-03-04*
+*Design by 真帆 🔭 — 2026-03-04, updated 2026-03-05*
