@@ -87,7 +87,7 @@ mn sync --reindex                     # sync + rebuild index
 # Read-only vaults: pull only, never push
 mn index                              # incremental rebuild (mtime-based diff)
 mn index --full                       # drop and rebuild from scratch
-mn index --model bge-m3               # specify embedding model for vector index
+mn index --model e5-large             # specify embedding model for vector index
 mn index --vault <name>               # index specific vault
 mn index --all                        # index all vaults
 
@@ -97,9 +97,14 @@ mn config set <key> <value>           # set vault-level config (maho.yaml)
 mn config set author.name "Name"      # vault-level: default author for new notes
 mn config set site.domain "notes.example.com"  # vault-level: published site domain
 mn config set --device <key> <value>             # per-vault device config (.maho/config.yaml)
-mn config set --global embed.model bge-m3        # global: embedding model (applies to ALL vaults on this device)
+mn config set --global embed.model e5-large       # global: embedding model (applies to ALL vaults on this device)
 mn config auth                        # GitHub auth (stored in ~/.maho/config.yaml — global, not per-vault)
 mn config auth --status               # check auth status (token source, validity)
+
+# ── Model Management ───────────────────────────────
+mn model list                         # show all embedding models (name, dimensions, size, downloaded status)
+mn model download <name>              # pre-download model (e.g., minilm, e5-small, e5-large)
+mn model remove <name>                # delete cached model files
 
 # ── Info ──────────────────────────────────────────
 mn collections                        # list collections + series within each

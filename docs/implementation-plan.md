@@ -243,6 +243,7 @@
 
 > One Xcode project, one SwiftUI codebase, three platforms. Share MahoNotesKit with CLI.
 > iCloud is infrastructure (not an add-on) — the app needs it from day one for vault registry.
+> UI design: **A (vault rail) + B (tree navigator) + C (content)** — see [app.md](app.md) for full spec.
 
 ### 4a — Xcode Project + iCloud Container + Vault Registry Sync
 
@@ -252,119 +253,199 @@
 - [ ] Add MahoNotesKit as local SPM dependency
 - [ ] App target: `Maho Notes.app`
 - [ ] Bundle identifier: `com.pcca.mahonotes`
-- [ ] Entitlements: iCloud (CloudKit / iCloud Documents), App Sandbox
+- [ ] Entitlements: iCloud Documents (`iCloud~com.pcca.mahonotes`), App Sandbox
 - [ ] iCloud container: `iCloud~com.pcca.mahonotes`
   - Vault registry in container: `config/vaults.yaml`
   - iCloud vaults stored in container: `vaults/<name>/`
-- [ ] `NSFileCoordinator` for safe reads/writes of vault registry
-- [ ] App reads vault registry on launch → resolves vault paths (iCloud / local / GitHub)
-- [ ] Basic `@main` App struct with empty NavigationSplitView shell
+- [ ] `NSFileCoordinator` for safe reads/writes of vault registry + vault files
+- [ ] `AppState` (`@Observable`): loads vault registry on launch, resolves vault paths per-platform
+- [ ] Basic `@main` App struct with `WindowGroup` + empty `NavigationSplitView` shell
+- [ ] Error state: if iCloud unavailable, show setup guidance (local-only mode works)
+- [ ] CLI compatibility: macOS CLI reads the same iCloud container path
 - [ ] Tests: vault registry load/save via iCloud container mock
 
-### 4b — Core UI: Sidebar, Navigation, Note List
+### 4b — Core UI: Layout, Navigation, Tree Explorer
 
-> The app can browse vaults, collections, and notes. Adaptive layout across platforms.
+> The app can browse vaults, collections, and notes. Adaptive layout across all three platforms.
+> Three-zone layout: **A (vault rail) + B (tree navigator) + C (content)** — no separate note list column.
 
-- [ ] Three-column `NavigationSplitView` (adaptive: 3-col macOS/iPad landscape, 2-col iPad portrait, push iPhone)
-  - Column 1: Vault picker + collection tree
-  - Column 2: Note list (filtered by collection)
-  - Column 3: Note content (preview placeholder initially)
-- [ ] Vault picker: list all vaults from registry, "All Vaults" option
-- [ ] Collection tree: nested directories as expandable `DisclosureGroup`
-- [ ] Read-only badge (🔒) on read-only vaults
-- [ ] Note list: sort by updated / title / custom order
-- [ ] iPhone: single-column push navigation, vault picker as section headers
-- [ ] iPad: two/three-column split view, Stage Manager multi-window support
-- [ ] Tests: navigation state, vault/collection filtering
+#### A — Vault Rail (~48pt wide, Slack-inspired)
+- [ ] Narrow vertical strip with rounded-square vault icons (first char + color background)
+- [ ] `＋` button (top): opens "Add Vault" flow (iCloud / GitHub / Local)
+- [ ] Vault grouping: iCloud → GitHub (owned) → Read-only, separated by subtle dividers
+- [ ] Active vault: highlighted with left accent bar
+- [ ] Read-only vaults: small 🔒 badge overlay on icon corner
+- [ ] Scrollable when many vaults; author stays pinned at bottom
+- [ ] Author + Settings (bottom, pinned): current vault's author initials + color; click → popover menu (Vault Settings, Search Settings, Appearance, About)
+- [ ] Author icon changes when switching vaults (each vault has its own author from `maho.yaml`)
+
+#### B — Tree Navigator (~240pt, resizable, collapsible)
+- [ ] B header: current vault icon + name (changes on vault switch); read-only vaults show 🔒
+- [ ] Width: default ~240pt, user-draggable (min 180pt, max 400pt), persisted per-window
+- [ ] **Starred collections** section: user manually stars collections for quick access at top
+- [ ] **Collections tree**: `DisclosureGroup` with unlimited nesting — collections expand in-place to show sub-collections and **notes as tree leaves** (no separate note list column)
+- [ ] **Pinned notes** section: user-pinned notes (cross-collection quick access)
+- [ ] **Recent** section: automatically populated, 5–10 most recently edited notes
+- [ ] Sections separated by subtle dividers with small uppercase labels
+- [ ] SF Symbol icons for collections (from `maho.yaml`)
+- [ ] Entire B column scrolls freely
+
+#### C — Content (remaining space)
+- [ ] C header: `◀ ▶` note history navigation + breadcrumb (clickable path segments) + `＋` new note button (⌘N)
+- [ ] **Smart tab bar**: hidden by default (clean); appears only when editing note A and opening another note B (preserves unsaved state); tab indicators: ✏️ editing, ● unsaved; closes when ≤ 1 tab; no hard limit
+- [ ] **Floating toolbar** (bottom-right):
+  - View mode: single icon cycles 👁 Preview → ✏️ Editor → ⊞ Split
+  - Edit mode: expanded formatting tools (B, I, H, 🔗, 🖼, ```, 📊, {|}, mode toggle)
+  - Read-only vault: 👁 dimmed/disabled, formatting toolbar never appears
+
+#### Collapsible Panels
+- [ ] ⌘⇧B: toggle B (navigator)
+- [ ] ⌘⇧A: toggle A (vault rail) — also collapses B
+- [ ] ⌘\\: toggle focus mode (collapse A+B together)
+- [ ] Sidebar toggle button in B header (click: toggle B / long-press: toggle A+B)
+- [ ] Thin edge handle (~4pt) when collapsed: click/tap to restore
+- [ ] Auto-collapse: window width < 900pt → B collapses; < 600pt → A+B collapse
+- [ ] Collapse state persisted per-window across app restarts
+
+#### Title Bar — Search
+- [ ] Search bar embedded in macOS title bar (like Slack)
+- [ ] ⌘K opens search panel (primary trigger); ⌘⇧F as alias from editor context
+- [ ] Search panel: scope picker (All Vaults / This Vault), mode picker (Text / Semantic / Hybrid)
+- [ ] Type-as-you-search (debounced), results appear instantly
+- [ ] Empty state: recent searches + quick access (recently opened notes)
+
+#### Platform Adaptation
+- [ ] macOS: A+B+C all visible (collapsible)
+- [ ] iPad landscape: same as macOS (A+B+C)
+- [ ] iPad portrait: A hidden (vault dropdown in B header), B as overlay sidebar (swipe from left), C full width
+- [ ] iPhone: A hidden (vault dropdown in B header), B full-screen push, C full-screen push; no split view
+- [ ] iPad: Stage Manager multi-window support
+
+- [ ] Tests: navigation state, vault/collection filtering, collapse state persistence, platform adaptation
 
 ### 4c — Markdown Rendering + Editor
 
-> The heaviest sub-phase. The app can display and edit notes with full markdown support.
+> The heaviest sub-phase. The app can display beautifully rendered markdown and edit notes.
 
-#### Rendering
-- [ ] `swift-markdown` parser → custom `AttributedString` renderer
-- [ ] Heading styles, bold, italic, code, links, blockquotes
-- [ ] Code blocks with TreeSitter syntax highlighting
-- [ ] Ruby annotation: `{base|annotation}` → custom AttributedString attribute → custom SwiftUI view
-- [ ] Images: load from relative path (`_assets/`) or remote URL
-- [ ] Math: `WKWebView` + KaTeX (inline `$...$` and block `$$...$$`)
-- [ ] Mermaid diagrams: `WKWebView`
-- [ ] Admonitions / callouts: styled blocks (tip, warning, note, info)
-- [ ] Table of contents: auto-generated from headings
-- [ ] Footnotes, GFM tables, task lists, strikethrough
+#### Rendering (swift-markdown → AttributedString)
+- [ ] CommonMark + GFM: headings, bold, italic, code, links, blockquotes, tables, task lists, strikethrough
+- [ ] Code blocks with TreeSitter syntax highlighting → colored `AttributedString`
+- [ ] Ruby annotation: `{base|annotation}` → custom `AttributedString` attribute → SwiftUI `rubyAnnotation` view
+- [ ] Images: local (`_assets/` relative path) or remote URL → `AsyncImage`
+- [ ] Math (KaTeX): `WKWebView` inline (inline `$...$` and block `$$...$$`)
+- [ ] Mermaid diagrams: `WKWebView` inline
+- [ ] Admonitions / callouts: styled blocks (colored border + icon: tip 💡, warning ⚠️, note 📝, info ℹ️)
+- [ ] Table of contents: auto-generated from headings, shown in sidebar or note header
+- [ ] Footnotes: superscript link → footnote section at bottom
 
 #### Editor
-- [ ] Raw markdown text editor with syntax highlighting
-- [ ] Three view modes (toolbar toggle + keyboard shortcut):
-  - Preview only (default) — rendered view
-  - Editor only — raw markdown
-  - Split view — editor left, preview right (macOS/iPad); toggle on iPhone
-- [ ] Toolbar shortcuts: bold, italic, heading, link, image, code block, table, ruby annotation
-- [ ] Auto-save on pause (debounced)
-- [ ] Keyboard shortcuts: ⌘N (new), ⌘S (save), ⌘F (search), ⌘⇧F (global search), ⌘E (toggle edit mode)
-- [ ] Tests: markdown rendering correctness, view mode switching
+- [ ] `TextEditor` with monospace font and markdown syntax highlighting
+- [ ] Three view modes (floating toolbar toggle + ⌘E):
+  - Preview (default) — rendered view, read-only
+  - Editor — raw markdown with syntax highlighting
+  - Split — editor left, live preview right (macOS/iPad landscape); toggle on iPhone
+- [ ] Formatting toolbar: bold (**B**), italic (*I*), heading (H), link (🔗), image (🖼), code (```), table (📊), ruby `{|}`
+- [ ] Auto-save: debounced (2s after last keystroke), writes via MahoNotesKit
+- [ ] Frontmatter: shown as collapsible header (not raw YAML by default)
+- [ ] Keyboard shortcuts: ⌘B bold, ⌘I italic, ⌘K link, ⌘N new note, ⌘S force save, ⌘E toggle edit mode, ⌘F in-note search
+
+- [ ] Tests: markdown rendering correctness (each feature), view mode switching, auto-save
 
 ### 4d — Search UI + Settings
 
-> In-app search (FTS5 + semantic) and app configuration.
+> In-app search (FTS5 + semantic + hybrid) and app configuration screens.
 
-#### Search
-- [ ] Global search bar (⌘⇧F): FTS5 search across all vaults
-- [ ] In-note search (⌘F)
-- [ ] Semantic / hybrid search toggle (when vector index available)
-- [ ] Search results: vault name + collection + title + snippet
-- [ ] Cross-vault search by default
+#### Search Results
+- [ ] Results appear in ⌘K dropdown panel as you type
+- [ ] Each result: vault badge + collection path + title + snippet (best-matching chunk for semantic)
+- [ ] Source indicators for hybrid: `[text]`, `[semantic]`, `[text+semantic]`
+- [ ] Click result → navigate to note with search term highlighted in C panel
+- [ ] Results grouped by vault when in "All Vaults" scope
 
-#### Settings
-- [ ] Vault management: add / remove / reorder vaults, set primary
-- [ ] GitHub auth: `ASWebAuthenticationSession`
-- [ ] Embedding model: picker with download status + progress (`ProgressView`)
-- [ ] Publishing configuration
-- [ ] Appearance: theme, font size
-- [ ] Tests: search result display, settings persistence
+#### In-Note Search (⌘F)
+- [ ] Find bar at top of note content (Preview or Editor mode)
+- [ ] Highlight matches, prev/next navigation
+- [ ] Replace (Editor mode only)
+
+#### Semantic Search Requirements
+- [ ] Semantic / Hybrid modes only enabled when vector index exists
+- [ ] If no index: show "Build search index" button → runs `VectorIndex.buildIndex()` in background
+- [ ] Model download prompt if no embedding model cached
+
+#### Settings (standard Settings view)
+- [ ] **Vaults**: list of registered vaults, add (iCloud/GitHub/Local), remove (with confirmation + `--delete` option), set primary, per-vault info (type, access, repo, last sync, note count)
+- [ ] **Sync**: GitHub auth status, sign in via `ASWebAuthenticationSession` → OAuth → Keychain, auto-sync toggle, manual "Sync Now" button, sync log / last sync per vault
+- [ ] **Search & Embedding**: current model info (name, size, dim, downloaded), model picker (MiniLM/E5-Small/E5-Large), download button with `ProgressView`, "Rebuild Index" button, index status
+- [ ] **Appearance**: theme (System/Light/Dark), font size (slider or presets), editor font
+- [ ] **About**: version, build, links (GitHub repo, docs, feedback)
+
+- [ ] Tests: search result display, settings persistence, model download flow
 
 ### 4e — iCloud Sync: File Coordination + Conflict Resolution
 
-> Full iCloud Documents sync for vault content (not just registry). Cross-device real-time sync.
+> Full iCloud Documents sync for vault content. Real-time cross-device sync with conflict handling.
 
-- [ ] `NSMetadataQuery` to monitor iCloud changes (new / modified / deleted files)
-- [ ] Detect download status → trigger on-demand download for lazy iCloud files
-- [ ] UI updates on file change detection (reactive via Combine / `@Observable`)
-- [ ] Conflict detection via `NSFileVersion`
-- [ ] Conflict handling:
-  - Keep remote version as `note.md`, save local as `note.conflict-{timestamp}-local.md`
-  - ⚠️ badge on conflicted notes in sidebar
-  - Conflict resolution UI: side-by-side compare, keep one, manual merge
-  - Resolving deletes the `.conflict-*` file
-- [ ] GitHub sync from app (no git CLI on iOS):
-  - GitHub REST API integration
-  - Auto push: debounced (30s after last edit)
-  - Auto pull: on app launch + periodic (5 min) + pull-to-refresh
-  - iCloud settles first → then GitHub sync
-- [ ] Tests: conflict detection, resolution flow, sync ordering
+#### iCloud File Monitoring
+- [ ] `NSMetadataQuery` with `NSMetadataQueryUbiquitousDocumentsScope` monitoring all vault dirs
+- [ ] File change handling: new note → add to list + queue FTS indexing; modified → reload + update FTS + mark for re-embedding; deleted → remove from list + indexes; conflict → create .conflict file + show ⚠️ badge
+- [ ] Download-on-demand: lazy files show placeholder → download triggered on access
+- [ ] Download progress shown for large files (e.g., `_assets/`)
+- [ ] UI updates reactive via `@Observable`
+
+#### Conflict Resolution UI
+- [ ] ⚠️ badge on conflicted notes in B panel tree + note content
+- [ ] Banner: "This note has a conflict" at top of note content
+- [ ] Resolve view: side-by-side diff (remote left, local right)
+- [ ] Actions: "Keep Remote", "Keep Local", "Keep Both" (rename local)
+- [ ] Resolution deletes the `.conflict-*` file
+
+#### GitHub Sync from App (REST API, no git CLI)
+- [ ] Clone: GitHub API get tree → download files
+- [ ] Pull: compare HEAD → download changed files
+- [ ] Push: create blobs → create tree → create commit → update ref
+- [ ] Auth: `ASWebAuthenticationSession` → OAuth token → Keychain
+- [ ] Sync ordering: iCloud settles first → GitHub sync against settled state (debounced 30s)
+- [ ] Auto-sync: push on note save (debounced 30s), pull on launch + every 5 min + pull-to-refresh
+- [ ] Conflict on pull: same resolution as iCloud (split into two versions)
+
+- [ ] Tests: conflict detection, resolution flow, sync ordering, GitHub REST API mocks
 
 ### 4f — Platform Polish + iOS Extras
 
 > From "it works" to "it's good." Platform-specific features and final polish.
 
-#### iOS / iPadOS
-- [ ] Share Extension: create new note from other apps (Safari, PDF reader, etc.)
-- [ ] Pull-to-refresh: trigger sync gesture
-- [ ] Keychain: auth token storage (iOS has no `~/.maho/config.yaml`)
-- [ ] `UserDefaults` for preferences (instead of file-based config on iOS)
-- [ ] On-Demand Resources (ODR): embedding models via Apple CDN (App Store binary size limits)
+#### Share Extension (iOS / iPadOS)
+- [ ] Separate target: `Maho Notes Share Extension`
+- [ ] Accepts: text, URLs, images, PDFs
+- [ ] UI: vault picker + collection picker + title field + preview
+- [ ] Creates new note via MahoNotesKit (shared App Group container)
+- [ ] Text → markdown body; URL → link with title; Image → saved to `_assets/`
 
-#### macOS
-- [ ] Menu bar integration (if needed)
-- [ ] Drag & drop refinements (macOS vs iPadOS behavior differences)
+#### On-Demand Resources (ODR) — Embedding Models
+- [ ] App Store binary ships with NO embedding models (keep under 200MB)
+- [ ] Models tagged as ODR: `model-minilm` (~90MB), `model-e5small` (~470MB), `model-e5large` (~2.2GB)
+- [ ] Download triggered from Settings → Search → Embedding Model
+- [ ] `ProgressView` shows download progress
+- [ ] Fallback: if ODR unavailable (TestFlight, sideloaded), download from HuggingFace Hub directly
 
-#### Universal
-- [ ] Accessibility: VoiceOver, Dynamic Type
-- [ ] App icon + launch screen
-- [ ] First launch onboarding
-- [ ] Offline mode: graceful fallback when iCloud / GitHub unavailable
+#### Keychain (iOS / iPadOS / macOS)
+- [ ] GitHub OAuth token in Keychain (not UserDefaults)
+- [ ] Shared Keychain access group for Share Extension
+- [ ] macOS app also uses Keychain (consistent; CLI uses `~/.maho/config.yaml`)
+
+#### Platform-Specific Polish
+- [ ] iOS: pull-to-refresh triggers GitHub sync
 - [ ] iPad: keyboard shortcuts (same as macOS with external keyboard)
-- [ ] iPad: drag & drop support
+- [ ] iPad: Stage Manager multi-window support
+- [ ] macOS + iPad: drag & drop (notes between collections; drop files to attach)
+- [ ] macOS: menu bar quick note creation (optional)
+
+#### Universal Polish
+- [ ] Accessibility: VoiceOver labels, Dynamic Type, reduce motion
+- [ ] App icon + launch screen (SF Symbol placeholder during dev)
+- [ ] First-launch onboarding: sign in to iCloud, create/import vault, optional GitHub auth
+- [ ] Offline mode: graceful degradation — hide sync UI, show "offline" indicator, all local ops work
+- [ ] Error handling: user-friendly messages (not raw Swift errors), retry buttons for network failures
 
 **Estimated effort:** 15–20 sessions total  
 **Dependencies:** Phase 0, Phase 1 (multi-vault), Phase 2 (vector search for semantic toggle)  
@@ -374,7 +455,7 @@
 | Sub-phase | Effort | Notes |
 |-----------|--------|-------|
 | 4a | 1–2 sessions | Xcode setup + iCloud container |
-| 4b | 2–3 sessions | Core navigation, adaptive layout |
+| 4b | 2–3 sessions | Vault rail, tree navigator, collapsible panels, platform adaptation |
 | 4c | 4–6 sessions | Largest: rendering + editor |
 | 4d | 2–3 sessions | Search UI + settings |
 | 4e | 3–4 sessions | iCloud sync + conflict resolution |

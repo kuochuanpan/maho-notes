@@ -117,7 +117,7 @@ Shared across all vaults on this device. Not synced anywhere.
 auth:
   github_token: ghp_xxx   # GitHub auth (from $GITHUB_TOKEN or gh auth)
 embed:
-  model: bge-m3            # embedding model for this device (applies to ALL vaults)
+  model: e5-large          # embedding model for this device (applies to ALL vaults)
 ```
 
 - Auth tokens live here, **never** in a vault (would leak to GitHub/iCloud)

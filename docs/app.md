@@ -424,7 +424,7 @@ Native SwiftUI rendering via `swift-markdown` parser → custom `AttributedStrin
 - Keyboard shortcuts:
   - ⌘B bold, ⌘I italic, ⌘K link
   - ⌘N new note, ⌘S force save, ⌘E toggle edit mode
-  - ⌘F in-note search, ⌘⇧F global search
+  - ⌘F in-note search, ⌘K global search (opens title bar search panel), ⌘⇧F alias for ⌘K
 
 ---
 

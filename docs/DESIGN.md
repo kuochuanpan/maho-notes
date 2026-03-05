@@ -105,7 +105,7 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | Math | WKWebView + KaTeX (native), KaTeX (static site) |
 | Ruby Annotation | `{base|annotation}` → `<ruby>` (web) / AttributedString (native) — furigana, Tâi-lô, Zhuyin, Pinyin, etc. |
 | Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) v0.2.0 (SQLite 3.48 + FTS5 + CJK tokenizer + vendored sqlite-vec v0.1.6) |
-| Embeddings | Tiered: all-MiniLM-L6-v2 (80MB, 384d, default) / multilingual-e5-small (120MB, 384d) / multilingual-e5-large (2.2GB, 1024d) |
+| Embeddings | Tiered: all-MiniLM-L6-v2 (~90MB, 384d, default) / multilingual-e5-small (~470MB, 384d) / multilingual-e5-large (~2.2GB, 1024d) |
 | Embedding Runtime | [`swift-embeddings`](https://github.com/jkrukowski/swift-embeddings) v0.0.26 (MLTensor, macOS 15+ / iOS 18+). Supports Bert + XLMRoberta model families. |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
 | Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
