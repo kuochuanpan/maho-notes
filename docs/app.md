@@ -83,60 +83,259 @@
 
 ---
 
-## Phase 4b — Core UI: Sidebar, Navigation, Note List
+## Phase 4b — Core UI: Layout, Navigation, Tree Explorer
 
 > The app can browse vaults, collections, and notes. Adaptive layout across all three platforms.
+> Design goal: **cleaner and more intuitive than Obsidian** — less chrome, more content, Slack-inspired vault switching.
 
-### Navigation Structure
+### Layout Overview (macOS)
 
 ```
-┌──────────────┬──────────────┬──────────────────────────┐
-│   Sidebar    │  Note List   │     Note Content         │
-│              │              │                          │
-│ ▼ All Vaults │ ★ Star      │  # 訓讀 vs 音讀          │
-│              │   2026-03-03 │                          │
-│ ▼ personal   │ Universe     │  Content here...         │
-│   日本語 📚  │   2026-03-02 │                          │
-│     grammar  │              │                          │
-│     vocab    │              │                          │
-│   天文 ✨    │              │                          │
-│              │              │                          │
-│ ▼ work       │              │                          │
-│   meetings   │              │                          │
-│              │              │                          │
-│ 🔒 cheatsheets│             │                          │
-│   git        │              │                          │
-└──────────────┴──────────────┴──────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ (🔴🟡🟢)        [ 🔍 Search Maho Notes              ]       │  ← Title Bar
+├──┬───────────────┬───────────────────────────────────────────┤
+│＋│ 📓 Personal   │ ◀ ▶  ◀ japanese / grammar            ＋ │  ← B header / C header
+│──│───────────────│──────────────────────────────────────────│
+│  │ ★ STARRED     │                                          │
+│📓│   📚 日本語   │ # 訓讀 vs 音讀                           │
+│  │   ✨ 天文     │                                          │
+│📔│───────────────│ 訓讀（くんよみ）是用日語固有の発音...     │
+│  │ COLLECTIONS   │                                          │
+│📕│ ▾ 📚 日本語   │ ## 音讀                                  │
+│  │   ▾ grammar   │                                          │
+│🔒│     001-訓讀  │ 音讀（おんよみ）是模仿漢字原來的         │
+│  │     002-長音  │ 中文發音...                               │
+│  │     003-小假名│                                          │
+│  │   ▸ vocab     │                                          │
+│  │ ▸ ✨ 天文     │                                          │
+│  │───────────────│                                          │
+│  │ ★ PINNED      │                                          │
+│  │   Star ⭐     │                                     ✏️👁⊞│
+│🧑│───────────────│                                          │
+│KC│ RECENT        │                                          │
+└──┴───────────────┴──────────────────────────────────────────┘
+ A         B                          C
 ```
+
+The layout has **three visual layers**:
+
+| Layer | Content | Function |
+|-------|---------|----------|
+| **Title Bar** | Search bar (centered) | Global search (⌘K) |
+| **Second Row** | B header (vault name) / C header (breadcrumb + nav) | Context awareness |
+| **Content** | A (vault rail) + B (tree explorer) + C (note content) | Main workspace |
+
+### A — Vault Rail (~48pt wide)
+
+A narrow vertical strip inspired by Slack's workspace switcher.
+
+```
+┌──┐
+│＋│  ← Add Vault button (top)
+│──│  ← separator
+│📓│  ← iCloud vaults
+│📔│
+│──│  ← subtle separator (1px line or spacing)
+│📕│  ← GitHub vaults (owned, read-write)
+│──│
+│🔒│  ← Read-only vaults (GitHub public repos)
+│  │
+│  │  ← flexible spacer (pushes author to bottom)
+│  │
+│🧑│  ← Author + Settings (pinned to bottom)
+│KC│
+└──┘
+```
+
+- **＋ button** (top): opens "Add Vault" flow — iCloud (new) / GitHub (repo URL) / Local (macOS only)
+- **Vault icons**: rounded square with first character of vault name + color background (like Slack)
+  - Active vault: highlighted with left accent bar
+  - Read-only: small 🔒 badge overlay on icon corner
+- **Vault grouping**: iCloud → GitHub (owned) → Read-only, separated by subtle dividers (no labels)
+- **Scrollable**: if too many vaults, the rail scrolls (author stays pinned at bottom)
+- **Author + Settings** (bottom, pinned):
+  - Shows current vault's author initials + color background (e.g., `KC` blue)
+  - Changes when switching vaults (each vault has its own author from `maho.yaml`)
+  - Click → popover menu:
+    ```
+    ┌─────────────────────┐
+    │ 🧑 Kuo-Chuan Pan    │  ← current vault author
+    │ ── personal vault ──│
+    │                     │
+    │ ⚙️ Vault Settings    │  ← current vault config
+    │ 🔍 Search Settings   │
+    │ 🎨 Appearance        │
+    │ ───────────────────  │
+    │ ℹ️ About Maho Notes  │
+    └─────────────────────┘
+    ```
+  - If vault has no author set → show `?` or default icon
+
+### B — Navigator (~240pt, collapsible)
+
+A **pure tree explorer** — collections expand in-place to show sub-collections and notes. No mode switching, no "back" button. Like Xcode's project navigator or Finder's sidebar.
+
+**B Header**: shows current vault icon + name (from `maho.yaml` `title` field). Changes when switching vault in A rail. Read-only vaults show `🔒 Cheatsheets`.
+
+**Tree Structure**:
+```
+┌───────────────┐
+│ 📓 Personal   │  ← B header (vault name)
+│───────────────│
+│ ★ STARRED     │  ← user-starred collections (quick access, like Slack starred channels)
+│   📚 日本語   │
+│   ✨ 天文     │
+│───────────────│  ← separator
+│ COLLECTIONS   │  ← full collection tree (expand in-place)
+│ ▾ 📚 日本語   │     click → toggle expand/collapse
+│   ▾ grammar   │     sub-collections expand too
+│     001-訓讀  │     notes appear as leaves → click → show in C
+│     002-長音  │
+│     003-小假名│
+│   ▸ vocab     │     collapsed sub-collection
+│   ▸ conversation│
+│ ▸ ✨ 天文     │  ← collapsed collection
+│ ▸ 🖥 模擬     │
+│ ▸ 💻 software │
+│───────────────│
+│ ★ PINNED      │  ← user-pinned notes (cross-collection quick access)
+│   Star ⭐     │
+│   Neutrino 📝 │
+│───────────────│
+│ RECENT        │  ← recently edited notes (automatic, 5-10 items)
+│   Universe    │
+│   Grammar #3  │
+│   模擬日誌 #12│
+└───────────────┘
+```
+
+- **Starred collections**: user manually stars collections for quick access at the top
+- **Collections tree**: `DisclosureGroup` with unlimited nesting depth, SF Symbol icons from `maho.yaml`
+- **Pinned notes**: user manually pins notes (appear regardless of which collection is expanded)
+- **Recent**: automatically populated, most recently edited notes (5-10 items)
+- Sections separated by subtle dividers with small uppercase labels
+- Entire B column scrolls freely
+
+### C — Content (remaining space)
+
+**C Header**: navigation arrows + breadcrumb + new note button.
+
+```
+┌──────────────────────────────────────────────────┐
+│ ◀ ▶  ◀ japanese / grammar                    ＋ │
+└──────────────────────────────────────────────────┘
+  nav    breadcrumb (clickable segments)    new note (⌘N)
+```
+
+- `◀ ▶` — note history navigation (back/forward through visited notes)
+- Breadcrumb — clickable path segments: `japanese` / `grammar` → click to navigate to that level
+- `＋` — new note in current collection (⌘N)
+
+**Smart Tab Bar** — appears only when needed:
+
+```
+Normal (no tab bar — clean):
+┌──────────────────────────────────────────────────┐
+│ ◀ ▶  ◀ japanese / grammar                    ＋ │
+│──────────────────────────────────────────────────│
+│                                                  │
+│ # 訓讀 vs 音讀                                   │
+│ ...                                              │
+
+Editing note A, then open note B → tab bar appears:
+┌──────────────────────────────────────────────────┐
+│ ◀ ▶  ◀ japanese / grammar                    ＋ │
+│ ┌─ ★ Star ●──┬─ Universe ✏️ ─┐                  │
+│─┤            │               ├──────────────────│
+│ │ # Star     │               │                  │
+│ │ ...        │               │                  │
+```
+
+- **Default**: no tab bar (one note, maximally clean)
+- **Tab bar appears when**: you're editing note A and click a different note B in B panel
+  - Note A stays open in a tab (preserving unsaved changes)
+  - Note B opens in a new tab
+- **View-only click**: if note A is in view mode (no edits), clicking note B just replaces it (no tab created — nothing to preserve)
+- **Tab indicators**: `✏️` = currently editing, `●` = unsaved changes (like VS Code / Xcode)
+- **Closing tabs**: click × on tab; when ≤ 1 tab remains, tab bar disappears
+- **No hard limit**: but tabs are context-preserving, not hoarding — most users will have 2-4
+
+**Floating Toolbar** (bottom-right corner):
+
+View mode (minimal):
+```
+┌──────────┐
+│ ✏️ 👁 ⊞  │  ← edit / preview / split
+└──────────┘
+```
+
+Edit mode (expanded):
+```
+┌────────────────────────────────────────┐
+│ B  I  H  🔗 🖼 ``` 📊 {|} │ ✏️ 👁 ⊞  │
+│ bold italic heading link img code tbl ruby │ modes │
+└────────────────────────────────────────┘
+```
+
+### Title Bar — Search
+
+Search bar embedded in the macOS window title bar (like Slack):
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ (🔴🟡🟢)        [ 🔍 Search Maho Notes              ]       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Click search bar or press ⌘K → search panel drops down:
+
+```
+┌──────────────────────────────────────┐
+│ 🔍 |                          ⌘K    │
+│──────────────────────────────────────│
+│ SCOPE: 🔘 All Vaults  ○ This Vault  │
+│ MODE:  🔘 Text  ○ Semantic  ○ Hybrid│
+│──────────────────────────────────────│
+│ RECENT SEARCHES                      │
+│   neutrino transport                 │
+│   恆星怎麼死的                        │
+│   ruby annotation                    │
+│──────────────────────────────────────│
+│ QUICK ACCESS                         │
+│   📝 Star (personal/japanese)        │
+│   📝 模擬日誌 #12 (work/simulation)  │
+└──────────────────────────────────────┘
+```
+
+- **Default scope: All Vaults** (cross-vault search is a core feature — not hidden)
+- Toggle scope to current vault
+- Search mode: Text (FTS5, default) / Semantic / Hybrid (enabled when vector index exists)
+- Type-as-you-search (debounced), results appear instantly
+- Empty state: recent searches + quick access (recently opened notes)
 
 ### Platform Adaptation
 
-| Platform | Layout | Behavior |
-|----------|--------|----------|
-| **macOS** | Three-column `NavigationSplitView` | Always visible sidebar; resizable columns |
-| **iPad landscape** | Three-column split | Same as macOS; sidebar toggleable |
-| **iPad portrait** | Two-column (sidebar overlay) | Sidebar slides over note list |
-| **iPhone** | Single-column push | Vault list → Collection → Note list → Note |
+| Platform | A (Vault Rail) | B (Navigator) | C (Content) | Search |
+|----------|---------------|---------------|-------------|--------|
+| **macOS** | Always visible | Always visible, collapsible | Fills remaining | Title bar search bar + ⌘K panel |
+| **iPad landscape** | Always visible | Toggleable sidebar | Fills remaining | Top toolbar search bar + ⌘K |
+| **iPad portrait** | Hidden (swipe from left edge) | Overlay sidebar | Full width | 🔍 icon in toolbar → sheet |
+| **iPhone** | Hidden (vault picker in B header dropdown) | Full-screen push | Full-screen push | 🔍 in nav bar → full-screen search |
 
-All use the same `NavigationSplitView` — SwiftUI handles column collapse automatically based on size class.
+**iPhone adaptation**: A rail doesn't fit on phone — vault switching via a dropdown in B header. B panel is the root view; tapping a note pushes C full-screen.
 
-### Sidebar (Column 1)
-- **"All Vaults"** item at top — shows all notes across all vaults
-- **Vault sections**: each vault as a collapsible section
-  - Vault name + icon (from `maho.yaml`)
-  - 🔒 badge on read-only vaults
-  - Collection tree: `DisclosureGroup` for nested directories, SF Symbol icons
-- **Vault picker** (compact): on iPhone, vaults shown as section headers
+**iPad adaptation**: A rail visible in landscape; in portrait, A+B slide in as overlay. Search accessible via toolbar icon.
 
-### Note List (Column 2)
-- Filtered by selected vault + collection
-- Sort options: by updated date (default), title, custom order
-- Note row: title, date, first-line preview, tags as pills
-- Swipe actions: delete (read-write vaults only), pin/favorite
-- Search bar at top (in-list filter, distinct from global search)
+### vs. Obsidian
 
-### Note Content (Column 3)
-- Placeholder until Phase 4c (shows raw markdown text as fallback)
+| Aspect | Obsidian | Maho Notes |
+|--------|---------|------------|
+| Sidebar | File explorer + search + bookmarks + tags + plugins (cluttered) | Vault rail + tree navigator (two clean layers) |
+| Vault switching | Close app, reopen different vault | Click icon (like Slack workspace) |
+| Tabs | Always visible tab bar | Smart tabs (appear only when editing + opening another note) |
+| Settings | Dozens of pages, maze-like | One popover, 4 sections |
+| Visual noise | Plugin icons, ribbons, status bars | Only vault icons + content |
+| Search | Sidebar panel | Title bar (always accessible, app-level) |
 
 ---
 
@@ -191,13 +390,14 @@ Native SwiftUI rendering via `swift-markdown` parser → custom `AttributedStrin
 
 ### Search
 
-#### Global Search (⌘⇧F)
-- Full-screen search overlay (or sheet on iPhone)
-- Search bar with mode picker: **Text** (FTS5) · **Semantic** · **Hybrid**
-- Cross-vault by default; optional vault/collection scope filter
-- Results: vault badge + collection path + title + snippet (best-matching chunk for semantic)
+> Global search UI (title bar + ⌘K panel) is spec'd in Phase 4b. This section covers search result display and in-note search.
+
+#### Search Results View
+- Results appear in the ⌘K dropdown panel as you type
+- Each result: vault badge + collection path + title + snippet (best-matching chunk for semantic)
 - Source indicators for hybrid: `[text]`, `[semantic]`, `[text+semantic]`
-- Tap result → navigate to note with search term highlighted
+- Click result → navigate to note with search term highlighted in C panel
+- Results grouped by vault when in "All Vaults" scope
 
 #### In-Note Search (⌘F)
 - Find bar at top of note content (Preview or Editor mode)
@@ -205,7 +405,7 @@ Native SwiftUI rendering via `swift-markdown` parser → custom `AttributedStrin
 - Replace (Editor mode only)
 
 #### Semantic Search Requirements
-- Only available when vector index exists for the vault
+- Semantic / Hybrid modes only enabled when vector index exists
 - If no index: show "Build search index" button → runs `VectorIndex.buildIndex()` in background
 - Model download prompt if no embedding model cached
 
