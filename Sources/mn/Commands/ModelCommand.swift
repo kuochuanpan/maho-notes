@@ -34,13 +34,13 @@ struct ModelCommand: AsyncParsableCommand {
             if outputOption.json {
                 try printJSON(models)
             } else {
-                let header = String(format: "%-12s %-25s %5s %10s %s", "NAME", "DISPLAY NAME", "DIM", "SIZE", "STATUS")
-                print(header)
+                print("NAME          DISPLAY NAME               DIM       SIZE  STATUS")
                 print(String(repeating: "-", count: 72))
                 for m in models {
-                    let status = m.downloaded ? "downloaded" : "not downloaded"
-                    let line = String(format: "%-12s %-25s %5d %10s %s", (m.name as NSString).utf8String!, (m.displayName as NSString).utf8String!, m.dimensions, (m.size as NSString).utf8String!, (status as NSString).utf8String!)
-                    print(line)
+                    let status = m.downloaded ? "✓ downloaded" : "—"
+                    let name = m.name.padding(toLength: 13, withPad: " ", startingAt: 0)
+                    let display = m.displayName.padding(toLength: 25, withPad: " ", startingAt: 0)
+                    print("\(name) \(display) \(String(m.dimensions).padding(toLength: 5, withPad: " ", startingAt: 0)) \(m.size.padding(toLength: 10, withPad: " ", startingAt: 0)) \(status)")
                 }
             }
         }
@@ -51,9 +51,14 @@ struct ModelCommand: AsyncParsableCommand {
 
         static func modelCachePath(_ model: EmbeddingModel) -> String? {
             let hfId = model.huggingFaceId
-            let dirName = "models--" + hfId.replacingOccurrences(of: "/", with: "--")
-            let basePath = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(dirName)")
-            return FileManager.default.fileExists(atPath: basePath) ? basePath : nil
+            // swift-transformers HubApi stores models under Documents/huggingface/models/{org}/{model}
+            let subPath = "models/" + hfId
+            let basePath = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(subPath)")
+            if FileManager.default.fileExists(atPath: basePath) { return basePath }
+            // Also check the alternate cache format: models--{org}--{model}
+            let altDirName = "models--" + hfId.replacingOccurrences(of: "/", with: "--")
+            let altPath = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(altDirName)")
+            return FileManager.default.fileExists(atPath: altPath) ? altPath : nil
         }
     }
 
