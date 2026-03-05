@@ -364,4 +364,31 @@ final class AppState {
     func notes(for collectionId: String) -> [Note] {
         notesByCollection[collectionId] ?? []
     }
+
+    // MARK: - Vault Management
+
+    /// Remove a vault from the registry (does not delete files).
+    @MainActor
+    func removeVault(name: String) {
+        guard var registry = try? MahoNotesKit.loadRegistry() else { return }
+        try? registry.removeVault(named: name)
+        // If removing the primary, reassign to first remaining vault
+        if registry.primary == name, let first = registry.vaults.first {
+            registry.primary = first.name
+        }
+        try? MahoNotesKit.saveRegistry(registry)
+        if selectedVaultName == name {
+            selectedVaultName = registry.primary
+        }
+        loadRegistry()
+    }
+
+    /// Set a vault as the primary vault.
+    @MainActor
+    func setPrimaryVault(name: String) {
+        guard var registry = try? MahoNotesKit.loadRegistry() else { return }
+        try? registry.setPrimary(name)
+        try? MahoNotesKit.saveRegistry(registry)
+        loadRegistry()
+    }
 }

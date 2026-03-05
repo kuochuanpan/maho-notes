@@ -4,6 +4,15 @@ import SwiftUI
 /// A: VaultRailView (48pt) | B: NavigatorView (240pt) | C: NoteContentView (flexible)
 struct ContentView: View {
     @Environment(AppState.self) private var appState
+    @AppStorage("appTheme") private var appTheme: String = "system"
+
+    private var colorScheme: ColorScheme? {
+        switch appTheme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -54,6 +63,7 @@ struct ContentView: View {
                 handleAutoCollapse(width: newWidth)
             }
         }
+        .preferredColorScheme(colorScheme)
         .task {
             appState.loadRegistry()
         }

@@ -5,7 +5,6 @@ import MahoNotesKit
 struct VaultRailView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAddAlert = false
-    @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,9 +47,7 @@ struct VaultRailView: View {
             if let vault = appState.selectedVault {
                 Divider()
                     .padding(.horizontal, 6)
-                Button {
-                    showingSettings = true
-                } label: {
+                SettingsLink {
                     Text(initials(for: vault.name))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -59,10 +56,6 @@ struct VaultRailView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
-                .popover(isPresented: $showingSettings) {
-                    Text("Settings")
-                        .padding()
-                }
             }
         }
         .frame(width: 48)

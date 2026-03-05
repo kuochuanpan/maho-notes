@@ -4,6 +4,7 @@ import MahoNotesKit
 /// C -- Note content panel showing the selected note's title and body.
 struct NoteContentView: View {
     @Environment(AppState.self) private var appState
+    @AppStorage("editorFontSize") private var editorFontSize: Double = 14
 
     var body: some View {
         if let note = appState.selectedNote {
@@ -68,7 +69,7 @@ struct NoteContentView: View {
     private var editorView: some View {
         @Bindable var state = appState
         return TextEditor(text: $state.editingBody)
-            .font(.system(.body, design: .monospaced))
+            .font(.system(size: editorFontSize, design: .monospaced))
             .scrollContentBackground(.hidden)
             .padding(12)
             .task(id: appState.editingBody) {

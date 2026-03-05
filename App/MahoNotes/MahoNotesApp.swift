@@ -47,5 +47,12 @@ struct MahoNotesApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
+
+        #if os(macOS)
+        Settings {
+            SettingsView()
+                .environment(appState)
+        }
+        #endif
     }
 }
