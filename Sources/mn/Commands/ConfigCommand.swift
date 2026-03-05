@@ -56,12 +56,14 @@ struct ConfigShowSubcommand: ParsableCommand {
 
         if !vaultConfig.isEmpty {
             print("# Vault config (maho.yaml)")
-            printDict(vaultConfig, indent: 0)
+            let yaml = (try? Yams.dump(object: vaultConfig)) ?? ""
+            print(yaml, terminator: "")
         }
 
         if !deviceConfig.isEmpty {
             print("\n# Device config (.maho/config.yaml)")
-            printDict(maskedDevice, indent: 0)
+            let yaml = (try? Yams.dump(object: maskedDevice)) ?? ""
+            print(yaml, terminator: "")
         }
 
         // Also show global auth if available
@@ -78,17 +80,6 @@ struct ConfigShowSubcommand: ParsableCommand {
         }
     }
 
-    private func printDict(_ dict: [String: Any], indent: Int) {
-        let prefix = String(repeating: "  ", count: indent)
-        for (key, value) in dict.sorted(by: { $0.key < $1.key }) {
-            if let nested = value as? [String: Any] {
-                print("\(prefix)\(key):")
-                printDict(nested, indent: indent + 1)
-            } else {
-                print("\(prefix)\(key): \(value)")
-            }
-        }
-    }
 }
 
 // MARK: - mn config --set <key> <value>

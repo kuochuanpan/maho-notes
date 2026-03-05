@@ -84,7 +84,7 @@ struct VaultOption: ParsableArguments {
     /// Validate that the vault is writable. Call from commands that modify notes.
     func validateWritable() throws {
         if let entry = resolveVaultEntry(), entry.access == .readOnly {
-            throw ValidationError("Error: Vault '\(entry.name)' is read-only")
+            throw ValidationError("Vault '\(entry.name)' is read-only")
         }
     }
 }

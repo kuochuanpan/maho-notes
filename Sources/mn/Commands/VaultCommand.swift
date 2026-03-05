@@ -127,8 +127,11 @@ struct VaultAddSubcommand: ParsableCommand {
         guard modes == 1 else {
             throw ValidationError("Specify exactly one of --icloud, --github <repo>, or --path <local>")
         }
-        if (readonly || readwrite || `import`) && github == nil {
-            throw ValidationError("--readonly, --readwrite, and --import require --github")
+        if `import` && github == nil {
+            throw ValidationError("--import requires --github")
+        }
+        if (readonly || readwrite) && github == nil && path == nil {
+            throw ValidationError("--readonly and --readwrite require --github or --path")
         }
         if readonly && readwrite {
             throw ValidationError("--readonly and --readwrite are mutually exclusive")
@@ -322,14 +325,15 @@ struct VaultAddSubcommand: ParsableCommand {
             throw ValidationError("Path does not exist: \(expanded)")
         }
 
+        let access: VaultAccess = readonly ? .readOnly : .readWrite
         var registry = try loadRegistry(globalConfigDir: globalConfigDir)
             ?? VaultRegistry(primary: name, vaults: [])
-        let entry = VaultEntry(name: name, type: .local, path: localPath, access: .readWrite)
+        let entry = VaultEntry(name: name, type: .local, path: localPath, access: access)
         try registry.addVault(entry)
         if registry.vaults.count == 1 { registry.primary = name }
         try saveRegistry(registry, globalConfigDir: globalConfigDir)
 
-        print("Vault '\(name)' registered (type: local, path: \(localPath))")
+        print("Vault '\(name)' registered (type: local, path: \(localPath), access: \(access.rawValue))")
     }
 }
 

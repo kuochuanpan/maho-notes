@@ -30,7 +30,21 @@ struct SyncCommand: ParsableCommand {
         }
 
         let gitSync = GitSync(vaultPath: vaultPath)
-        let result = try gitSync.sync()
+        let result: SyncResult
+        do {
+            result = try gitSync.sync()
+        } catch {
+            if outputOption.json {
+                let output = ["error": "\(error)"]
+                if let data = try? JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            } else {
+                print("Sync failed: \(error)")
+            }
+            throw ExitCode.failure
+        }
 
         if !outputOption.json {
             print(result.message)
