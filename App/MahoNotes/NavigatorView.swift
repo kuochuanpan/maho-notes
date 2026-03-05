@@ -62,15 +62,8 @@ struct NavigatorView: View {
     @ViewBuilder
     private var collectionsSection: some View {
         Section {
-            ForEach(appState.collections, id: \.id) { collection in
-                DisclosureGroup {
-                    ForEach(appState.notes(for: collection.id), id: \.relativePath) { note in
-                        noteRow(note)
-                            .tag(note.relativePath)
-                    }
-                } label: {
-                    Label(collection.name, systemImage: collection.icon)
-                }
+            ForEach(appState.fileTree, id: \.id) { node in
+                TreeNodeView(node: node, appState: appState)
             }
         } header: {
             Text("COLLECTIONS")
@@ -120,5 +113,63 @@ struct NavigatorView: View {
         case .github: "arrow.triangle.branch"
         case .local: "folder"
         }
+    }
+}
+
+// MARK: - Recursive Tree Node View
+
+/// Renders a single node in the file tree — directories expand/collapse, notes are selectable leaves.
+/// Clicking anywhere on a directory row (not just the triangle) toggles expand/collapse.
+private struct TreeNodeView: View {
+    let node: FileTreeNode
+    let appState: AppState
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        if node.isDirectory {
+            directoryRow
+        } else {
+            noteLeafRow
+        }
+    }
+
+    // MARK: - Directory
+
+    @ViewBuilder
+    private var directoryRow: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ForEach(node.children, id: \.id) { child in
+                TreeNodeView(node: child, appState: appState)
+            }
+        } label: {
+            Label(node.name, systemImage: node.icon)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }
+        }
+    }
+
+    // MARK: - Note Leaf
+
+    private var noteLeafRow: some View {
+        Label {
+            HStack(spacing: 4) {
+                Text(node.name)
+                    .lineLimit(1)
+                if let note = node.note,
+                   appState.conflict(for: note.relativePath) != nil {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                }
+            }
+        } icon: {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+        }
+        .tag(node.note?.relativePath ?? node.id)
     }
 }

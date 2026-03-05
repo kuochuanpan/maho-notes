@@ -28,6 +28,9 @@ final class AppState {
     /// Collections in the currently selected vault.
     private(set) var collections: [Collection] = []
 
+    /// Hierarchical file tree for the currently selected vault.
+    private(set) var fileTree: [FileTreeNode] = []
+
     /// All notes in the currently selected vault, grouped by collection.
     private(set) var notesByCollection: [String: [Note]] = [:]
 
@@ -327,6 +330,7 @@ final class AppState {
         do {
             self.collections = try vault.collections()
             self.allNotes = try vault.allNotes()
+            self.fileTree = try vault.buildFileTree()
 
             var grouped: [String: [Note]] = [:]
             for note in allNotes {
@@ -398,6 +402,7 @@ final class AppState {
     func loadSelectedVault() {
         guard let entry = selectedVault else {
             collections = []
+            fileTree = []
             notesByCollection = [:]
             allNotes = []
             selectedNotePath = nil
@@ -410,6 +415,7 @@ final class AppState {
         do {
             self.collections = try vault.collections()
             self.allNotes = try vault.allNotes()
+            self.fileTree = try vault.buildFileTree()
 
             var grouped: [String: [Note]] = [:]
             for note in allNotes {
@@ -423,6 +429,7 @@ final class AppState {
         } catch {
             self.collections = []
             self.allNotes = []
+            self.fileTree = []
             self.notesByCollection = [:]
         }
 

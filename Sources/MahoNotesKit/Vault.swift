@@ -30,11 +30,9 @@ public struct Vault: Sendable {
                   !definedIds.contains(name)
             else { continue }
 
-            // Only count as collection if it has at least one .md file
-            let mdFiles = (try? fm.contentsOfDirectory(atPath: item.path))?.filter {
-                $0.hasSuffix(".md") && $0 != "_index.md"
-            } ?? []
-            guard !mdFiles.isEmpty else { continue }
+            // Only count as collection if it has at least one .md file (recursively)
+            let hasMarkdown = hasMarkdownFiles(in: item.path, fileManager: fm)
+            guard hasMarkdown else { continue }
 
             // Check _index.md for metadata
             let indexPath = item.appendingPathComponent("_index.md").path
@@ -175,6 +173,22 @@ public struct Vault: Sendable {
 }
 
 // MARK: - Helpers
+
+/// Check if a directory contains any .md files (recursively), excluding _index.md
+private func hasMarkdownFiles(in directoryPath: String, fileManager fm: FileManager) -> Bool {
+    guard let enumerator = fm.enumerator(
+        at: URL(fileURLWithPath: directoryPath),
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles]
+    ) else { return false }
+
+    for case let fileURL as URL in enumerator {
+        if fileURL.pathExtension == "md" && fileURL.lastPathComponent != "_index.md" {
+            return true
+        }
+    }
+    return false
+}
 
 public func makeSlug(from title: String) -> String {
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
