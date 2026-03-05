@@ -190,22 +190,21 @@
 
 > Static site generation + GitHub Pages deployment.
 
-### 3.1 — Static Site Generator
-- [ ] `SiteGenerator.swift` in MahoNotesKit:
-  - Input: list of `public: true` notes
-  - Output: directory of HTML files + index + RSS
-- [ ] HTML template system (Swift string templates or Plot)
-- [ ] Markdown → HTML rendering:
-  - swift-markdown for parsing
-  - Syntax highlighting: Splash (Swift-native) + bundled highlight.js
-  - Math: bundled KaTeX JS/CSS
-  - Ruby annotation: `{base|annotation}` → `<ruby><rb>base</rb><rp>(</rp><rt>annotation</rt><rp>)</rp></ruby>`
-  - Mermaid: bundled mermaid.js
-  - Admonitions / callouts
-- [ ] Routes: `/`, `/c/:collection`, `/c/:collection/:slug`, `/feed.xml`
-- [ ] Theme: clean responsive HTML/CSS (light/dark mode)
-- [ ] Open Graph meta tags, reading time estimate
-- [ ] Tests: HTML generation for various markdown features
+### 3.1 — Static Site Generator ✅ (2026-03-05)
+- [x] `SiteGenerator.swift` in MahoNotesKit (SiteConfig, GenerationResult, generate(to:notes:))
+- [x] `MarkdownHTMLRenderer.swift`: swift-markdown visitor → HTML
+  - Headings, bold, italic, code, links, images, tables, task lists, blockquotes, strikethrough
+  - Ruby annotation: `{base|annotation}` → `<ruby>` HTML
+  - Admonitions: `[!tip]`/`[!warning]`/`[!note]`/`[!info]` → styled divs
+  - Math: `$...$` → `<span class="math-inline">`, `$$...$$` → `<div class="math-block">` (KaTeX CDN)
+  - Mermaid: code blocks → `<div class="mermaid">` (Mermaid CDN)
+  - Code blocks: `<pre><code class="language-xxx">` (highlight.js CDN)
+- [x] Routes: `/index.html`, `/c/<collection>/index.html`, `/c/<collection>/<slug>.html`, `/feed.xml`
+- [x] Inline CSS: light/dark mode, responsive, system font stack, admonition styling
+- [x] Open Graph meta tags, reading time (word count / 200 wpm)
+- [x] RSS 2.0 feed (last 20 notes)
+- [x] Copies `_assets/` directory
+- [x] 23 new tests (SiteGeneratorTests), 210 total
 
 ### 3.2 — Incremental Publishing
 - [ ] `PublishManifest.swift`: track content hashes (SHA-256) per published note
