@@ -242,12 +242,50 @@ struct InitCommand: ParsableCommand {
         let configPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
         let backupPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml.bak")
         let fm = FileManager.default
+
+        // Back up existing config
         if fm.fileExists(atPath: backupPath) {
             try fm.removeItem(atPath: backupPath)
         }
-        try fm.moveItem(atPath: configPath, toPath: backupPath)
-        print("Backed up config to config.yaml.bak")
-        try runFirstTimeSetup(globalConfigDir: globalConfigDir)
+        if fm.fileExists(atPath: configPath) {
+            try fm.moveItem(atPath: configPath, toPath: backupPath)
+            print("Backed up config to config.yaml.bak")
+        }
+
+        // Only reconfigure global settings (author, storage) — don't create vaults
+        print("")
+        print("Author name: ", terminator: "")
+        let authorInput = readLine() ?? ""
+
+        // Re-create global config with author
+        let skeleton: String
+        if authorInput.isEmpty {
+            skeleton = """
+            # Maho Notes — global device config
+            # Auth tokens and device-specific settings
+            auth: {}
+            embed:
+              model: builtin
+            """
+        } else {
+            skeleton = """
+            # Maho Notes — global device config
+            author: \(authorInput)
+            auth: {}
+            embed:
+              model: builtin
+            """
+        }
+        if !fm.fileExists(atPath: globalConfigDir) {
+            try fm.createDirectory(atPath: globalConfigDir, withIntermediateDirectories: true)
+        }
+        try skeleton.write(toFile: configPath, atomically: true, encoding: .utf8)
+
+        print("")
+        print("Global config updated at \(configPath)")
+        print("")
+        print("Your existing vaults are unchanged.")
+        print("Run `mn vault list` to see them.")
     }
 
     private func printSuccess(vaultName: String, vaultRoot: String) {
