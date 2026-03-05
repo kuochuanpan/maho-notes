@@ -9,15 +9,17 @@ struct VaultTests {
         let tmp = fm.temporaryDirectory.appendingPathComponent("test-vault-\(UUID().uuidString)")
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
 
-        // Create collections.yaml
+        // Create maho.yaml with collections
         let collectionsYaml = """
+        author:
+          name: ""
         collections:
           - id: testcoll
             name: Test Collection
             icon: star
             description: A test collection
         """
-        try collectionsYaml.write(to: tmp.appendingPathComponent("collections.yaml"), atomically: true, encoding: .utf8)
+        try collectionsYaml.write(to: tmp.appendingPathComponent("maho.yaml"), atomically: true, encoding: .utf8)
 
         // Create collection directory
         let collDir = tmp.appendingPathComponent("testcoll")

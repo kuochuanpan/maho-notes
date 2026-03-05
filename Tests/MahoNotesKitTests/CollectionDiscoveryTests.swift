@@ -9,15 +9,17 @@ struct CollectionDiscoveryTests {
         let tmp = fm.temporaryDirectory.appendingPathComponent("test-vault-\(UUID().uuidString)")
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
 
-        // Create collections.yaml with one defined collection
+        // Create maho.yaml with one defined collection
         let collectionsYaml = """
+        author:
+          name: ""
         collections:
           - id: defined
             name: Defined Collection
             icon: star
             description: A defined collection
         """
-        try collectionsYaml.write(to: tmp.appendingPathComponent("collections.yaml"), atomically: true, encoding: .utf8)
+        try collectionsYaml.write(to: tmp.appendingPathComponent("maho.yaml"), atomically: true, encoding: .utf8)
 
         // Create the defined collection directory with a note
         let definedDir = tmp.appendingPathComponent("defined")

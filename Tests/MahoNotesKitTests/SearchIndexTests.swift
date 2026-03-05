@@ -13,18 +13,14 @@ struct SearchIndexTests {
         let tmp = fm.temporaryDirectory.appendingPathComponent("test-vault-\(UUID().uuidString)")
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
 
-        let collectionsYaml = """
+        let mahoYaml = """
+        author:
+          name: Test User
         collections:
           - id: notes
             name: Notes
             icon: note.text
             description: Test notes
-        """
-        try collectionsYaml.write(to: tmp.appendingPathComponent("collections.yaml"), atomically: true, encoding: .utf8)
-
-        let mahoYaml = """
-        author:
-          name: Test User
         """
         try mahoYaml.write(to: tmp.appendingPathComponent("maho.yaml"), atomically: true, encoding: .utf8)
 

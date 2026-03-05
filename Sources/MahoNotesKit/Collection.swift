@@ -1,7 +1,7 @@
 import Foundation
 import Yams
 
-/// A collection definition from collections.yaml
+/// A collection definition from maho.yaml
 public struct Collection: Sendable, Codable {
     public let id: String
     public let name: String
@@ -42,12 +42,29 @@ public struct Collection: Sendable, Codable {
     ]
 }
 
-/// Parses collections.yaml from the vault root
+/// Parses the collections: key from maho.yaml in the vault root.
+/// If collections.yaml exists but maho.yaml lacks a collections: key, migrates
+/// the collections into maho.yaml and deletes collections.yaml.
 public func loadCollections(from vaultPath: String) throws -> [Collection] {
-    let url = URL(fileURLWithPath: vaultPath).appendingPathComponent("collections.yaml")
-    let data = try String(contentsOf: url, encoding: .utf8)
+    let fm = FileManager.default
+    let mahoURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("maho.yaml")
+    let legacyURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("collections.yaml")
 
-    guard let yaml = try Yams.load(yaml: data) as? [String: Any],
+    // Migration: collections.yaml exists but maho.yaml has no collections: key
+    if fm.fileExists(atPath: legacyURL.path) {
+        let mahoContent = (try? String(contentsOf: mahoURL, encoding: .utf8)) ?? ""
+        if !mahoContent.contains("collections:") {
+            let legacyContent = try String(contentsOf: legacyURL, encoding: .utf8)
+            let separator = mahoContent.hasSuffix("\n") ? "" : "\n"
+            let merged = mahoContent + separator + legacyContent
+            try merged.write(to: mahoURL, atomically: true, encoding: .utf8)
+            try fm.removeItem(at: legacyURL)
+            print("Migrated collections from collections.yaml → maho.yaml")
+        }
+    }
+
+    guard let data = try? String(contentsOf: mahoURL, encoding: .utf8),
+          let yaml = try? Yams.load(yaml: data) as? [String: Any],
           let items = yaml["collections"] as? [[String: Any]]
     else {
         return []

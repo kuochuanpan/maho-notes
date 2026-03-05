@@ -27,6 +27,11 @@ struct InitCommand: ParsableCommand {
             author:
               name: ""
               url: ""
+            collections:
+              - id: getting-started
+                name: Getting Started
+                icon: questionmark.circle
+                description: Tutorial — how to use Maho Notes (safe to delete)
             github:
               repo: ""
             site:
@@ -36,20 +41,6 @@ struct InitCommand: ParsableCommand {
             """
             try content.write(toFile: mahoYaml, atomically: true, encoding: .utf8)
             print("Created maho.yaml")
-        }
-
-        // collections.yaml
-        let collectionsYaml = (vaultPath as NSString).appendingPathComponent("collections.yaml")
-        if !fm.fileExists(atPath: collectionsYaml) {
-            let content = """
-            collections:
-              - id: getting-started
-                name: Getting Started
-                icon: questionmark.circle
-                description: Tutorial — how to use Maho Notes (safe to delete)
-            """
-            try content.write(toFile: collectionsYaml, atomically: true, encoding: .utf8)
-            print("Created collections.yaml")
         }
 
         // .maho/ directory
@@ -128,7 +119,7 @@ struct InitCommand: ParsableCommand {
              # Collections
 
              Collections are top-level directories in your vault.
-             Define them in `collections.yaml`.
+             Define them in `maho.yaml` under the `collections:` key.
 
              ```bash
              mn collections    # list all collections

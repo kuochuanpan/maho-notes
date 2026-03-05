@@ -9,7 +9,7 @@ public struct Vault: Sendable {
         self.path = (path as NSString).expandingTildeInPath
     }
 
-    /// Load all collections: defined in collections.yaml + discovered from filesystem
+    /// Load all collections: defined in maho.yaml + discovered from filesystem
     public func collections() throws -> [Collection] {
         let defined = try loadCollections(from: path)
         let definedIds = Set(defined.map { $0.id })
