@@ -244,24 +244,25 @@
 > iCloud is infrastructure (not an add-on) — the app needs it from day one for vault registry.
 > UI design: **A (vault rail) + B (tree navigator) + C (content)** — see [app.md](app.md) for full spec.
 
-### 4a — Xcode Project + iCloud Container + Vault Registry Sync
+### 4a — Xcode Project + iCloud Container + Vault Registry Sync ✅ (2026-03-05)
 
 > Foundation: the app can launch, read vaults, and sync registry across devices.
 
-- [ ] Create Xcode project (Universal App: macOS + iOS + iPadOS targets)
-- [ ] Add MahoNotesKit as local SPM dependency
-- [ ] App target: `Maho Notes.app`
-- [ ] Bundle identifier: `com.pcca.mahonotes`
-- [ ] Entitlements: iCloud Documents (`iCloud~com.pcca.mahonotes`), App Sandbox
-- [ ] iCloud container: `iCloud~com.pcca.mahonotes`
+- [x] Create Xcode project (Universal App: macOS + iOS + iPadOS targets) — XcodeGen `project.yml`
+- [x] Add MahoNotesKit as local SPM dependency
+- [x] App target: `Maho Notes.app`
+- [x] Bundle identifier: `com.pcca.mahonotes`
+- [x] Entitlements: iCloud Documents (`iCloud.com.pcca.mahonotes`), App Sandbox, network client
+- [x] iCloud container: `iCloud.com.pcca.mahonotes`
   - Vault registry in container: `config/vaults.yaml`
   - iCloud vaults stored in container: `vaults/<name>/`
-- [ ] `NSFileCoordinator` for safe reads/writes of vault registry + vault files
-- [ ] `AppState` (`@Observable`): loads vault registry on launch, resolves vault paths per-platform
-- [ ] Basic `@main` App struct with `WindowGroup` + empty `NavigationSplitView` shell
-- [ ] Error state: if iCloud unavailable, show setup guidance (local-only mode works)
-- [ ] CLI compatibility: macOS CLI reads the same iCloud container path
-- [ ] Tests: vault registry load/save via iCloud container mock
+- [ ] `NSFileCoordinator` for safe reads/writes of vault registry + vault files (deferred — needed when iCloud is live)
+- [x] `AppState` (`@Observable`): loads vault registry on launch, resolves vault paths per-platform
+- [x] Basic `@main` App struct with `WindowGroup` + empty `NavigationSplitView` shell
+- [x] Error state: if iCloud unavailable, show setup guidance (local-only mode works)
+- [x] CLI compatibility: macOS CLI reads the same iCloud container path (Package.swift: `.iOS(.v18)` added)
+- [x] iOS compatibility: `#if os(macOS)` guards on Process/git CLI in Auth, GitSync, VaultInit
+- [ ] Tests: vault registry load/save via iCloud container mock (existing 210 tests pass, app-specific tests in 4b+)
 
 ### 4b — Core UI: Layout, Navigation, Tree Explorer
 
