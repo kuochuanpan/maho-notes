@@ -6,7 +6,8 @@ public func initVault(
     authorName: String,
     githubRepo: String,
     skipTutorial: Bool,
-    globalConfigDir: String
+    globalConfigDir: String,
+    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
 ) throws {
     let fm = FileManager.default
 
@@ -85,157 +86,33 @@ public func initVault(
         }
     }
 
-    // --- Tutorial notes ---
+    // --- Tutorial notes (cloned from remote) ---
     if !skipTutorial {
         let gsDir = (vaultPath as NSString).appendingPathComponent("getting-started")
         if !fm.fileExists(atPath: gsDir) {
-            try fm.createDirectory(atPath: gsDir, withIntermediateDirectories: true)
-        }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = ["clone", "--depth", "1", tutorialRepoURL, "getting-started"]
+            process.currentDirectoryURL = URL(fileURLWithPath: vaultPath)
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
-        let now = dateFormatter.string(from: Date())
-
-        let tutorialNotes: [(filename: String, content: String)] = [
-            ("_index.md", """
-             ---
-             title: Getting Started
-             description: Tutorial — how to use Maho Notes
-             ---
-
-             # Getting Started
-
-             Welcome to Maho Notes! This collection walks you through the basics.
-             """),
-            ("001-your-first-note.md", """
-             ---
-             title: Your First Note
-             tags: [tutorial]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 1
-             ---
-
-             # Your First Note
-
-             Create a new note with:
-
-             ```bash
-             mn new "My Note" --collection getting-started
-             ```
-
-             Notes are markdown files with YAML frontmatter.
-             """),
-            ("002-collections.md", """
-             ---
-             title: Collections
-             tags: [tutorial]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 2
-             ---
-
-             # Collections
-
-             Collections are top-level directories in your vault.
-             Define them in `maho.yaml` under the `collections:` key.
-
-             ```bash
-             mn collections    # list all collections
-             mn list           # list notes grouped by collection
-             ```
-             """),
-            ("003-markdown-features.md", """
-             ---
-             title: Markdown Features
-             tags: [tutorial, markdown]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 3
-             ---
-
-             # Markdown Features
-
-             Maho Notes supports CommonMark + GFM with extensions:
-
-             - **Math**: `$E = mc^2$` and `$$...$$` blocks (KaTeX)
-             - **Diagrams**: Mermaid code blocks
-             - **Ruby annotation**: `{漢字|かんじ}` for furigana and phonetic guides
-             - **Tables**, task lists, footnotes
-             """),
-            ("004-search.md", """
-             ---
-             title: Search
-             tags: [tutorial]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 4
-             ---
-
-             # Search
-
-             Search across all notes:
-
-             ```bash
-             mn search "query"              # full-text search
-             mn search --collection japanese "query"  # scoped search
-             ```
-             """),
-            ("005-sync-and-github.md", """
-             ---
-             title: Sync & GitHub
-             tags: [tutorial, sync]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 5
-             ---
-
-             # Sync & GitHub
-
-             Your vault syncs via iCloud by default. For GitHub sync:
-
-             ```bash
-             mn config auth                    # set up GitHub auth
-             mn config set github.repo user/vault  # set repo
-             mn sync                           # pull + push
-             ```
-             """),
-            ("006-publishing.md", """
-             ---
-             title: Publishing
-             tags: [tutorial, publishing]
-             created: \(now)
-             updated: \(now)
-             public: false
-             order: 6
-             ---
-
-             # Publishing
-
-             Publish notes as a static site on GitHub Pages:
-
-             ```bash
-             mn meta <path> --set public=true  # mark as public
-             mn publish                        # deploy to GitHub Pages
-             ```
-             """),
-        ]
-
-        var createdAny = false
-        for note in tutorialNotes {
-            let filePath = (gsDir as NSString).appendingPathComponent(note.filename)
-            if !fm.fileExists(atPath: filePath) {
-                try note.content.write(toFile: filePath, atomically: true, encoding: .utf8)
-                createdAny = true
+            var cloneSucceeded = false
+            do {
+                try process.run()
+                process.waitUntilExit()
+                cloneSucceeded = process.terminationStatus == 0
+            } catch {
+                // git not installed or other launch failure
             }
-        }
-        if createdAny {
-            print("Created getting-started/ tutorial notes")
+
+            if cloneSucceeded {
+                let gitDir = (gsDir as NSString).appendingPathComponent(".git")
+                try? fm.removeItem(atPath: gitDir)
+                print("Created getting-started/ tutorial notes")
+            } else {
+                print("Warning: Could not clone tutorial vault. You can add it later with: mn vault add getting-started --github kuochuanpan/maho-getting-started")
+            }
         }
     }
 

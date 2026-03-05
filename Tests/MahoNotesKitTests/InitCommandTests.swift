@@ -28,7 +28,8 @@ struct InitCommandTests {
             authorName: "",
             githubRepo: "",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let configPath = globalDir.appendingPathComponent("config.yaml").path
@@ -54,7 +55,8 @@ struct InitCommandTests {
             authorName: "",
             githubRepo: "",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let after = try String(contentsOfFile: configPath.path, encoding: .utf8)
@@ -73,7 +75,8 @@ struct InitCommandTests {
             authorName: "Test User",
             githubRepo: "user/repo",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let mahoYaml = try String(
@@ -124,23 +127,27 @@ struct InitCommandTests {
         #expect(mahoYaml.contains("collections: []"))
     }
 
-    @Test func withTutorialCreatesTutorialNotes() throws {
+    @Test func withTutorialIncludesCollectionInMahoYaml() throws {
         let globalDir = try makeTempDir()
         let vaultDir = try makeTempDir()
         defer { cleanup(globalDir, vaultDir) }
 
+        // Pass a fake URL — clone will fail gracefully (no throw)
         try initVault(
             vaultPath: vaultDir.path,
             authorName: "",
             githubRepo: "",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
-        let gsDir = vaultDir.appendingPathComponent("getting-started")
-        #expect(FileManager.default.fileExists(atPath: gsDir.path))
-        #expect(FileManager.default.fileExists(atPath: gsDir.appendingPathComponent("_index.md").path))
-        #expect(FileManager.default.fileExists(atPath: gsDir.appendingPathComponent("001-your-first-note.md").path))
+        let mahoYaml = try String(
+            contentsOfFile: vaultDir.appendingPathComponent("maho.yaml").path,
+            encoding: .utf8
+        )
+        #expect(mahoYaml.contains("getting-started"))
+        #expect(mahoYaml.contains("Getting Started"))
     }
 
     // MARK: - Idempotency
@@ -155,7 +162,8 @@ struct InitCommandTests {
             authorName: "First",
             githubRepo: "a/b",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let mahoYamlPath = vaultDir.appendingPathComponent("maho.yaml")
@@ -186,7 +194,8 @@ struct InitCommandTests {
             authorName: "",
             githubRepo: "",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let configPath = globalDir.appendingPathComponent("config.yaml")
@@ -198,7 +207,8 @@ struct InitCommandTests {
             authorName: "",
             githubRepo: "",
             skipTutorial: false,
-            globalConfigDir: globalDir.path
+            globalConfigDir: globalDir.path,
+            tutorialRepoURL: "/nonexistent/fake/tutorial/repo"
         )
 
         let afterSecond = try String(contentsOfFile: configPath.path, encoding: .utf8)
