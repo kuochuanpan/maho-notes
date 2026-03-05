@@ -52,7 +52,10 @@ struct VaultOption: ParsableArguments {
         // Legacy fallback
         let icloudPath = ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents" as NSString).expandingTildeInPath
         if FileManager.default.fileExists(atPath: icloudPath) { return icloudPath }
-        return "~/maho-vault"
+        // Keep ~/maho-vault for backward compat; default to ~/.maho/vaults/ for new installs
+        let legacyPath = ("~/maho-vault" as NSString).expandingTildeInPath
+        if FileManager.default.fileExists(atPath: legacyPath) { return legacyPath }
+        return ("~/.maho/vaults" as NSString).expandingTildeInPath
     }
 
     private func findEntry(_ identifier: String) -> VaultEntry? {

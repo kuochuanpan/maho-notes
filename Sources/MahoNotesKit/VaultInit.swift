@@ -1,21 +1,44 @@
 import Foundation
 
-/// Core vault initialization logic. Extracted so it can be tested with temp directories.
-public func initVault(
-    vaultPath: String,
-    authorName: String,
-    githubRepo: String,
-    skipTutorial: Bool,
-    globalConfigDir: String,
-    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
-) throws {
-    let fm = FileManager.default
+// MARK: - Storage Option
 
-    // --- Global ~/.maho/ setup ---
+public enum StorageOption: String, Sendable, CaseIterable {
+    case icloud
+    case local
+}
+
+// MARK: - iCloud detection
+
+public func iCloudContainerExists() -> Bool {
+    let path = ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes" as NSString).expandingTildeInPath
+    return FileManager.default.fileExists(atPath: path)
+}
+
+// MARK: - Vault root resolution
+
+/// Returns the directory where vault folders are stored.
+public func resolveVaultRoot(storage: StorageOption?) -> String {
+    switch storage {
+    case .icloud:
+        return ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+    case .local:
+        return ("~/.maho/vaults" as NSString).expandingTildeInPath
+    case nil:
+        if iCloudContainerExists() {
+            return ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+        }
+        return ("~/.maho/vaults" as NSString).expandingTildeInPath
+    }
+}
+
+// MARK: - Global config
+
+/// Creates `globalConfigDir/config.yaml` if it doesn't exist.
+public func ensureGlobalConfig(globalConfigDir: String) throws {
+    let fm = FileManager.default
     if !fm.fileExists(atPath: globalConfigDir) {
         try fm.createDirectory(atPath: globalConfigDir, withIntermediateDirectories: true)
     }
-
     let globalConfigPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
     if !fm.fileExists(atPath: globalConfigPath) {
         let skeleton = """
@@ -28,14 +51,26 @@ public func initVault(
         try skeleton.write(toFile: globalConfigPath, atomically: true, encoding: .utf8)
         print("Created ~/.maho/config.yaml")
     }
+}
 
-    // --- Vault directory ---
+// MARK: - Low-level vault file creation
+
+/// Writes vault files (maho.yaml, .maho/, .gitignore, optional tutorial) into `vaultPath`.
+/// Does not create a global config or register the vault.
+func writeVaultFiles(
+    vaultPath: String,
+    authorName: String,
+    githubRepo: String,
+    skipTutorial: Bool,
+    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
+) throws {
+    let fm = FileManager.default
+
     if !fm.fileExists(atPath: vaultPath) {
         try fm.createDirectory(atPath: vaultPath, withIntermediateDirectories: true)
         print("Created vault at \(vaultPath)")
     }
 
-    // --- maho.yaml ---
     let mahoYaml = (vaultPath as NSString).appendingPathComponent("maho.yaml")
     if !fm.fileExists(atPath: mahoYaml) {
         let collectionsSection: String
@@ -66,14 +101,12 @@ public func initVault(
         print("Created maho.yaml")
     }
 
-    // --- .maho/ directory ---
     let mahoDir = (vaultPath as NSString).appendingPathComponent(".maho")
     if !fm.fileExists(atPath: mahoDir) {
         try fm.createDirectory(atPath: mahoDir, withIntermediateDirectories: true)
         print("Created .maho/")
     }
 
-    // --- .gitignore ---
     let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
     if !fm.fileExists(atPath: gitignorePath) {
         try ".maho/\n".write(toFile: gitignorePath, atomically: true, encoding: .utf8)
@@ -86,24 +119,34 @@ public func initVault(
         }
     }
 
-    // --- Tutorial notes (cloned from remote) ---
     if !skipTutorial {
         let gsDir = (vaultPath as NSString).appendingPathComponent("getting-started")
         if !fm.fileExists(atPath: gsDir) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["clone", "--depth", "1", tutorialRepoURL, "getting-started"]
-            process.currentDirectoryURL = URL(fileURLWithPath: vaultPath)
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
+            // Try SSH version of tutorial URL first, then the provided URL (usually HTTPS)
+            let sshURL = tutorialRepoURL
+                .replacingOccurrences(of: "https://github.com/", with: "git@github.com:")
+            let urlsToTry = sshURL != tutorialRepoURL ? [sshURL, tutorialRepoURL] : [tutorialRepoURL]
 
             var cloneSucceeded = false
-            do {
-                try process.run()
-                process.waitUntilExit()
-                cloneSucceeded = process.terminationStatus == 0
-            } catch {
-                // git not installed or other launch failure
+            for url in urlsToTry {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                process.arguments = ["clone", "--depth", "1", url, "getting-started"]
+                process.currentDirectoryURL = URL(fileURLWithPath: vaultPath)
+                process.standardOutput = Pipe()
+                process.standardError = Pipe()
+                process.environment = (ProcessInfo.processInfo.environment).merging(
+                    ["GIT_TERMINAL_PROMPT": "0"], uniquingKeysWith: { _, new in new }
+                )
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    if process.terminationStatus == 0 {
+                        cloneSucceeded = true
+                        break
+                    }
+                } catch {}
             }
 
             if cloneSucceeded {
@@ -115,6 +158,202 @@ public func initVault(
             }
         }
     }
+}
 
+// MARK: - Registry helper
+
+/// Registers `name` in the vault registry, setting it as primary if it's the first vault.
+/// Skips silently if already registered.
+func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String) throws {
+    var registry = (try? loadRegistry(globalConfigDir: globalConfigDir)) ?? VaultRegistry(primary: "", vaults: [])
+    guard registry.findVault(named: name) == nil else { return }
+
+    let entry = VaultEntry(
+        name: name,
+        type: .local,
+        github: githubRepo,
+        path: vaultPath,
+        access: .readWrite
+    )
+    try registry.addVault(entry)
+    if registry.primary.isEmpty {
+        registry.primary = name
+    }
+    try saveRegistry(registry, globalConfigDir: globalConfigDir)
+    print("Registered vault '\(name)' in registry")
+}
+
+// MARK: - Public API
+
+/// Creates an empty vault at `vaultRoot/name` and registers it.
+public func createEmptyVault(
+    name: String,
+    vaultRoot: String,
+    authorName: String,
+    skipTutorial: Bool,
+    globalConfigDir: String,
+    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
+) throws {
+    let fm = FileManager.default
+    if !fm.fileExists(atPath: vaultRoot) {
+        try fm.createDirectory(atPath: vaultRoot, withIntermediateDirectories: true)
+    }
+    let vaultPath = (vaultRoot as NSString).appendingPathComponent(name)
+
+    try ensureGlobalConfig(globalConfigDir: globalConfigDir)
+    try writeVaultFiles(
+        vaultPath: vaultPath,
+        authorName: authorName,
+        githubRepo: "",
+        skipTutorial: skipTutorial,
+        tutorialRepoURL: tutorialRepoURL
+    )
+    try registerVaultEntry(name: name, vaultPath: vaultPath, githubRepo: nil, globalConfigDir: globalConfigDir)
+    print("Vault initialized at \(vaultPath)")
+}
+
+/// Clones a GitHub vault into `vaultRoot/<name>` and registers it.
+/// If the directory already exists, skips cloning and registers as-is.
+/// - Returns: The vault name that was registered.
+@discardableResult
+public func cloneGitHubVault(
+    repo: String,
+    vaultRoot: String,
+    name: String? = nil,
+    globalConfigDir: String
+) throws -> String {
+    let fm = FileManager.default
+    let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
+    let vaultPath = (vaultRoot as NSString).appendingPathComponent(vaultName)
+
+    if !fm.fileExists(atPath: vaultRoot) {
+        try fm.createDirectory(atPath: vaultRoot, withIntermediateDirectories: true)
+    }
+
+    try ensureGlobalConfig(globalConfigDir: globalConfigDir)
+
+    if !fm.fileExists(atPath: vaultPath) {
+        print("Cloning \(repo)...")
+
+        // Try SSH first (git@github.com:repo.git), then HTTPS
+        let urls = [
+            "git@github.com:\(repo).git",
+            "https://github.com/\(repo).git"
+        ]
+
+        var cloneSucceeded = false
+        for url in urls {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = ["clone", "--depth", "1", url, vaultName]
+            process.currentDirectoryURL = URL(fileURLWithPath: vaultRoot)
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            process.environment = (ProcessInfo.processInfo.environment).merging(
+                ["GIT_TERMINAL_PROMPT": "0"], uniquingKeysWith: { _, new in new }
+            )
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    cloneSucceeded = true
+                    break
+                }
+            } catch {}
+        }
+
+        if !cloneSucceeded {
+            throw VaultInitError.cloneFailed(repo)
+        }
+        print("Cloned \(repo) to \(vaultPath)")
+    } else {
+        print("Directory already exists at \(vaultPath), registering...")
+    }
+
+    // Detect or generate maho.yaml (import mode)
+    let mahoYaml = (vaultPath as NSString).appendingPathComponent("maho.yaml")
+    if !fm.fileExists(atPath: mahoYaml) {
+        let content = """
+        author:
+          name: ""
+          url: ""
+        collections: []
+        github:
+          repo: "\(repo)"
+        site:
+          domain: ""
+          title: My Notes
+          theme: default
+        """
+        try content.write(toFile: mahoYaml, atomically: true, encoding: .utf8)
+        print("Generated maho.yaml (import mode)")
+    }
+
+    // Ensure .maho/ and .gitignore
+    let mahoDir = (vaultPath as NSString).appendingPathComponent(".maho")
+    if !fm.fileExists(atPath: mahoDir) {
+        try fm.createDirectory(atPath: mahoDir, withIntermediateDirectories: true)
+    }
+    let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
+    if !fm.fileExists(atPath: gitignorePath) {
+        try ".maho/\n".write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+    } else {
+        let existing = try String(contentsOfFile: gitignorePath, encoding: .utf8)
+        if !existing.contains(".maho/") && !existing.contains(".maho\n") {
+            try (existing + "\n.maho/\n").write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+        }
+    }
+
+    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir)
+    print("Vault '\(vaultName)' ready at \(vaultPath)")
+    return vaultName
+}
+
+public enum VaultInitError: Error, CustomStringConvertible {
+    case cloneFailed(String)
+
+    public var description: String {
+        switch self {
+        case .cloneFailed(let repo): return "Failed to clone repository: \(repo)"
+        }
+    }
+}
+
+// MARK: - Legacy API
+
+/// Core vault initialization logic (legacy). Prefer `createEmptyVault` for new code.
+public func initVault(
+    vaultPath: String,
+    authorName: String,
+    githubRepo: String,
+    skipTutorial: Bool,
+    globalConfigDir: String,
+    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
+) throws {
+    let fm = FileManager.default
+    if !fm.fileExists(atPath: globalConfigDir) {
+        try fm.createDirectory(atPath: globalConfigDir, withIntermediateDirectories: true)
+    }
+    let globalConfigPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
+    if !fm.fileExists(atPath: globalConfigPath) {
+        let skeleton = """
+        # Maho Notes — global device config
+        # Auth tokens and device-specific settings
+        auth: {}
+        embed:
+          model: builtin
+        """
+        try skeleton.write(toFile: globalConfigPath, atomically: true, encoding: .utf8)
+        print("Created ~/.maho/config.yaml")
+    }
+
+    try writeVaultFiles(
+        vaultPath: vaultPath,
+        authorName: authorName,
+        githubRepo: githubRepo,
+        skipTutorial: skipTutorial,
+        tutorialRepoURL: tutorialRepoURL
+    )
     print("Vault initialized at \(vaultPath)")
 }
