@@ -313,18 +313,44 @@ Click search bar or press ⌘K → search panel drops down:
 - Type-as-you-search (debounced), results appear instantly
 - Empty state: recent searches + quick access (recently opened notes)
 
+### Collapsible Panels
+
+Both A and B panels can be collapsed to maximize writing space:
+
+```
+Full (default):        B collapsed:           A+B collapsed (focus mode):
+┌──┬─────┬────────┐   ┌──┬──────────────┐   ┌──────────────────────┐
+│A │ B   │   C    │   │A │     C        │   │         C            │
+│  │     │        │   │  │              │   │                      │
+└──┴─────┴────────┘   └──┴──────────────┘   └──────────────────────┘
+```
+
+| Shortcut | Action |
+|----------|--------|
+| **⌘⇧B** | Toggle B (navigator) |
+| **⌘⇧A** | Toggle A (vault rail) — also collapses B |
+| **⌘\\** | Toggle focus mode (collapse A+B together) |
+
+**Collapse behavior**:
+- B collapsed → thin vertical line as handle; click or ⌘⇧B to restore
+- A collapsed → B shifts to left edge; vault switching via dropdown in B header (shows vault icon + name, click for vault list)
+- A+B collapsed → C fills entire window; hover left edge or press shortcut to restore
+- Collapse state is remembered per-window (persisted across app restarts)
+
+**Auto-collapse**: when window width < 900pt, B auto-collapses; < 600pt, A+B auto-collapse (like responsive breakpoints).
+
 ### Platform Adaptation
 
 | Platform | A (Vault Rail) | B (Navigator) | C (Content) | Search |
 |----------|---------------|---------------|-------------|--------|
-| **macOS** | Always visible | Always visible, collapsible | Fills remaining | Title bar search bar + ⌘K panel |
-| **iPad landscape** | Always visible | Toggleable sidebar | Fills remaining | Top toolbar search bar + ⌘K |
-| **iPad portrait** | Hidden (swipe from left edge) | Overlay sidebar | Full width | 🔍 icon in toolbar → sheet |
-| **iPhone** | Hidden (vault picker in B header dropdown) | Full-screen push | Full-screen push | 🔍 in nav bar → full-screen search |
+| **macOS** | Visible (collapsible) | Visible (collapsible) | Fills remaining | Title bar search bar + ⌘K panel |
+| **iPad landscape** | Visible (collapsible) | Visible (collapsible) | Fills remaining | Top toolbar search bar + ⌘K |
+| **iPad portrait** | Hidden (vault dropdown in B header) | Overlay sidebar (swipe from left) | Full width | 🔍 icon in toolbar → sheet |
+| **iPhone** | Hidden (vault dropdown in B header) | Full-screen push | Full-screen push | 🔍 in nav bar → full-screen search |
 
 **iPhone adaptation**: A rail doesn't fit on phone — vault switching via a dropdown in B header. B panel is the root view; tapping a note pushes C full-screen.
 
-**iPad adaptation**: A rail visible in landscape; in portrait, A+B slide in as overlay. Search accessible via toolbar icon.
+**iPad adaptation**: In landscape, same as macOS (A+B+C). In portrait, A hides and B becomes a swipe-in overlay. Keyboard shortcuts work with external keyboard.
 
 ### vs. Obsidian
 
