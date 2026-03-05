@@ -28,6 +28,13 @@ struct MahoNotesApp: App {
                 .keyboardShortcut("\\", modifiers: .command)
             }
 
+            CommandGroup(after: .toolbar) {
+                Button("Cycle View Mode") {
+                    appState.cycleViewMode()
+                }
+                .keyboardShortcut("e", modifiers: .command)
+            }
+
             CommandGroup(after: .textEditing) {
                 Button("Search Notes") {
                     appState.toggleSearch()

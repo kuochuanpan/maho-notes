@@ -138,10 +138,131 @@ final class AppState {
         searchResults = []
     }
 
+    // MARK: - View Mode & Editing
+
+    /// View mode for the content panel.
+    enum ViewMode: String { case preview, editor, split }
+
+    /// Current view mode.
+    var viewMode: ViewMode = .preview
+
+    /// The current editing buffer (raw markdown body).
+    var editingBody: String = ""
+
+    /// Whether the editing buffer differs from the saved note body.
+    var hasUnsavedChanges: Bool {
+        guard let note = selectedNote else { return false }
+        return editingBody != note.body
+    }
+
+    /// Whether the current vault is read-only.
+    var isReadOnly: Bool {
+        selectedVault?.access == .readOnly
+    }
+
+    /// Copy the note body into the editing buffer.
+    func startEditing() {
+        guard let note = selectedNote else { return }
+        if editingBody.isEmpty || !hasUnsavedChanges {
+            editingBody = note.body
+        }
+    }
+
+    /// Cycle view mode: preview → editor → split → preview.
+    func cycleViewMode() {
+        guard !isReadOnly else { return }
+        switch viewMode {
+        case .preview: viewMode = .editor; startEditing()
+        case .editor: viewMode = .split; startEditing()
+        case .split: viewMode = .preview
+        }
+    }
+
+    /// Save the editing buffer back to the markdown file, preserving frontmatter.
+    @MainActor
+    func saveNote() {
+        guard let note = selectedNote, let entry = selectedVault, !isReadOnly else { return }
+        guard hasUnsavedChanges else { return }
+
+        let vaultPath = resolvedPath(for: entry)
+        let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
+
+        do {
+            let content = try String(contentsOfFile: filePath, encoding: .utf8)
+            let lines = content.components(separatedBy: "\n")
+
+            // Find frontmatter boundaries
+            guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return }
+            var closingIndex: Int?
+            for i in 1..<lines.count {
+                if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
+                    closingIndex = i
+                    break
+                }
+            }
+            guard let endIdx = closingIndex else { return }
+
+            // Update the `updated` timestamp in frontmatter
+            var frontmatterLines = Array(lines[0...endIdx])
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime]
+            let now = isoFormatter.string(from: Date())
+
+            if let updatedIdx = frontmatterLines.firstIndex(where: { $0.hasPrefix("updated:") }) {
+                frontmatterLines[updatedIdx] = "updated: \(now)"
+            } else {
+                frontmatterLines.insert("updated: \(now)", at: endIdx)
+            }
+
+            let newContent = frontmatterLines.joined(separator: "\n") + "\n" + editingBody
+            try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+
+            // Reload the note in allNotes
+            if let updated = try parseNote(at: filePath, relativeTo: vaultPath) {
+                if let idx = allNotes.firstIndex(where: { $0.relativePath == note.relativePath }) {
+                    allNotes[idx] = updated
+                }
+                // Update grouped notes
+                var grouped = notesByCollection
+                if var notes = grouped[updated.collection] {
+                    if let idx = notes.firstIndex(where: { $0.relativePath == updated.relativePath }) {
+                        notes[idx] = updated
+                        grouped[updated.collection] = notes
+                    }
+                }
+                notesByCollection = grouped
+            }
+        } catch {
+            // Silently fail for now — could add error reporting later
+        }
+    }
+
+    /// Revert editing buffer and switch to preview.
+    @MainActor
+    func cancelEditing() {
+        if let note = selectedNote {
+            editingBody = note.body
+        }
+        viewMode = .preview
+    }
+
     // MARK: - Note Selection
 
     /// Relative path of the currently selected note.
     var selectedNotePath: String?
+
+    /// Call when changing selected note to handle auto-save and reset.
+    @MainActor
+    func selectNote(path: String?) {
+        // Auto-save when switching notes
+        if selectedNotePath != nil && selectedNotePath != path && hasUnsavedChanges {
+            saveNote()
+        }
+        selectedNotePath = path
+        // Reset view mode to preview when selecting a new note
+        viewMode = .preview
+        editingBody = ""
+    }
 
     /// The currently selected note (loaded on demand).
     var selectedNote: Note? {

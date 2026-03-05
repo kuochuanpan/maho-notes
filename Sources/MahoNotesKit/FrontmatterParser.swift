@@ -40,6 +40,38 @@ private func formatDateField(_ value: Any?) -> String {
     return "\(value)"
 }
 
+/// Update the `public` field in a note's YAML frontmatter.
+/// Rewrites the file in place, preserving all other content.
+public func setFrontmatterPublic(filePath: String, isPublic: Bool) throws {
+    let content = try String(contentsOfFile: filePath, encoding: .utf8)
+    let (yamlStr, body) = splitFrontmatter(content)
+
+    guard var yamlStr else {
+        throw NSError(domain: "MahoNotesKit", code: 1, userInfo: [NSLocalizedDescriptionKey: "No frontmatter found in \(filePath)"])
+    }
+
+    // Replace or add the public field
+    let publicLine = "public: \(isPublic)"
+    let lines = yamlStr.components(separatedBy: "\n")
+    var found = false
+    let updatedLines = lines.map { line -> String in
+        if line.trimmingCharacters(in: .whitespaces).hasPrefix("public:") {
+            found = true
+            return publicLine
+        }
+        return line
+    }
+
+    if found {
+        yamlStr = updatedLines.joined(separator: "\n")
+    } else {
+        yamlStr += "\n" + publicLine
+    }
+
+    let output = "---\n\(yamlStr)\n---\(body)"
+    try output.write(toFile: filePath, atomically: true, encoding: .utf8)
+}
+
 /// Parses a markdown file at the given path into a Note
 public func parseNote(at filePath: String, relativeTo vaultPath: String) throws -> Note? {
     let content = try String(contentsOfFile: filePath, encoding: .utf8)

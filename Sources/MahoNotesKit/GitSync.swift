@@ -475,7 +475,7 @@ public enum SyncError: Error, CustomStringConvertible {
 
 #if os(macOS)
 @discardableResult
-func runGit(_ args: [String], in directory: String, label: String, env: [String: String]? = nil) throws -> String {
+public func runGit(_ args: [String], in directory: String, label: String, env: [String: String]? = nil) throws -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     process.arguments = args
@@ -505,7 +505,7 @@ func runGit(_ args: [String], in directory: String, label: String, env: [String:
     return output
 }
 
-func runGitCapture(_ args: [String], in directory: String) throws -> Int32 {
+public func runGitCapture(_ args: [String], in directory: String) throws -> Int32 {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
     process.arguments = args

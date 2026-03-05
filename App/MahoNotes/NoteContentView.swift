@@ -1,7 +1,7 @@
 import SwiftUI
 import MahoNotesKit
 
-/// C — Note content panel showing the selected note's title and body.
+/// C -- Note content panel showing the selected note's title and body.
 struct NoteContentView: View {
     @Environment(AppState.self) private var appState
 
@@ -25,6 +25,11 @@ struct NoteContentView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Text(note.title)
+                if appState.hasUnsavedChanges {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 6, height: 6)
+                }
                 Spacer()
             }
             .font(.subheadline)
@@ -34,9 +39,45 @@ struct NoteContentView: View {
 
             Divider()
 
-            // Note body (rendered markdown)
-            MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
+            // Content area with floating toolbar overlay
+            ZStack(alignment: .bottomTrailing) {
+                contentForMode(note)
+                FloatingToolbarView()
+            }
         }
+    }
+
+    @ViewBuilder
+    private func contentForMode(_ note: Note) -> some View {
+        switch appState.viewMode {
+        case .preview:
+            MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
+        case .editor:
+            editorView
+                .onAppear { appState.startEditing() }
+        case .split:
+            HStack(spacing: 0) {
+                editorView
+                Divider()
+                MarkdownWebView(markdown: "# \(note.title)\n\n\(appState.editingBody)")
+            }
+            .onAppear { appState.startEditing() }
+        }
+    }
+
+    private var editorView: some View {
+        @Bindable var state = appState
+        return TextEditor(text: $state.editingBody)
+            .font(.system(.body, design: .monospaced))
+            .scrollContentBackground(.hidden)
+            .padding(12)
+            .task(id: appState.editingBody) {
+                // Debounced auto-save: 2s after last keystroke
+                try? await Task.sleep(for: .seconds(2))
+                if !Task.isCancelled {
+                    appState.saveNote()
+                }
+            }
     }
 
     // MARK: - Empty State

@@ -159,6 +159,155 @@ public struct SiteGenerator: Sendable {
         return GenerationResult(generated: generated, skipped: skipped, errors: errors)
     }
 
+    /// Generate the static site incrementally, skipping unchanged notes
+    public func generateIncremental(to outputPath: String, manifest: PublishManifest, notes: [Note]? = nil) throws -> (result: GenerationResult, manifest: PublishManifest) {
+        let fm = FileManager.default
+        let allNotes = try notes ?? vault.allNotes()
+
+        // Filter to public, non-draft notes
+        let publicNotes = allNotes.filter { $0.isPublic && !$0.draft }
+        let publicPaths = Set(publicNotes.map { $0.relativePath })
+
+        // Create output directory
+        try fm.createDirectory(atPath: outputPath, withIntermediateDirectories: true)
+
+        var newManifest = PublishManifest()
+        var generated = 0
+        var skipped = 0
+        var errors = 0
+        let renderer = MarkdownHTMLRenderer()
+
+        // Remove stale entries: notes in old manifest but no longer public/existing
+        for (path, entry) in manifest.entries {
+            if !publicPaths.contains(path) {
+                // Remove the HTML file
+                let htmlPath = "\(outputPath)/c/\(entry.collection)/\(entry.slug).html"
+                try? fm.removeItem(atPath: htmlPath)
+            }
+        }
+
+        // Generate individual note pages
+        for note in publicNotes {
+            do {
+                let hash = PublishManifest.contentHash(for: note)
+                let slug = note.slug ?? makeSlug(from: note.title)
+                let col = note.collection
+
+                // Check if unchanged
+                if let existing = manifest.entries[note.relativePath],
+                   existing.contentHash == hash {
+                    // Carry forward
+                    newManifest.entries[note.relativePath] = existing
+                    skipped += 1
+                    continue
+                }
+
+                let dir = "\(outputPath)/c/\(col)"
+                try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+                let htmlBody = renderer.render(note.body)
+                let readingTime = Self.readingTime(for: note.body)
+                let description = Self.plainTextExcerpt(from: note.body, maxLength: 160)
+                let url = "\(config.domain)/c/\(col)/\(slug).html"
+
+                let page = Self.notePage(
+                    note: note,
+                    htmlBody: htmlBody,
+                    readingTime: readingTime,
+                    description: description,
+                    url: url,
+                    config: config
+                )
+
+                try page.write(toFile: "\(dir)/\(slug).html", atomically: true, encoding: .utf8)
+                generated += 1
+
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime]
+
+                newManifest.entries[note.relativePath] = PublishManifest.ManifestEntry(
+                    contentHash: hash,
+                    slug: slug,
+                    collection: col,
+                    generatedAt: formatter.string(from: Date())
+                )
+            } catch {
+                errors += 1
+            }
+        }
+
+        // Always regenerate collection indexes, site index, and RSS (they depend on note list)
+        let nonNoteCount = generateSharedPages(to: outputPath, publicNotes: publicNotes, renderer: renderer)
+        generated += nonNoteCount
+
+        // Copy _assets/ if it exists
+        let assetsSource = (vault.path as NSString).appendingPathComponent("_assets")
+        let assetsDest = (outputPath as NSString).appendingPathComponent("_assets")
+        if fm.fileExists(atPath: assetsSource) {
+            if fm.fileExists(atPath: assetsDest) {
+                try fm.removeItem(atPath: assetsDest)
+            }
+            try fm.copyItem(atPath: assetsSource, toPath: assetsDest)
+        }
+
+        return (
+            result: GenerationResult(generated: generated, skipped: skipped, errors: errors),
+            manifest: newManifest
+        )
+    }
+
+    /// Generate collection indexes, site index, and RSS feed. Returns count of generated files.
+    private func generateSharedPages(to outputPath: String, publicNotes: [Note], renderer: MarkdownHTMLRenderer) -> Int {
+        var generated = 0
+
+        // Group notes by collection
+        var notesByCollection: [String: [Note]] = [:]
+        for note in publicNotes {
+            notesByCollection[note.collection, default: []].append(note)
+        }
+
+        // Sort notes within each collection
+        for key in notesByCollection.keys {
+            notesByCollection[key]?.sort { a, b in
+                if let oa = a.order, let ob = b.order { return oa < ob }
+                if a.order != nil { return true }
+                if b.order != nil { return false }
+                return a.title < b.title
+            }
+        }
+
+        let collections = (try? vault.collections()) ?? []
+        let collectionMap = Dictionary(uniqueKeysWithValues: collections.map { ($0.id, $0) })
+
+        for (colId, colNotes) in notesByCollection {
+            do {
+                let dir = "\(outputPath)/c/\(colId)"
+                try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                let colMeta = collectionMap[colId]
+                let colName = colMeta?.name ?? colId
+                let page = Self.collectionPage(collectionId: colId, collectionName: colName, notes: colNotes, config: config)
+                try page.write(toFile: "\(dir)/index.html", atomically: true, encoding: .utf8)
+                generated += 1
+            } catch {}
+        }
+
+        do {
+            let indexPage = Self.indexPage(notesByCollection: notesByCollection, collectionMap: collectionMap, config: config)
+            try indexPage.write(toFile: "\(outputPath)/index.html", atomically: true, encoding: .utf8)
+            generated += 1
+        } catch {}
+
+        do {
+            let sortedNotes = publicNotes.sorted { $0.updated > $1.updated }
+            let feedNotes = Array(sortedNotes.prefix(20))
+            let feed = Self.rssFeed(notes: feedNotes, config: config)
+            try feed.write(toFile: "\(outputPath)/feed.xml", atomically: true, encoding: .utf8)
+            generated += 1
+        } catch {}
+
+        return generated
+    }
+
     // MARK: - Reading Time
 
     static func readingTime(for text: String) -> Int {

@@ -49,7 +49,7 @@ struct NavigatorView: View {
     private var list: some View {
         List(selection: Binding(
             get: { appState.selectedNotePath },
-            set: { appState.selectedNotePath = $0 }
+            set: { appState.selectNote(path: $0) }
         )) {
             collectionsSection
             recentSection
