@@ -23,7 +23,7 @@ mn sync (GitHub, explicit)
 
 `mn sync` syncs vaults with their configured GitHub remotes. iCloud settles first (local), then GitHub sync runs against the settled local state.
 
-## Multi-Vault Architecture (Phase 1d)
+## Multi-Vault Architecture
 
 A user can have **multiple vaults** — one primary (iCloud) and any number of additional GitHub-backed vaults. This enables:
 - **Knowledge separation**: personal notes, work notes, reference material in distinct repos
@@ -51,11 +51,14 @@ A user can have **multiple vaults** — one primary (iCloud) and any number of a
 
 ## Vault Types
 
+> **"Primary" = "Default"**: The primary vault is simply whichever vault is set as the default (via `mn vault set-primary <name>`). It's the target for commands when no `--vault` flag is specified. Any vault can be primary — there's no special type, just a designation in the vault registry.
+
 | Type | Source | Access | Sync |
 |------|--------|--------|------|
-| **Primary** | iCloud (+ optional GitHub) | read-write | iCloud auto + `mn sync` |
+| **iCloud** | iCloud container | read-write | iCloud auto + optional `mn sync` (GitHub) |
 | **GitHub (owned)** | Your GitHub repo | read-write | `mn sync` (pull + push) |
-| **GitHub (public/read-only)** | Others' public repos | read-only (local changes stay local) | `mn sync` (pull only, never push) |
+| **GitHub (read-only)** | Others' public repos | read-only (local changes stay local) | `mn sync` (pull only, never push) |
+| **Local** | Local directory (macOS only) | read-write | None (manual backup) |
 
 ## Vault Registry
 
@@ -130,7 +133,8 @@ Auth tokens and device-specific settings are stored **per-device**, never in iCl
 | Platform | Location | Contents |
 |----------|----------|----------|
 | macOS CLI | `~/.maho/config.yaml` | Auth tokens, embed model, cache |
-| macOS/iOS App | Keychain + UserDefaults | Auth tokens (Keychain), preferences (UserDefaults) |
+| macOS App | Keychain + UserDefaults | Auth tokens (Keychain), preferences (UserDefaults) |
+| iOS / iPadOS App | Keychain + UserDefaults | Auth tokens (Keychain), preferences (UserDefaults) |
 
 The `~/.maho/` directory on macOS CLI also serves as cache for GitHub vault clones.
 

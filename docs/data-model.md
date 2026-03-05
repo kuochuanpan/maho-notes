@@ -130,7 +130,7 @@ Lives in the iCloud container so it syncs across all Apple devices automatically
 
 ```yaml
 # iCloud~com.pcca.mahonotes/config/vaults.yaml
-primary: personal
+primary: personal    # default vault (used when no --vault flag specified)
 vaults:
   - name: personal
     type: icloud
