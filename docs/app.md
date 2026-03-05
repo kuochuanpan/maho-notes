@@ -338,10 +338,19 @@ Full (default):        B collapsed:           A+B collapsed (focus mode):
 | **⌘⇧A** | Toggle A (vault rail) — also collapses B |
 | **⌘\\** | Toggle focus mode (collapse A+B together) |
 
+**UI Controls**:
+
+| UI Element | Location | Action |
+|------------|----------|--------|
+| Sidebar toggle (`sidebar.left` SF Symbol) | B header, left side | Click: toggle B / Long-press: toggle A+B |
+| Thin edge handle (~4pt) | Left edge when A/B collapsed | Click/tap: restore previous panel state |
+| Focus icon (`arrow.up.left.and.arrow.down.right`) | C floating toolbar (optional) | Click: toggle focus mode (A+B) |
+
 **Collapse behavior**:
-- B collapsed → thin vertical line as handle; click or ⌘⇧B to restore
-- A collapsed → B shifts to left edge; vault switching via dropdown in B header (shows vault icon + name, click for vault list)
-- A+B collapsed → C fills entire window; hover left edge or press shortcut to restore
+- B collapsed → thin vertical line as handle on left edge of C; click handle or ⌘⇧B to restore
+- A collapsed → B shifts to left edge; vault switching via dropdown in B header (shows vault icon + name, click for vault list); sidebar toggle remains in B header
+- A+B collapsed → C fills entire window; thin handle on left edge; hover/tap to restore
+- Sidebar toggle icon rotates or changes state to indicate collapsed panels
 - Collapse state is remembered per-window (persisted across app restarts)
 
 **Auto-collapse**: when window width < 900pt, B auto-collapses; < 600pt, A+B auto-collapse (like responsive breakpoints).
