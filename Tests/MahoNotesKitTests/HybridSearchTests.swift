@@ -51,4 +51,29 @@ struct HybridSearchTests {
         let merged = HybridSearch.merge(ftsResults: [], vectorResults: [])
         #expect(merged.isEmpty)
     }
+
+    @Test func ranksAreTracked() {
+        let ftsResults: [SearchResult] = [
+            SearchResult(path: "a.md", title: "A", tags: [], snippet: "", rank: -5.0),
+            SearchResult(path: "b.md", title: "B", tags: [], snippet: "", rank: -3.0),
+        ]
+        let vecResults: [VectorSearchResult] = [
+            VectorSearchResult(path: "b.md", chunkText: "", score: 0.9, chunkId: 0),
+            VectorSearchResult(path: "c.md", chunkText: "", score: 0.8, chunkId: 0),
+        ]
+
+        let merged = HybridSearch.merge(ftsResults: ftsResults, vectorResults: vecResults)
+
+        let a = merged.first { $0.path == "a.md" }!
+        #expect(a.ftsRank == 1)
+        #expect(a.vectorRank == nil)
+
+        let b = merged.first { $0.path == "b.md" }!
+        #expect(b.ftsRank == 2)
+        #expect(b.vectorRank == 1)
+
+        let c = merged.first { $0.path == "c.md" }!
+        #expect(c.ftsRank == nil)
+        #expect(c.vectorRank == 2)
+    }
 }

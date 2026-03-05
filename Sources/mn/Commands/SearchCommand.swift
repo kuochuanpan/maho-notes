@@ -28,10 +28,19 @@ struct SearchCommand: AsyncParsableCommand {
 
     func run() async throws {
         if semantic || hybrid {
-            try vaultOption.validateVaultExists()
-            let vault = vaultOption.makeVault()
             if #available(macOS 15.0, *) {
-                try await runSemanticOrHybrid(vault: vault)
+                // Cross-vault semantic/hybrid: iterate all vaults
+                let searchAll = all || vaultOption.vault == nil
+                if searchAll, let entries = vaultOption.allVaultEntries(), !entries.isEmpty {
+                    for entry in entries {
+                        let vault = Vault(path: MahoNotesKit.resolvedPath(for: entry))
+                        try await runSemanticOrHybrid(vault: vault)
+                    }
+                } else {
+                    try vaultOption.validateVaultExists()
+                    let vault = vaultOption.makeVault()
+                    try await runSemanticOrHybrid(vault: vault)
+                }
             } else {
                 throw ValidationError("Semantic search requires macOS 15+")
             }
@@ -74,8 +83,8 @@ struct SearchCommand: AsyncParsableCommand {
 
             if VectorIndex.vectorIndexExists(vaultPath: vault.path),
                let vecIndex = try? VectorIndex(vaultPath: vault.path),
-               let modelName = try? vecIndex.currentModel(),
-               let embeddingModel = EmbeddingModel(rawValue: modelName ?? "") {
+               let modelName = (try? vecIndex.currentModel()) ?? nil,
+               let embeddingModel = EmbeddingModel(rawValue: modelName) {
                 let provider = SwiftEmbeddingsProvider(model: embeddingModel)
                 let queryVector = try await provider.embed(query)
                 let vecResults = try vecIndex.search(queryVector: queryVector, limit: 50)
@@ -143,14 +152,17 @@ struct SearchCommand: AsyncParsableCommand {
     private func outputHybridResults(_ results: [HybridSearchResult]) {
         if outputOption.json {
             let jsonArray = results.map { r -> [String: Any] in
-                [
+                var d: [String: Any] = [
                     "path": r.path,
                     "title": r.title,
                     "tags": r.tags,
                     "snippet": r.snippet,
-                    "rrfScore": r.rrfScore,
+                    "rrf_score": r.rrfScore,
                     "sources": Array(r.sources),
                 ]
+                if let ftsRank = r.ftsRank { d["fts_rank"] = ftsRank }
+                if let vectorRank = r.vectorRank { d["vector_rank"] = vectorRank }
+                return d
             }
             if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
                let str = String(data: data, encoding: .utf8) {

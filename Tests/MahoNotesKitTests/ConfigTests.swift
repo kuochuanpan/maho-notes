@@ -135,4 +135,35 @@ struct ConfigTests {
         #expect(author?["name"] as? String == "Test User")
         #expect(author?["url"] as? String == "https://example.com")
     }
+
+    // MARK: - embed.model persistence
+
+    @Test func setEmbedModelPersistsToDeviceConfig() throws {
+        let (config, tmp) = try makeTestVault()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        try config.setValue(key: "embed.model", value: "minilm")
+        let device = try config.loadDeviceConfig()
+        let embed = device["embed"] as? [String: Any]
+        #expect(embed?["model"] as? String == "minilm")
+    }
+
+    @Test func resolveEmbedModelReadsVaultDeviceConfig() throws {
+        let (config, tmp) = try makeTestVault()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        try config.setValue(key: "embed.model", value: "e5-small")
+        let resolved = Config.resolveEmbedModel(vaultPath: tmp.path)
+        #expect(resolved == "e5-small")
+    }
+
+    @Test func resolveEmbedModelReturnsNilWhenUnset() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("test-vault-\(UUID().uuidString)")
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: tmp) }
+
+        let resolved = Config.resolveEmbedModel(vaultPath: tmp.path)
+        #expect(resolved == nil)
+    }
 }

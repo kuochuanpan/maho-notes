@@ -8,6 +8,8 @@ public struct HybridSearchResult: Sendable {
     public let snippet: String
     public let rrfScore: Double
     public let sources: Set<String> // "fts", "vec"
+    public let ftsRank: Int?     // 1-based rank in FTS results, nil if not in FTS
+    public let vectorRank: Int?  // 1-based rank in vector results, nil if not in vector
 }
 
 /// Reciprocal Rank Fusion: merge two ranked result lists.
@@ -23,16 +25,19 @@ public enum HybridSearch {
         var scoresByPath: [String: Double] = [:]
         var metaByPath: [String: (title: String, tags: [String], snippet: String)] = [:]
         var sourcesByPath: [String: Set<String>] = [:]
+        var ftsRankByPath: [String: Int] = [:]
+        var vecRankByPath: [String: Int] = [:]
 
-        // FTS ranked results
+        // FTS ranked results (1-based ranks)
         for (rank, r) in ftsResults.enumerated() {
             let rrfContrib = 1.0 / (k + Double(rank + 1))
             scoresByPath[r.path, default: 0] += rrfContrib
             metaByPath[r.path] = (title: r.title, tags: r.tags, snippet: r.snippet)
             sourcesByPath[r.path, default: []].insert("fts")
+            ftsRankByPath[r.path] = rank + 1
         }
 
-        // Vector ranked results
+        // Vector ranked results (1-based ranks)
         for (rank, r) in vectorResults.enumerated() {
             let rrfContrib = 1.0 / (k + Double(rank + 1))
             scoresByPath[r.path, default: 0] += rrfContrib
@@ -40,6 +45,7 @@ public enum HybridSearch {
                 metaByPath[r.path] = (title: "", tags: [], snippet: r.chunkText)
             }
             sourcesByPath[r.path, default: []].insert("vec")
+            vecRankByPath[r.path] = rank + 1
         }
 
         return scoresByPath
@@ -54,7 +60,9 @@ public enum HybridSearch {
                     tags: meta.tags,
                     snippet: meta.snippet,
                     rrfScore: score,
-                    sources: sources
+                    sources: sources,
+                    ftsRank: ftsRankByPath[path],
+                    vectorRank: vecRankByPath[path]
                 )
             }
     }
