@@ -14,7 +14,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.3"),
-        .package(url: "https://github.com/mahopan/swift-cjk-sqlite.git", from: "0.1.0"),
+        .package(url: "https://github.com/mahopan/swift-cjk-sqlite.git", from: "0.2.0"),
     ],
     targets: [
         .target(
