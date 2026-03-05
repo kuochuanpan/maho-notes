@@ -262,20 +262,27 @@ Editing note A, then open note B → tab bar appears:
 
 **Floating Toolbar** (bottom-right corner):
 
-View mode (minimal):
+View mode (minimal — single icon cycles through modes):
 ```
-┌──────────┐
-│ ✏️ 👁 ⊞  │  ← edit / preview / split
-└──────────┘
+┌─────┐
+│ 👁  │  ← click to cycle: 👁 Preview → ✏️ Editor → ⊞ Split → 👁 Preview...
+└─────┘
 ```
 
-Edit mode (expanded):
+Edit mode (expanded — formatting tools appear):
 ```
-┌────────────────────────────────────────┐
-│ B  I  H  🔗 🖼 ``` 📊 {|} │ ✏️ 👁 ⊞  │
-│ bold italic heading link img code tbl ruby │ modes │
-└────────────────────────────────────────┘
+┌──────────────────────────────────┐
+│ B  I  H  🔗 🖼 ``` 📊 {|}  ✏️  │
+│ bold italic heading link img code tbl ruby  mode │
+└──────────────────────────────────┘
 ```
+
+**View mode cycling**: single icon, click to advance. Icon changes to reflect current mode:
+- 👁 = Preview (reading)
+- ✏️ = Editor (writing)
+- ⊞ = Split (side-by-side)
+
+**Read-only vault**: mode icon shows 👁 with dimmed/disabled appearance (muted color, no hover effect). Click does nothing — read-only vaults are always in preview mode. Formatting toolbar never appears.
 
 ### Title Bar — Search
 
