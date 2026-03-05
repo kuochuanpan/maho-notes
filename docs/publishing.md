@@ -120,6 +120,26 @@ site:
 - Each vault publishes to its own GitHub repo → its own GitHub Pages site
 - Cross-vault links are not supported in published sites (each site is self-contained)
 
+## GitHub Pages Free-Tier Limitations
+
+| Constraint | Limit |
+|-----------|-------|
+| Repo visibility | **Public only** (private repo Pages requires Pro/Team/Enterprise) |
+| Site size | ≤ 1 GB |
+| Bandwidth | ≤ 100 GB/month (soft limit) |
+| Build frequency | ≤ 10 builds/hour |
+
+Our design separates the **vault repo** (can be private — personal notes) from the **publishing repo** (must be public for free users). `mn publish` pushes generated HTML to the publishing repo, not the vault repo.
+
+### Alternative Hosting (Future)
+
+For users who need private-repo publishing or higher limits, we plan to support:
+- **Netlify** — free tier supports private repos, 100 GB bandwidth/month
+- **Cloudflare Pages** — free tier supports private repos, unlimited bandwidth
+- **Vercel** — free tier supports private repos, 100 GB bandwidth/month
+
+The static site generator output is standard HTML — any static hosting works. The initial implementation targets GitHub Pages; alternative providers can be added later.
+
 ## Our Instance
 
 - `notes.pcca.dev` → Kuo-Chuan's personal published notes (our own GitHub Pages)

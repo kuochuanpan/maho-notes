@@ -1,5 +1,9 @@
 # Sync Strategy
 
+## Sync Architecture
+
+The sync layer is designed around an abstract **`SyncProvider`** protocol. iCloud is the first (and initially only) cloud sync implementation. The abstraction preserves room for future backends (Google Drive, Synology Drive, WebDAV, Dropbox, etc.) without redesigning the sync pipeline. GitHub is a separate, optional layer — not a general sync backend, but a version control + publishing bridge.
+
 ## Two Sync Layers
 
 The primary vault lives in iCloud by default. GitHub is an optional second layer for power users.
