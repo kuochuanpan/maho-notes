@@ -37,13 +37,14 @@
 - [x] Update all tests (4 files + 1 migration test added)
 - [x] 85 tests passing
 
-### 0.2 — `mn init` Wizard
-- [ ] Interactive mode (default): prompt for vault type (iCloud / Local / GitHub), author name, optional GitHub repo
-- [ ] Non-interactive flags: `--icloud`, `--path <dir>`, `--author <name>`, `--github <repo>`
-- [ ] `--no-tutorial` flag: skip tutorial vault clone
-- [ ] Global `~/.maho/` setup: create if missing, write `config.yaml` skeleton
-- [ ] Idempotent: safe to run again (only add missing config, never overwrite)
-- [ ] Update tests
+### 0.2 — `mn init` Wizard ✅ (2026-03-04)
+- [x] Interactive wizard mode: prompts for author, GitHub repo, tutorial (readLine)
+- [x] Non-interactive flags: `--author <name>`, `--github <repo>`, `--non-interactive`
+- [x] `--no-tutorial` flag: skip tutorial notes + collection
+- [x] Global `~/.maho/` setup: creates `~/.maho/config.yaml` skeleton
+- [x] Idempotent: safe to run again (never overwrites)
+- [x] Core logic extracted to `MahoNotesKit/VaultInit.swift` (testable)
+- [x] 10 new tests (94 total, all passing)
 
 ### 0.3 — Tutorial as Separate Vault
 - [ ] Create `kuochuanpan/maho-getting-started` repo with tutorial notes (currently inline in InitCommand)
