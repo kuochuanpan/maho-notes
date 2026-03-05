@@ -48,6 +48,8 @@
 
 24. **Replace BGE-M3 with multilingual-e5-large**: Originally planned `BAAI/bge-m3` (1024 dim, ~2.2GB) as the Pro model tier. Discovered during implementation (2026-03-05) that BGE-M3 only ships `pytorch_model.bin` — no `model.safetensors`. `swift-embeddings` exclusively uses Safetensors format; no PyTorch loader available. Replaced with `intfloat/multilingual-e5-large` (1024 dim, ~2.2GB, XLMRoberta, safetensors ✅). Same model family as e5-small (both from intfloat), ensuring API compatibility. Quality is comparable to BGE-M3 on multilingual benchmarks.
 
+25. **Slack-inspired UI layout**: Three-zone layout: A (vault rail, ~48pt) | B (tree navigator, ~240pt) | C (content). Vault rail uses rounded-square icons like Slack workspace switcher — one icon per vault, grouped by type (iCloud → GitHub → read-only), with `＋` at top to add vaults and author+settings pinned at bottom. B panel is a pure tree explorer (no mode switching) with sections: Starred collections → Collection tree (expand in-place to show notes) → Pinned notes → Recent. C panel has smart tab bar (hidden by default, appears only when editing a note and opening another — preserves unsaved state), breadcrumb navigation, and floating toolbar (minimal in view mode, expanded in edit mode). Search bar embedded in macOS title bar (like Slack), triggered by ⌘K, with scope picker (All Vaults / This Vault) and mode picker (Text / Semantic / Hybrid). Design goal: cleaner than Obsidian — no plugin ribbon, no permanent tab bar, no settings maze.
+
 ---
 
 *Design by 真帆 🔭 — 2026-03-04, updated 2026-03-05*
