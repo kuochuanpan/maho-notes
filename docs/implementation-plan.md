@@ -98,48 +98,67 @@
 ## Phase 2: Vector Search
 
 > On-device semantic search with multilingual embedding models.
+> Runtime: `swift-embeddings` (MLTensor) + `SQLiteVec` (sqlite-vec). No Apple NLEmbedding — see Decision #21.
 
-### 2.1 — sqlite-vec Integration
-- [ ] Add sqlite-vec SPM dependency to Package.swift
-- [ ] Verify sqlite-vec compiles with our swift-cjk-sqlite (both extend SQLite — check for conflicts)
-- [ ] `VectorIndex.swift` in MahoNotesKit: create/query vector tables
-- [ ] Schema: `embeddings(path TEXT, embedding BLOB, model TEXT, mtime REAL)`
+### 2.1 — sqlite-vec + CJKSQLite Compatibility Spike
+- [ ] Add `SQLiteVec` SPM dependency to Package.swift
+- [ ] Spike test: load both CJKSQLite (FTS5) and sqlite-vec in the same process
+  - Can they share the same `index.db`? Or do we need separate DB files?
+  - If conflict: extend CJKSQLite's `Database` to load sqlite-vec extension (we own the repo)
+  - If no conflict: proceed with single `index.db`
+- [ ] `VectorIndex.swift` in MahoNotesKit: create/query vec0 virtual table + chunks metadata table
+- [ ] Schema: `vec_chunks` (vec0 virtual table) + `chunks` (path, chunk_id, chunk_text, model, mtime)
 - [ ] Tests: basic insert/query with dummy vectors
 
 ### 2.2 — Embedding Pipeline
-- [ ] `EmbeddingProvider.swift` protocol: `func embed(_ text: String) -> [Float]`, `var dimensions: Int`
-- [ ] Tier 1 (built-in): `NLEmbeddingProvider` — Apple NLEmbedding, 0 MB download
+- [ ] Add `swift-embeddings` SPM dependency to Package.swift
+- [ ] `EmbeddingProvider.swift` protocol:
+  - `func embed(_ text: String) async throws -> [Float]`
+  - `func embedBatch(_ texts: [String]) async throws -> [[Float]]`
+  - `var dimensions: Int`
+  - `var modelIdentifier: String`
+- [ ] `SwiftEmbeddingsProvider`: wraps `swift-embeddings` XLMRoberta/Bert model loading
+- [ ] Default model: `all-MiniLM-L6-v2` (384 dim, ~90MB, 50+ languages)
+- [ ] Model auto-download from HuggingFace Hub → cached in `~/.maho/models/`
 - [ ] Model selection: `~/.maho/config.yaml` → `embed.model` field
-- [ ] `mn index --model <name>`: set + re-embed with specified model
-- [ ] Chunking strategy for long notes: split by headings or paragraphs, embed each chunk
-- [ ] Incremental: only re-embed changed notes (mtime check)
-- [ ] Tests: NLEmbedding provider, chunking, incremental logic
+- [ ] `mn index --model <name>`: set model + re-embed all notes
+- [ ] Chunking: heading-based split (see search.md § Chunking Strategy)
+  - Short notes (< 512 tokens) → single chunk with title prefix
+  - Long notes → split by headings, title prefix per chunk
+  - No overlap, no frontmatter embedding
+- [ ] Incremental: only re-embed changed notes (mtime check); prune deleted notes
+- [ ] Tests: embedding provider, chunking logic, incremental indexing, model mismatch detection
 
 ### 2.3 — Semantic Search
-- [ ] `mn search --semantic "query"`: embed query → cosine similarity → top-K results
-- [ ] `--limit N` flag for top-K (default: 10)
+- [ ] `mn search --semantic "query"`: embed query → sqlite-vec cosine similarity → top-K chunks
+- [ ] Chunk-to-note aggregation: best chunk score per note → note-level ranking
+- [ ] `--limit N` flag for top-K notes (default: 10)
 - [ ] Cross-vault semantic search (query all vault indices)
-- [ ] Result format: path, score, snippet
-- [ ] Tests: end-to-end semantic search
+- [ ] Result format: path, score, snippet (from best-matching chunk)
+- [ ] Graceful error: if no vector index → print error + suggest `mn index --model <name>`
+- [ ] Tests: end-to-end semantic search with real embeddings
 
 ### 2.4 — Hybrid Search (RRF)
-- [ ] Combine FTS5 results + vector results via Reciprocal Rank Fusion
+- [ ] Combine FTS5 results + vector results via Reciprocal Rank Fusion (k=60)
 - [ ] Default search mode: FTS5 only (fast, no model needed)
 - [ ] `--semantic` flag: vector only
-- [ ] `--hybrid` flag: combined (requires vector index)
-- [ ] Graceful fallback: if no vector index exists, silently use FTS5 only
-- [ ] Tests: RRF merging logic
-
-### 2.5 — Additional Embedding Tiers (Optional, Lower Priority)
-- [ ] Tier 2 (Light): all-MiniLM-L6-v2 multilingual (90MB CoreML)
-- [ ] Tier 3 (Standard): multilingual-e5-small (470MB CoreML)
-- [ ] Tier 4 (Pro): BGE-M3 (2.2GB CoreML, optional MLX)
-- [ ] Model download + caching logic
-- [ ] CLI: `mn index --model bge-m3` triggers download if not cached
+- [ ] `--hybrid` flag: combined RRF merge
+- [ ] Graceful fallback: `--hybrid` without vector index → FTS5 only + stderr warning
+- [ ] `--json` output includes both fts_rank and vector_rank for debugging
+- [ ] Tests: RRF merging logic, edge cases (no overlap, one-sided results)
 
 **Estimated effort:** 4–5 sessions  
-**Dependencies:** Phase 0  
-**Tests:** ~25 new tests expected
+**Dependencies:** Phase 0, swift-cjk-sqlite compatibility  
+**Tests:** ~30 new tests expected
+
+### Phase 2b (Future): Additional Embedding Tiers
+> Deferred to Phase 4 (native app) where model selection has a proper UI.
+
+- [ ] Standard tier: multilingual-e5-small (470MB, 384 dim)
+- [ ] Pro tier: BGE-M3 (2.2GB, 1024 dim) — Mac recommended
+- [ ] Model download manager with progress UI
+- [ ] Model switching in Settings → Search → Embedding Model
+- [ ] On-Demand Resources (ODR) for App Store distribution
 
 ---
 
@@ -327,7 +346,7 @@
 |-------|-------------|--------|--------------|
 | **0** | Code ↔ Design alignment | 2–3 sessions | None |
 | **1** | Multi-Vault | 3–4 sessions | Phase 0 |
-| **2** | Vector Search | 4–5 sessions | Phase 0 |
+| **2** | Vector Search | 4–5 sessions | Phase 0, CJKSQLite compat |
 | **3** | Publishing | 4–5 sessions | Phase 0, 1 |
 | **4** | Native App (macOS) | 8–12 sessions | Phase 0, 1, 2 |
 | **5** | iCloud Sync | 4–6 sessions | Phase 4 |
