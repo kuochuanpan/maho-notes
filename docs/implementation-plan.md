@@ -206,26 +206,27 @@
 - [x] Copies `_assets/` directory
 - [x] 23 new tests (SiteGeneratorTests), 210 total
 
-### 3.2 — Incremental Publishing
-- [ ] `PublishManifest.swift`: track content hashes (SHA-256) per published note
-- [ ] `.maho/publish-manifest.json`: load/save
-- [ ] On publish: compare hashes → only regenerate changed notes
-- [ ] Handle deletions (note removed or set `public: false`)
-- [ ] `--force` flag: full rebuild
+### 3.2 — Incremental Publishing ✅ (2026-03-05)
+- [x] `PublishManifest.swift`: track content hashes (SHA-256) per published note
+- [x] `.maho/publish-manifest.json`: load/save
+- [x] On publish: compare hashes → only regenerate changed notes
+- [x] Handle deletions (note removed or set `public: false`)
+- [x] `--force` flag: full rebuild
+- [x] `setFrontmatterPublic()` helper in MahoNotesKit (shared by CLI + tests)
 
-### 3.3 — Publish Commands
-- [ ] `PublishCommand.swift`:
+### 3.3 — Publish Commands ✅ (2026-03-05)
+- [x] `PublishCommand.swift`:
   - `mn publish` — incremental publish
   - `mn publish --force` — full rebuild
   - `mn publish --vault <name>` — publish specific vault
   - `mn publish <path>` — mark public + generate + push (one-step)
   - `mn publish --preview` — generate to temp dir + open in browser
-- [ ] `UnpublishCommand.swift`:
+- [x] `UnpublishCommand.swift`:
   - `mn unpublish <path>` — set `public: false` + remove from site
-- [ ] Git push to publishing repo (separate from vault repo)
-- [ ] Block on read-only vaults
-- [ ] Register in `MahoNotes.swift`
-- [ ] Tests: publish flow, incremental, preview
+- [x] Git push to publishing repo (separate from vault repo)
+- [x] Block on read-only vaults (via `validateWritable()`)
+- [x] Register in `MahoNotes.swift`
+- [x] Tests: 13 new PublishManifest tests (223 total)
 
 ### 3.4 — Our Instance (notes.pcca.dev)
 - [ ] Set up GitHub Pages repo for `kuochuanpan/maho-vault` or separate publishing repo
