@@ -104,7 +104,7 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | Syntax Highlighting | TreeSitter (native app, code block highlighting), Splash (Swift-native, static site fallback), highlight.js (static site) |
 | Math | WKWebView + KaTeX (native), KaTeX (static site) |
 | Ruby Annotation | `{base|annotation}` → `<ruby>` (web) / AttributedString (native) — furigana, Tâi-lô, Zhuyin, Pinyin, etc. |
-| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) (SQLite 3.48 + FTS5 + CJK tokenizer) + sqlite-vec |
+| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) (SQLite 3.48 + FTS5 + CJK tokenizer) + sqlite-vec (future, for vector search) |
 | Embeddings | Tiered: Apple NLEmbedding (built-in) / all-MiniLM-L6-v2 multilingual (90MB) / multilingual-e5-small (470MB) / BGE-M3 (2.2GB) |
 | Embedding Runtime | CoreML (default), MLX (optional, faster on Apple Silicon for large models like BGE-M3) |
 | Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
@@ -123,11 +123,11 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | [Search](search.md) | FTS5, vector search, embedding models, search modes |
 | [Native App](app.md) | SwiftUI universal app, markdown rendering, editor, platform adaptation |
 | [Publishing](publishing.md) | Static site generation, GitHub Pages, incremental publishing |
-| [Design Decisions](decisions.md) | Decision log (#1–#16) |
+| [Design Decisions](decisions.md) | Decision log (#1–#20) |
 
 ## Implementation
 
-Implementation phases will be planned after design freeze. These docs describe the **target state** — what Maho Notes will look like when complete.
+These docs describe the **target state** — what Maho Notes will look like when complete. Implementation order will be planned separately.
 
 ---
 

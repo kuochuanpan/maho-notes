@@ -53,6 +53,7 @@ mn search --semantic "query" --limit 5     # top-K results
 # ── Publishing ────────────────────────────────────
 mn publish                            # incremental: only regenerate + push changed notes
 mn publish --force                    # full rebuild (e.g., after theme change)
+mn publish --vault <name>             # publish from specific vault
 mn publish <path>                     # set public:true + generate + push (one-step)
 mn unpublish <path>                   # set public:false + remove from published site
 mn publish --preview                  # local preview before push

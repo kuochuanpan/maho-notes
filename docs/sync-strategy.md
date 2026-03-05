@@ -142,7 +142,6 @@ The `~/.maho/` directory on macOS CLI also serves as cache for GitHub vault clon
 
 - `mn sync` → pull only, never push
 - `mn new`, `mn delete`, `mn meta --set`, `mn publish` → blocked with clear error: "Vault '<name>' is read-only"
-- `mn sync` → pull only, never push
 - `mn sync` will overwrite local changes with upstream (reset to remote state)
 - Local file edits are allowed (user's filesystem) but are not tracked or synced back — next `mn sync` will overwrite them
 - Search works normally (indexed like any vault)

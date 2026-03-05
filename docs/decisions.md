@@ -34,6 +34,12 @@
 
 17. **Auto-detection on `mn vault add --github`**: When adding a GitHub vault, the CLI auto-detects two things via GitHub REST API: (a) **access level** — checks `permissions.push` on the repo; no push → auto-readonly, push → auto-readwrite; (b) **vault format** — checks if `maho.yaml` exists in repo root; present → native Maho vault, absent → auto-import (generate `maho.yaml` from directory structure). The `--readonly`, `--readwrite`, and `--import` flags become overrides that skip auto-detection. This simplifies the default UX to just `mn vault add <name> --github <repo>`.
 
+18. **SyncProvider abstract protocol**: The sync layer is designed around an abstract `SyncProvider` protocol rather than hardcoding iCloud. iCloud is the first (and initially only) implementation, but the abstraction preserves room for future backends (Google Drive, Synology Drive, WebDAV, Dropbox) without redesigning the sync pipeline. GitHub is a separate, optional layer — not a `SyncProvider` implementation, but a version control + publishing bridge.
+
+19. **TreeSitter for native code highlighting**: Native app uses TreeSitter for syntax highlighting in code blocks (via `WKWebView` or `AttributedString` rendering). Chosen over regex-based highlighters for accuracy and multi-language support. For the static site generator (publishing), we use Splash (Swift-native, for Swift code) and highlight.js (bundled JS, for all other languages) since TreeSitter requires native runtime.
+
+20. **Embedding model distribution**: On-Demand Resources (ODR) for App Store builds (Apple-managed CDN, lazy download per model tier) + direct download from GitHub Releases for CLI / sideloaded builds. App prompts user before downloading; shows model size and expected quality improvement. This avoids bloating the app binary with multi-GB models while keeping the download UX smooth.
+
 ---
 
 *Design by 真帆 🔭 — 2026-03-04*

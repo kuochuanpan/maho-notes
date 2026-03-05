@@ -13,6 +13,7 @@
 
 ### Architecture
 - **100% on-device** — no server dependency (App Store requirement)
+- **Storage**: sqlite-vec extension for vector similarity queries (future dependency — not yet in Package.swift; will be added when vector search is implemented)
 - Each device has its own local embedding DB (not synced between devices)
 - Markdown files sync via iCloud/GitHub; each device generates its own embeddings locally
 - User can choose embedding model per device (bigger Mac → bigger model, iPhone → smaller model)

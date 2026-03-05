@@ -81,7 +81,7 @@ collections:
     icon: terminal
     description: 數值模擬運行紀錄與分析
 github:
-  repo: kuochuanpan/maho-vault         # optional, only if synced to GitHub
+  repo: kuochuanpan/maho-vault         # optional; nested object here (Layer 1) — vs flat string in vaults.yaml (Layer 4)
 site:
   domain: notes.pcca.dev
   title: Kuo-Chuan's Notes
@@ -246,6 +246,33 @@ japanese/                  ← collection (top-level = defined in maho.yaml)
 - Subdirectories within a collection are free-form — create whatever hierarchy makes sense
 - `_index.md` can appear at any level as a directory overview page
 - App UI renders the tree structure; CLI uses path-based navigation
+
+## `_index.md` (Directory Overview)
+
+`_index.md` is a special note that serves as the overview page for any directory level (collection or subdirectory).
+
+| Aspect | Behavior |
+|--------|----------|
+| **Frontmatter** | Same format as regular notes (`title`, `tags`, `public`, etc.) |
+| **Search** | Included in FTS5 and vector search like any other note |
+| **Publishing** | Rendered as the collection/directory landing page (e.g., `/c/japanese/` renders `japanese/_index.md`) |
+| **`mn list`** | Shown with a `[index]` marker, sorted first within its directory |
+| **`mn new`** | Not auto-created; user creates manually or via `mn new "_index" --collection japanese` |
+| **`mn stats`** | Counted as a regular note in word/note counts |
+
+Example:
+```markdown
+---
+title: 日本語學習筆記
+tags: [日本語, overview]
+created: 2026-03-03T09:00:00-05:00
+updated: 2026-03-04T10:00:00-05:00
+public: true
+slug: japanese
+---
+
+日語學習的總覽頁面。包含文法、單字、會話等分類。
+```
 
 ## Collections (in maho.yaml)
 
