@@ -42,6 +42,49 @@ final class AppState {
     /// All notes flat list.
     private(set) var allNotes: [Note] = []
 
+    // MARK: - Panel Visibility
+
+    /// Whether the vault rail (A) is visible.
+    var showVaultRail: Bool = UserDefaults.standard.object(forKey: "showVaultRail") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showVaultRail, forKey: "showVaultRail") }
+    }
+
+    /// Whether the navigator (B) is visible.
+    var showNavigator: Bool = UserDefaults.standard.object(forKey: "showNavigator") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showNavigator, forKey: "showNavigator") }
+    }
+
+    /// Tracks user's explicit panel state (before auto-collapse overrides).
+    var userShowVaultRail: Bool = true
+    var userShowNavigator: Bool = true
+
+    /// Toggle navigator (B). ⌘⇧B
+    func toggleNavigator() {
+        showNavigator.toggle()
+        userShowNavigator = showNavigator
+    }
+
+    /// Toggle vault rail (A). ⌘⇧A — hiding A also hides B; showing A also shows B.
+    func toggleVaultRail() {
+        showVaultRail.toggle()
+        showNavigator = showVaultRail
+        userShowVaultRail = showVaultRail
+        userShowNavigator = showNavigator
+    }
+
+    /// Focus mode. ⌘\ — if any panel visible, hide both; if both hidden, show both.
+    func toggleFocusMode() {
+        if showVaultRail || showNavigator {
+            showVaultRail = false
+            showNavigator = false
+        } else {
+            showVaultRail = true
+            showNavigator = true
+        }
+        userShowVaultRail = showVaultRail
+        userShowNavigator = showNavigator
+    }
+
     // MARK: - Note Selection
 
     /// Relative path of the currently selected note.

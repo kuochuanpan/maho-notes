@@ -31,6 +31,14 @@ struct NavigatorView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                appState.toggleNavigator()
+            } label: {
+                Image(systemName: "sidebar.left")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Toggle Navigator (⌘⇧B)")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
