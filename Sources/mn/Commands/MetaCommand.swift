@@ -50,6 +50,7 @@ struct MetaCommand: ParsableCommand {
         let hasModifications = !set.isEmpty || !addTags.isEmpty || !removeTags.isEmpty
 
         if hasModifications {
+            try vaultOption.validateWritable()
             // Valid frontmatter keys that can be set via --set
             let validSetKeys: Set<String> = [
                 "title", "public", "slug", "author", "draft", "order", "series",

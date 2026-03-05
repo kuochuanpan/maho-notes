@@ -24,6 +24,7 @@ struct NewCommand: ParsableCommand {
 
     func run() throws {
         try vaultOption.validateVaultExists()
+        try vaultOption.validateWritable()
         let vault = vaultOption.makeVault()
         let tagList = tags?
             .components(separatedBy: ",")

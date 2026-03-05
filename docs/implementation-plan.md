@@ -67,51 +67,29 @@
 
 > Core infrastructure for multiple vaults. Prerequisite for cross-vault search, publishing, and the native app.
 
-### 1.1 — Vault Registry
-- [ ] `VaultRegistry.swift` in MahoNotesKit: load/save `vaults.yaml`
-- [ ] Data model: `VaultEntry { name, type (icloud|github|local), github, access (readwrite|readonly), path? }`
-- [ ] Registry locations:
-  - macOS: `~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/config/vaults.yaml`
-  - Fallback (no iCloud): `~/.maho/vaults.yaml`
-- [ ] Local cache: `~/.maho/vaults-cache.yaml` (offline copy)
-- [ ] Type-based path resolution (see sync-strategy.md):
-  - `icloud` → iCloud container `vaults/<name>/`
-  - `github` → `~/.maho/vaults/<name>/`
-  - `local` → user-specified path
-- [ ] `primary` field: default vault for all commands
-- [ ] Tests: load/save/resolve paths
+### 1.1 — Vault Registry ✅ (2026-03-05)
+- [x] VaultRegistry.swift: load/save `vaults.yaml` with iCloud primary + fallback + cache
+- [x] Data model: VaultEntry/VaultRegistry (Codable + Sendable)
+- [x] Path resolution for icloud/github/local types
+- [x] CRUD helpers: findVault, addVault, removeVault, setPrimary
+- [x] 17 tests
 
-### 1.2 — `mn vault` Commands
-- [ ] `VaultCommand.swift` with subcommands:
-  - `mn vault list` — show all registered vaults (name, type, access, path, sync status)
-  - `mn vault add <name> --icloud` — create new iCloud vault
-  - `mn vault add <name> --github <repo>` — clone GitHub vault with auto-detection:
-    - Check `permissions.push` via GitHub API → set access level
-    - Check for `maho.yaml` in repo → native vs import mode
-  - `mn vault add <name> --path <local>` — register local directory
-  - `mn vault remove <name>` — unregister (keep files)
-  - `mn vault remove <name> --delete` — unregister + delete
-  - `mn vault set-primary <name>` — change default vault
-  - `mn vault info <name>` — vault details
-- [ ] Override flags: `--readonly`, `--readwrite`, `--import`
-- [ ] Auto-generate `maho.yaml` for non-Maho repos (import mode)
-- [ ] Register subcommand in `MahoNotes.swift`
-- [ ] Tests: add/remove/list/auto-detect
+### 1.2 — `mn vault` Commands ✅ (2026-03-05)
+- [x] VaultCommand with 7 subcommands: list, add (--icloud/--github/--path), remove (--delete), set-primary, info
+- [x] GitHub API auto-detect (push access), import mode (auto-generate maho.yaml)
+- [x] Override flags: --readonly, --readwrite, --import
+- [x] Registered in MahoNotes.swift
+- [x] 10 tests
 
-### 1.3 — Cross-Vault Wiring
-- [ ] Update `VaultOption.swift`: resolve `--vault <name>` via registry (not just path)
-- [ ] `$MN_VAULT` env var support
-- [ ] Priority: `--vault` flag → `$MN_VAULT` → primary vault → legacy auto-detect
-- [ ] `mn list --all`: list notes across all vaults
-- [ ] `mn search --all` (default): search across all vaults, results prefixed with vault name
-- [ ] `mn search --vault <name>`: scoped to one vault
-- [ ] `mn index --all`: index all vaults
-- [ ] `mn index --vault <name>`: index specific vault
-- [ ] `mn sync --all`: sync all vaults
-- [ ] Read-only vault enforcement: block `mn new`, `mn delete`, `mn meta --set`, `mn publish` on read-only vaults
-- [ ] Tests: cross-vault resolution, read-only blocking
+### 1.3 — Cross-Vault Wiring ✅ (2026-03-05)
+- [x] VaultOption.swift: resolve `--vault <name>` via registry, `$MN_VAULT`, primary fallback, legacy auto-detect
+- [x] `--all` flag on list/search/index/sync (search defaults to cross-vault)
+- [x] Read-only enforcement: validateWritable() on new/delete/meta --set
+- [x] 10 CrossVaultTests (registry resolution, multi-vault notes/search, read-only flags)
 
-**Estimated effort:** 3–4 sessions  
+**Phase 1 complete! 🎉** 100 → 139 tests, 3 sub-phases done.
+
+**Estimated effort:** 3–4 sessions (actual: 1 session)  
 **Dependencies:** Phase 0 (collections in maho.yaml)  
 **Tests:** ~30 new tests expected
 

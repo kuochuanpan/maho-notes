@@ -28,7 +28,14 @@ struct ListCommand: ParsableCommand {
     @Flag(name: .long, help: "Show all series")
     var listSeries = false
 
+    @Flag(name: .long, help: "List notes across all registered vaults")
+    var all = false
+
     func run() throws {
+        if all {
+            try runAllVaults()
+            return
+        }
         try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
         let collections = try vault.collections()
@@ -130,6 +137,64 @@ struct ListCommand: ParsableCommand {
                 print("    \(note.title)\(tags)")
             }
             print()
+        }
+    }
+
+    // MARK: - Cross-vault
+
+    private func runAllVaults() throws {
+        guard let entries = vaultOption.allVaultEntries(), !entries.isEmpty else {
+            print("No vaults registered. Use `mn vault add` to add one.")
+            return
+        }
+
+        if outputOption.json {
+            // Emit {"vault1": [...notes], "vault2": [...notes]}
+            var result: [String: [Note]] = [:]
+            for entry in entries {
+                let vault = Vault(path: MahoNotesKit.resolvedPath(for: entry))
+                result[entry.name] = (try? vault.allNotes()) ?? []
+            }
+            try printJSON(result)
+            return
+        }
+
+        for entry in entries {
+            let path = MahoNotesKit.resolvedPath(for: entry)
+            let vault = Vault(path: path)
+            let notes = (try? vault.allNotes()) ?? []
+            if notes.isEmpty { continue }
+
+            print("=== \(entry.name) ===")
+            let collections = (try? vault.collections()) ?? []
+            let grouped = Dictionary(grouping: notes, by: { $0.collection })
+
+            for coll in collections {
+                guard let collNotes = grouped[coll.id], !collNotes.isEmpty else { continue }
+                print("\(coll.cliIcon) \(coll.name) (\(coll.id))")
+                print(String(repeating: "─", count: 40))
+                let sorted = collNotes.sorted { ($0.order ?? 999) < ($1.order ?? 999) }
+                for note in sorted {
+                    let tags = note.tags.isEmpty ? "" : " [\(note.tags.joined(separator: ", "))]"
+                    let date = String(note.created.prefix(10))
+                    print("  [\(entry.name)] \(note.relativePath)")
+                    print("    \(note.title)\(tags)  \(date)")
+                }
+                print()
+            }
+
+            let knownIds = Set(collections.map(\.id))
+            let uncategorized = grouped.filter { !knownIds.contains($0.key) }
+            for (collId, collNotes) in uncategorized {
+                print("? \(collId)")
+                print(String(repeating: "─", count: 40))
+                for note in collNotes {
+                    let tags = note.tags.isEmpty ? "" : " [\(note.tags.joined(separator: ", "))]"
+                    print("  [\(entry.name)] \(note.relativePath)")
+                    print("    \(note.title)\(tags)")
+                }
+                print()
+            }
         }
     }
 }

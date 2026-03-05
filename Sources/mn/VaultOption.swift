@@ -4,16 +4,59 @@ import MahoNotesKit
 
 /// Shared --vault option used across all commands
 struct VaultOption: ParsableArguments {
-    @Option(name: .long, help: "Path to the vault directory")
+    @Option(name: .long, help: "Vault name (from registry) or path to the vault directory")
     var vault: String?
 
-    /// Resolve the vault path: --vault flag > MN_VAULT env > iCloud container > ~/maho-vault
+    /// Override for tests — set to a temp dir to avoid touching ~/.maho
+    nonisolated(unsafe) static var globalConfigDir: String = "~/.maho"
+
+    /// Returns the registry entry for the resolved vault, if found in registry.
+    func resolveVaultEntry() -> VaultEntry? {
+        guard let registry = try? loadRegistry(globalConfigDir: Self.globalConfigDir) else {
+            return nil
+        }
+        let identifier = vault ?? ProcessInfo.processInfo.environment["MN_VAULT"]
+        if let identifier {
+            return registry.findVault(named: identifier)
+        }
+        return registry.primaryVault()
+    }
+
+    /// All vault entries from registry, or nil if no registry exists.
+    func allVaultEntries() -> [VaultEntry]? {
+        try? loadRegistry(globalConfigDir: Self.globalConfigDir)?.vaults
+    }
+
+    /// Resolve the vault path:
+    ///   1. --vault flag → name in registry, then treat as path
+    ///   2. $MN_VAULT env → name in registry, then treat as path
+    ///   3. Primary vault from registry
+    ///   4. Legacy fallback: iCloud container → ~/maho-vault
     var resolvedPath: String {
-        if let vault { return vault }
-        if let env = ProcessInfo.processInfo.environment["MN_VAULT"] { return env }
+        if let vault {
+            if let entry = findEntry(vault) {
+                return MahoNotesKit.resolvedPath(for: entry)
+            }
+            return vault
+        }
+        if let env = ProcessInfo.processInfo.environment["MN_VAULT"] {
+            if let entry = findEntry(env) {
+                return MahoNotesKit.resolvedPath(for: entry)
+            }
+            return env
+        }
+        if let registry = try? loadRegistry(globalConfigDir: Self.globalConfigDir),
+           let primary = registry.primaryVault() {
+            return MahoNotesKit.resolvedPath(for: primary)
+        }
+        // Legacy fallback
         let icloudPath = ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents" as NSString).expandingTildeInPath
         if FileManager.default.fileExists(atPath: icloudPath) { return icloudPath }
         return "~/maho-vault"
+    }
+
+    private func findEntry(_ identifier: String) -> VaultEntry? {
+        (try? loadRegistry(globalConfigDir: Self.globalConfigDir))?.findVault(named: identifier)
     }
 
     func makeVault() -> Vault {
@@ -21,11 +64,9 @@ struct VaultOption: ParsableArguments {
     }
 
     /// Validate that the vault exists. Call this from commands that need an existing vault.
-    /// Returns a user-friendly error message if the vault is not found.
     func validateVaultExists() throws {
         let expanded = (resolvedPath as NSString).expandingTildeInPath
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: expanded) else {
+        guard FileManager.default.fileExists(atPath: expanded) else {
             throw ValidationError("""
                 Vault not found at: \(expanded)
 
@@ -37,6 +78,13 @@ struct VaultOption: ParsableArguments {
                   3. Create a new vault:
                      mn init --vault ~/path/to/your/vault
                 """)
+        }
+    }
+
+    /// Validate that the vault is writable. Call from commands that modify notes.
+    func validateWritable() throws {
+        if let entry = resolveVaultEntry(), entry.access == .readOnly {
+            throw ValidationError("Error: Vault '\(entry.name)' is read-only")
         }
     }
 }
