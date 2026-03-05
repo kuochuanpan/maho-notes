@@ -143,11 +143,13 @@
 ### Phase 2b-CLI: Model Management + BGE-M3
 > CLI-side model improvements. No dependency on native app.
 
-#### 2b.1 — BGE-M3 Model Tier ✅ (2026-03-05)
-- [x] `EmbeddingModel.bgeM3` case (`BAAI/bge-m3`, 1024 dim, ~2.2GB)
-- [x] `dimensions` per-case: minilm=384, e5small=384, bgeM3=1024
+#### 2b.1 — Pro Model Tier ✅ (2026-03-05)
+- [x] `EmbeddingModel.e5large` case (`intfloat/multilingual-e5-large`, 1024 dim, ~2.2GB)
+  - Originally planned BGE-M3, but it only has pytorch_model.bin (no safetensors) → incompatible with swift-embeddings
+  - E5-Large is same family as E5-Small, XLMRoberta, safetensors ✅
+- [x] `dimensions` per-case: minilm=384, e5small=384, e5large=1024
 - [x] `displayName` + `approximateSize` computed properties
-- [x] XLMRoberta loading for BGE-M3 (`.init()` loadConfig, no weight prefix)
+- [x] XLMRoberta loading for E5-Large (`.init()` loadConfig, no weight prefix)
 - [x] `VectorIndex`: stores dimensions in `_vec_schema` table, detects dimension mismatch → error with `mn index --full` hint
 - [x] 5 new tests (EmbeddingProviderTests) + 2 new tests (VectorIndexTests dimension mismatch)
 
@@ -159,13 +161,16 @@
 - [x] Model cache detection: `~/Documents/huggingface/models/{org}/{model}` (+ alt `models--{org}--{model}`)
 - [ ] Download progress: stderr output during download (deferred — swift-embeddings/HubApi doesn't expose progress callbacks)
 
-**Phase 2b-CLI complete! 🎉** 176 → 187 tests, commits `902c7f4`, `6fea291`, `44dcf7c`.
+**Phase 2b-CLI complete! 🎉** 176 → 187 tests, commits `902c7f4` → `918a6a0`.
 
 #### Bugs Found During Testing
 - [x] `String(format:)` + `NSString.utf8String!` → SIGSEGV in `mn model list` (replaced with Swift `.padding`)
 - [x] Model cache path was `models--org--model` but HubApi uses `models/org/model` (fixed to check both)
 - [x] `_vec_schema` migration: old DBs lack `dimensions` column → added `ALTER TABLE` + backfill
 - [x] e5-small `loadConfig`: doesn't need `.addWeightKeyPrefix("roberta.")` (weights don't have prefix)
+- [x] BGE-M3 has no safetensors → replaced with `intfloat/multilingual-e5-large` (same 1024d, safetensors ✅)
+- [x] `mn index --full` blocked by dimension mismatch at init → added `skipDimensionCheck` + `resetSchema()`
+- [x] `SearchCommand` failed on dimension mismatch when reading existing index → `skipDimensionCheck: true`
 
 #### Already Done
 - [x] Standard tier: multilingual-e5-small — implemented in Phase 2.2 (`EmbeddingModel.e5small`)
