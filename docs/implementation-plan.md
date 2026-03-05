@@ -143,18 +143,23 @@
 ### Phase 2b-CLI: Model Management + BGE-M3
 > CLI-side model improvements. No dependency on native app.
 
-#### 2b.1 — BGE-M3 Model Tier
-- [ ] Add `EmbeddingModel.bgeM3` case (`BAAI/bge-m3`, 1024 dim, ~2.2GB)
-- [ ] Change `dimensions` from shared computed property to per-case (384 for minilm/e5-small, 1024 for bge-m3)
-- [ ] `VectorIndex`: dynamic dimension from model (currently hardcoded `float[384]` at table creation)
-- [ ] Handle dimension mismatch on model switch (detect + prompt full rebuild)
-- [ ] Verify XLMRoberta loading works for BGE-M3 (may need different `loadConfig`)
+#### 2b.1 — BGE-M3 Model Tier ✅ (2026-03-05)
+- [x] `EmbeddingModel.bgeM3` case (`BAAI/bge-m3`, 1024 dim, ~2.2GB)
+- [x] `dimensions` per-case: minilm=384, e5small=384, bgeM3=1024
+- [x] `displayName` + `approximateSize` computed properties
+- [x] XLMRoberta loading for BGE-M3 (`.init()` loadConfig, no weight prefix)
+- [x] `VectorIndex`: stores dimensions in `_vec_schema` table, detects dimension mismatch → error with `mn index --full` hint
+- [x] 5 new tests (EmbeddingProviderTests) + 2 new tests (VectorIndexTests dimension mismatch)
 
-#### 2b.2 — `mn model` Subcommand
-- [ ] `mn model list` — show available models with: name, HuggingFace ID, dimensions, size, downloaded status
-- [ ] `mn model download <name>` — pre-download model to `~/.maho/models/` (avoid download-during-index for large models)
-- [ ] `mn model remove <name>` — delete cached model files
-- [ ] Download progress: stderr output during download (at minimum percentage or bytes)
+#### 2b.2 — `mn model` Subcommand ✅ (2026-03-05)
+- [x] `mn model list` — table with name, display name, dimensions, size, downloaded status (✓/—)
+- [x] `mn model download <name>` — pre-download model via warmup embed
+- [x] `mn model remove <name>` — delete cached model directory
+- [x] `--json` output support
+- [x] Model cache detection: `~/Documents/huggingface/models/{org}/{model}` (+ alt `models--{org}--{model}`)
+- [ ] Download progress: stderr output during download (deferred — swift-embeddings/HubApi doesn't expose progress callbacks)
+
+**Phase 2b-CLI complete! 🎉** 176 → 187 tests, commits `902c7f4`, `a69de1e`.
 
 #### Already Done
 - [x] Standard tier: multilingual-e5-small — implemented in Phase 2.2 (`EmbeddingModel.e5small`)
