@@ -9,6 +9,7 @@ struct SyncCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Flag(name: .long, help: "Rebuild search index after sync")
     var reindex: Bool = false
@@ -16,19 +17,33 @@ struct SyncCommand: ParsableCommand {
     func run() throws {
         try vaultOption.validateVaultExists()
         let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
-        print("Syncing vault at \(vaultPath)...")
+
+        if !outputOption.json {
+            print("Syncing vault at \(vaultPath)...")
+        }
 
         let gitSync = GitSync(vaultPath: vaultPath)
         let result = try gitSync.sync()
-        print(result.message)
+
+        if !outputOption.json {
+            print(result.message)
+        }
 
         if reindex {
-            print("Rebuilding search index...")
+            if !outputOption.json {
+                print("Rebuilding search index...")
+            }
             let vault = Vault(path: vaultPath)
             let notes = try vault.allNotes()
             let index = try SearchIndex(vaultPath: vaultPath)
             let stats = try index.buildIndex(notes: notes, fullRebuild: true)
-            print("Index rebuilt: \(stats.total) notes indexed (\(stats.added) added, \(stats.updated) updated, \(stats.deleted) deleted)")
+            if !outputOption.json {
+                print("Index rebuilt: \(stats.total) notes indexed (\(stats.added) added, \(stats.updated) updated, \(stats.deleted) deleted)")
+            }
+        }
+
+        if outputOption.json {
+            try printJSON(result)
         }
     }
 }

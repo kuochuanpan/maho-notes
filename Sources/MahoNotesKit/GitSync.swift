@@ -21,7 +21,7 @@ private let rootOnlyMdFiles: Set<String> = [
 // MARK: - Sync Result
 
 /// Result returned from a sync operation
-public struct SyncResult: Sendable {
+public struct SyncResult: Sendable, Codable {
     public let cloned: Bool
     public let pulled: Bool
     public let pushed: Bool

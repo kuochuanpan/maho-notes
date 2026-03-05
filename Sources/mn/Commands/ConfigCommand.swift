@@ -21,6 +21,7 @@ struct ConfigShowSubcommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     func run() throws {
         try vaultOption.validateVaultExists()
@@ -30,6 +31,29 @@ struct ConfigShowSubcommand: ParsableCommand {
         let vaultConfig = try config.loadVaultConfig()
         let deviceConfig = try config.loadDeviceConfig()
 
+        // Mask device config auth token
+        var maskedDevice = deviceConfig
+        if var auth = maskedDevice["auth"] as? [String: Any],
+           let token = auth["github_token"] as? String, !token.isEmpty {
+            let authToken = AuthToken(token: token, source: .stored)
+            auth["github_token"] = authToken.masked
+            maskedDevice["auth"] = auth
+        }
+
+        let globalAuth = Auth()
+        let globalToken = try? globalAuth.resolveToken()
+
+        if outputOption.json {
+            var output: [String: Any] = [:]
+            if !vaultConfig.isEmpty { output["vault_config"] = vaultConfig }
+            if !maskedDevice.isEmpty { output["device_config"] = maskedDevice }
+            if let token = globalToken {
+                output["global_auth"] = ["github_token": token.masked, "source": token.source.rawValue]
+            }
+            try printJSONDict(output)
+            return
+        }
+
         if !vaultConfig.isEmpty {
             print("# Vault config (maho.yaml)")
             printDict(vaultConfig, indent: 0)
@@ -37,20 +61,11 @@ struct ConfigShowSubcommand: ParsableCommand {
 
         if !deviceConfig.isEmpty {
             print("\n# Device config (.maho/config.yaml)")
-            // Mask auth token in display
-            var masked = deviceConfig
-            if var auth = masked["auth"] as? [String: Any],
-               let token = auth["github_token"] as? String, !token.isEmpty {
-                let authToken = AuthToken(token: token, source: .stored)
-                auth["github_token"] = authToken.masked
-                masked["auth"] = auth
-            }
-            printDict(masked, indent: 0)
+            printDict(maskedDevice, indent: 0)
         }
 
         // Also show global auth if available
-        let globalAuth = Auth()
-        if let token = try? globalAuth.resolveToken() {
+        if let token = globalToken {
             if deviceConfig.isEmpty && vaultConfig.isEmpty {
                 print("# No vault config found")
             }
@@ -58,10 +73,8 @@ struct ConfigShowSubcommand: ParsableCommand {
             print("  github_token: \(token.masked)")
         }
 
-        if vaultConfig.isEmpty && deviceConfig.isEmpty {
-            if (try? globalAuth.resolveToken()) == nil {
-                print("No configuration found. Run `mn init` to create a vault.")
-            }
+        if vaultConfig.isEmpty && deviceConfig.isEmpty && globalToken == nil {
+            print("No configuration found. Run `mn init` to create a vault.")
         }
     }
 

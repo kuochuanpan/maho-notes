@@ -2,7 +2,7 @@ import Foundation
 import CJKSQLite
 
 /// Statistics from an index build operation.
-public struct IndexStats: Sendable {
+public struct IndexStats: Sendable, Codable {
     public let added: Int
     public let updated: Int
     public let deleted: Int

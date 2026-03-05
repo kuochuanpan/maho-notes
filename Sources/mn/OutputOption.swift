@@ -13,3 +13,8 @@ func printJSON<T: Encodable>(_ value: T) throws {
     let data = try encoder.encode(value)
     print(String(data: data, encoding: .utf8)!)
 }
+
+func printJSONDict(_ dict: [String: Any]) throws {
+    let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+    print(String(data: data, encoding: .utf8)!)
+}
