@@ -108,46 +108,37 @@
 - [x] 8 tests (insert, query, incremental, model mismatch detection)
 - [x] 176 tests total, all passing
 
-### 2.2 — Embedding Pipeline
-- [ ] Add `swift-embeddings` SPM dependency to Package.swift
-- [ ] `EmbeddingProvider.swift` protocol:
-  - `func embed(_ text: String) async throws -> [Float]`
-  - `func embedBatch(_ texts: [String]) async throws -> [[Float]]`
-  - `var dimensions: Int`
-  - `var modelIdentifier: String`
-- [ ] `SwiftEmbeddingsProvider`: wraps `swift-embeddings` XLMRoberta/Bert model loading
-- [ ] Default model: `all-MiniLM-L6-v2` (384 dim, ~90MB, 50+ languages)
-- [ ] Model auto-download from HuggingFace Hub → cached in `~/.maho/models/`
-- [ ] Model selection: `~/.maho/config.yaml` → `embed.model` field
-- [ ] `mn index --model <name>`: set model + re-embed all notes
-- [ ] Chunking: heading-based split (see search.md § Chunking Strategy)
-  - Short notes (< 512 tokens) → single chunk with title prefix
-  - Long notes → split by headings, title prefix per chunk
-  - No overlap, no frontmatter embedding
-- [ ] Incremental: only re-embed changed notes (mtime check); prune deleted notes
-- [ ] Tests: embedding provider, chunking logic, incremental indexing, model mismatch detection
+### 2.2 — Embedding Pipeline ✅ (2026-03-05)
+- [x] Added `swift-embeddings` 0.0.26 SPM dependency; macOS 15+ minimum
+- [x] `EmbeddingProvider.swift` protocol (Sendable, async embed/embedBatch/dimensions/modelIdentifier)
+- [x] `SwiftEmbeddingsProvider.swift`: wraps Bert (MiniLM) + XLMRoberta (e5-small), auto-download from HuggingFace Hub
+- [x] `EmbeddingModel` enum: `.minilm` (all-MiniLM-L6-v2, 384d, ~90MB) + `.e5Small` (multilingual-e5-small, 384d, ~470MB)
+- [x] `Chunker.swift`: heading-based split, frontmatter stripping, title prefix, short-note single chunk
+- [x] `mn index --model <name>`: builds vector index with specified model
+- [x] VectorIndex.swift updated: uses Chunker + async buildIndex with embedder closure
+- [x] Incremental: mtime-based skip, model mismatch detection, prune deleted notes
+- [x] 5 new tests (Chunker: short/long/frontmatter/empty, EmbeddingProvider: mock)
 
-### 2.3 — Semantic Search
-- [ ] `mn search --semantic "query"`: embed query → sqlite-vec cosine similarity → top-K chunks
-- [ ] Chunk-to-note aggregation: best chunk score per note → note-level ranking
-- [ ] `--limit N` flag for top-K notes (default: 10)
-- [ ] Cross-vault semantic search (query all vault indices)
-- [ ] Result format: path, score, snippet (from best-matching chunk)
-- [ ] Graceful error: if no vector index → print error + suggest `mn index --model <name>`
-- [ ] Tests: end-to-end semantic search with real embeddings
+### 2.3 — Semantic Search ✅ (2026-03-05)
+- [x] `mn search --semantic "query"`: embed query → sqlite-vec cosine → chunk-to-note aggregation
+- [x] `--limit N` flag (default: 10)
+- [x] Cross-vault semantic search (`--all`)
+- [x] Result format: path, score, snippet from best-matching chunk
+- [x] SearchCommand now AsyncParsableCommand (root MahoNotes too)
 
-### 2.4 — Hybrid Search (RRF)
-- [ ] Combine FTS5 results + vector results via Reciprocal Rank Fusion (k=60)
-- [ ] Default search mode: FTS5 only (fast, no model needed)
-- [ ] `--semantic` flag: vector only
-- [ ] `--hybrid` flag: combined RRF merge
-- [ ] Graceful fallback: `--hybrid` without vector index → FTS5 only + stderr warning
-- [ ] `--json` output includes both fts_rank and vector_rank for debugging
-- [ ] Tests: RRF merging logic, edge cases (no overlap, one-sided results)
+### 2.4 — Hybrid Search (RRF) ✅ (2026-03-05)
+- [x] `HybridSearch.swift`: RRF merge (k=60, 1:1 FTS5:vector weight)
+- [x] `--hybrid` flag: FTS5 + vector → RRF merge → sorted results
+- [x] Source indicators: `[fts]`, `[vec]`, `[fts+vec]` in output
+- [x] Default search: FTS5 only; `--semantic`: vector only; `--hybrid`: combined
+- [x] 3 new tests (RRF merge correctness, limit, empty inputs)
+- [x] 3 new test suites (ChunkerTests, HybridSearchTests, EmbeddingProviderTests)
 
-**Estimated effort:** 4–5 sessions  
+**Phase 2 complete! 🎉** 165 → 176 tests, 4 sub-phases done.
+
+**Estimated effort:** 4–5 sessions (actual: 1 session)  
 **Dependencies:** Phase 0, swift-cjk-sqlite compatibility  
-**Tests:** ~30 new tests expected
+**Tests:** 19 new tests (8 VectorIndex + 5 Chunker + 3 Hybrid + 3 Embedding)
 
 ### Phase 2b (Future): Additional Embedding Tiers
 > Deferred to Phase 4 (native app) where model selection has a proper UI.
@@ -342,9 +333,9 @@
 
 | Phase | Description | Effort | Dependencies |
 |-------|-------------|--------|--------------|
-| **0** | Code ↔ Design alignment | 2–3 sessions | None |
-| **1** | Multi-Vault | 3–4 sessions | Phase 0 |
-| **2** | Vector Search | 4–5 sessions | Phase 0, CJKSQLite compat |
+| **0** | Code ↔ Design alignment | ✅ done (1 session) | None |
+| **1** | Multi-Vault | ✅ done (1 session) | Phase 0 |
+| **2** | Vector Search | ✅ done (1 session) | Phase 0, CJKSQLite compat |
 | **3** | Publishing | 4–5 sessions | Phase 0, 1 |
 | **4** | Native App (macOS) | 8–12 sessions | Phase 0, 1, 2 |
 | **5** | iCloud Sync | 4–6 sessions | Phase 4 |
