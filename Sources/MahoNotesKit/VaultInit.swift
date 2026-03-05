@@ -164,7 +164,7 @@ func writeVaultFiles(
 
 /// Registers `name` in the vault registry, setting it as primary if it's the first vault.
 /// Skips silently if already registered.
-func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String) throws {
+func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String, readOnly: Bool = false) throws {
     var registry = (try? loadRegistry(globalConfigDir: globalConfigDir)) ?? VaultRegistry(primary: "", vaults: [])
     guard registry.findVault(named: name) == nil else { return }
 
@@ -173,10 +173,10 @@ func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, gl
         type: .local,
         github: githubRepo,
         path: vaultPath,
-        access: .readWrite
+        access: readOnly ? .readOnly : .readWrite
     )
     try registry.addVault(entry)
-    if registry.primary.isEmpty {
+    if registry.primary.isEmpty && !readOnly {
         registry.primary = name
     }
     try saveRegistry(registry, globalConfigDir: globalConfigDir)
@@ -220,7 +220,8 @@ public func cloneGitHubVault(
     repo: String,
     vaultRoot: String,
     name: String? = nil,
-    globalConfigDir: String
+    globalConfigDir: String,
+    readOnly: Bool = false
 ) throws -> String {
     let fm = FileManager.default
     let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
@@ -305,7 +306,7 @@ public func cloneGitHubVault(
         }
     }
 
-    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir)
+    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir, readOnly: readOnly)
     print("Vault '\(vaultName)' ready at \(vaultPath)")
     return vaultName
 }

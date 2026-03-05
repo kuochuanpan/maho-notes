@@ -47,6 +47,15 @@ struct InitCommand: ParsableCommand {
 
         if nonInteractive {
             let vaultRoot = resolveVaultRoot(storage: storageOpt)
+
+            // Tutorial vault (unless --no-tutorial)
+            if !noTutorial {
+                let _ = try? cloneGitHubVault(
+                    repo: "kuochuanpan/maho-getting-started", vaultRoot: vaultRoot,
+                    name: "getting-started", globalConfigDir: globalConfigDir, readOnly: true
+                )
+            }
+
             if !resolvedGithub.isEmpty {
                 let vaultName = name ?? String(resolvedGithub.split(separator: "/").last ?? "vault")
                 do {
@@ -62,7 +71,8 @@ struct InitCommand: ParsableCommand {
                 let vaultName = name ?? "personal"
                 try createEmptyVault(
                     name: vaultName, vaultRoot: vaultRoot, authorName: resolvedAuthor,
-                    skipTutorial: noTutorial, globalConfigDir: globalConfigDir
+                    skipTutorial: true,  // tutorial is separate vault now
+                    globalConfigDir: globalConfigDir
                 )
                 printSuccess(vaultName: vaultName, vaultRoot: vaultRoot)
             }
@@ -100,6 +110,27 @@ struct InitCommand: ParsableCommand {
             authorInput = readLine() ?? ""
         }
 
+        // Step: Tutorial vault (first-time only, separate read-only vault)
+        if !noTutorial {
+            print("")
+            print("Add getting-started tutorial vault? (read-only) [Y/n]: ", terminator: "")
+            let tutorialChoice = readLine() ?? "Y"
+            if tutorialChoice.lowercased() != "n" {
+                do {
+                    let _ = try cloneGitHubVault(
+                        repo: "kuochuanpan/maho-getting-started", vaultRoot: vaultRoot,
+                        name: "getting-started", globalConfigDir: globalConfigDir,
+                        readOnly: true
+                    )
+                    print("Added getting-started tutorial vault (read-only)")
+                } catch {
+                    print("Warning: Could not clone tutorial: \(error)")
+                    print("You can add it later with: mn vault add getting-started --github kuochuanpan/maho-getting-started --readonly")
+                }
+            }
+        }
+
+        // Step: User's vault (clone or create new)
         print("")
         print("Do you have an existing vault on GitHub? (e.g., user/vault)")
         print("GitHub repo (leave blank to create new): ", terminator: "")
@@ -127,7 +158,8 @@ struct InitCommand: ParsableCommand {
             }
             try createEmptyVault(
                 name: resolvedName, vaultRoot: vaultRoot, authorName: authorInput,
-                skipTutorial: noTutorial, globalConfigDir: globalConfigDir
+                skipTutorial: true,  // tutorial is now a separate vault, not inside user's vault
+                globalConfigDir: globalConfigDir
             )
             printSuccess(vaultName: resolvedName, vaultRoot: vaultRoot)
         }
