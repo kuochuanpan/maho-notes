@@ -34,21 +34,8 @@ struct NoteContentView: View {
 
             Divider()
 
-            // Note body
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(note.title)
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .textSelection(.enabled)
-
-                    Text(note.body)
-                        .font(.body)
-                        .textSelection(.enabled)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-            }
+            // Note body (rendered markdown)
+            MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
         }
     }
 
