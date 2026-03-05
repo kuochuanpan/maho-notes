@@ -97,6 +97,9 @@ struct InitCommand: ParsableCommand {
                 let choice = readLine() ?? "1"
                 chosenStorage = choice == "2" ? .local : .icloud
             } else {
+                let localRoot = resolveVaultRoot(storage: .local)
+                print("Vaults will be stored at: \(localRoot)/")
+                print("(Install the Maho Notes app for iCloud sync)")
                 chosenStorage = .local
             }
         }
