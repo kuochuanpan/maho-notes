@@ -171,7 +171,9 @@ A narrow vertical strip inspired by Slack's workspace switcher.
     ```
   - If vault has no author set → show `?` or default icon
 
-### B — Navigator (~240pt, collapsible)
+### B — Navigator (~240pt, resizable, collapsible)
+
+**Width**: default ~240pt, user-draggable via divider between B and C. Min 180pt, max 400pt. Width persisted per-window across restarts. Drag handle: thin line between B/C, cursor changes to `col-resize` on hover (macOS) or shows drag affordance (iPad).
 
 A **pure tree explorer** — collections expand in-place to show sub-collections and notes. No mode switching, no "back" button. Like Xcode's project navigator or Finder's sidebar.
 
