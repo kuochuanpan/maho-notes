@@ -1,7 +1,8 @@
 import ArgumentParser
+import Foundation
 import MahoNotesKit
 
-struct IndexCommand: ParsableCommand {
+struct IndexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "index",
         abstract: "Build or rebuild the full-text search index"
@@ -16,9 +17,12 @@ struct IndexCommand: ParsableCommand {
     @Flag(name: .long, help: "Index all registered vaults")
     var all = false
 
-    func run() throws {
+    @Option(name: .long, help: "Embedding model for vector index (minilm, e5-small)")
+    var model: String?
+
+    func run() async throws {
         if all {
-            try runAllVaults()
+            try await runAllVaults()
             return
         }
         try vaultOption.validateVaultExists()
@@ -41,11 +45,42 @@ struct IndexCommand: ParsableCommand {
         } else {
             print("Indexed \(stats.total) notes (\(stats.added) new, \(stats.updated) updated, \(stats.deleted) deleted)")
         }
+
+        if let modelName = model {
+            try await buildVectorIndex(vault: vault, notes: notes, modelName: modelName)
+        }
+    }
+
+    @available(macOS 15.0, *)
+    private func buildVectorIndex(vault: Vault, notes: [Note], modelName: String) async throws {
+        guard let embeddingModel = EmbeddingModel(rawValue: modelName) else {
+            throw ValidationError("Unknown model '\(modelName)'. Supported: \(EmbeddingModel.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+
+        if !outputOption.json {
+            print("Building vector index with model '\(modelName)'...")
+        }
+
+        let provider = SwiftEmbeddingsProvider(model: embeddingModel)
+        let vecIndex = try VectorIndex(vaultPath: vault.path, dimensions: embeddingModel.dimensions)
+
+        let vecStats = try await vecIndex.buildIndex(
+            notes: notes,
+            asyncEmbedder: { texts in
+                try await provider.embedBatch(texts)
+            },
+            model: modelName,
+            fullRebuild: full
+        )
+
+        if !outputOption.json {
+            print("Vector index: \(vecStats.totalChunks) chunks (\(vecStats.added) new, \(vecStats.updated) updated, \(vecStats.deleted) deleted)")
+        }
     }
 
     // MARK: - Cross-vault
 
-    private func runAllVaults() throws {
+    private func runAllVaults() async throws {
         guard let entries = vaultOption.allVaultEntries(), !entries.isEmpty else {
             print("No vaults registered. Use `mn vault add` to add one.")
             return

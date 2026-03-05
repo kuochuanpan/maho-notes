@@ -241,6 +241,75 @@ public final class VectorIndex: @unchecked Sendable {
         return VectorIndexStats(added: added, updated: updated, deleted: deleted, totalChunks: totalChunks)
     }
 
+    /// Async variant of buildIndex that takes an async embedder.
+    @discardableResult
+    public func buildIndex(
+        notes: [Note],
+        asyncEmbedder: ([String]) async throws -> [[Float]],
+        model: String,
+        fullRebuild: Bool = false
+    ) async throws -> VectorIndexStats {
+        if !fullRebuild, let storedModel = try currentModel(), storedModel != model {
+            throw VectorIndexError.modelMismatch(stored: storedModel, requested: model)
+        }
+
+        if fullRebuild {
+            try db.execute("DELETE FROM chunks")
+            try db.execute("DROP TABLE IF EXISTS vec_chunks")
+            try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
+        }
+
+        var notesByPath: [String: Note] = [:]
+        for note in notes { notesByPath[note.relativePath] = note }
+
+        let existingRows = try db.query("SELECT DISTINCT path, mtime FROM chunks")
+        var existingMtimes: [String: Double] = [:]
+        for row in existingRows {
+            if let path = row["path"], let mtimeStr = row["mtime"], let mtime = Double(mtimeStr) {
+                existingMtimes[path] = mtime
+            }
+        }
+
+        var added = 0, updated = 0, deleted = 0
+
+        for note in notes {
+            let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
+            let fileMtime = Self.fileMtime(atPath: filePath)
+
+            if let existingMtime = existingMtimes[note.relativePath] {
+                if abs(fileMtime - existingMtime) > 0.001 {
+                    let chunks = chunkNote(note)
+                    if !chunks.isEmpty {
+                        let texts = chunks.map { $0.text }
+                        let vectors = try await asyncEmbedder(texts)
+                        try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
+                    }
+                    updated += 1
+                }
+            } else {
+                let chunks = chunkNote(note)
+                if !chunks.isEmpty {
+                    let texts = chunks.map { $0.text }
+                    let vectors = try await asyncEmbedder(texts)
+                    try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
+                }
+                added += 1
+            }
+        }
+
+        let currentPaths = Set(notesByPath.keys)
+        for existingPath in existingMtimes.keys {
+            if !currentPaths.contains(existingPath) {
+                try removeNote(path: existingPath)
+                deleted += 1
+            }
+        }
+
+        let countRows = try db.query("SELECT COUNT(*) as cnt FROM chunks")
+        let totalChunks = countRows.first.flatMap { $0["cnt"] }.flatMap { Int($0) } ?? 0
+        return VectorIndexStats(added: added, updated: updated, deleted: deleted, totalChunks: totalChunks)
+    }
+
     // MARK: - Search
 
     /// Search for notes matching the query vector. Returns results aggregated by note path (best chunk score per note).
@@ -311,18 +380,9 @@ public final class VectorIndex: @unchecked Sendable {
 
     // MARK: - Helpers
 
-    /// Simple chunking: split note body into paragraphs.
     private func chunkNote(_ note: Note) -> [(id: Int, text: String)] {
-        let paragraphs = note.body
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if paragraphs.isEmpty && !note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return [(id: 0, text: note.body.trimmingCharacters(in: .whitespacesAndNewlines))]
-        }
-
-        return paragraphs.enumerated().map { (id: $0.offset, text: $0.element) }
+        Chunker.chunkNote(title: note.title, body: note.body)
+            .map { (id: $0.id, text: $0.text) }
     }
 
     private func escapeSQLString(_ s: String) -> String {

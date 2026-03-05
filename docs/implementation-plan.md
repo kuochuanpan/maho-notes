@@ -100,15 +100,13 @@
 > On-device semantic search with multilingual embedding models.
 > Runtime: `swift-embeddings` (MLTensor) + `SQLiteVec` (sqlite-vec). No Apple NLEmbedding — see Decision #21.
 
-### 2.1 — sqlite-vec + CJKSQLite Compatibility Spike
-- [ ] Add `SQLiteVec` SPM dependency to Package.swift
-- [ ] Spike test: load both CJKSQLite (FTS5) and sqlite-vec in the same process
-  - Can they share the same `index.db`? Or do we need separate DB files?
-  - If conflict: extend CJKSQLite's `Database` to load sqlite-vec extension (we own the repo)
-  - If no conflict: proceed with single `index.db`
-- [ ] `VectorIndex.swift` in MahoNotesKit: create/query vec0 virtual table + chunks metadata table
-- [ ] Schema: `vec_chunks` (vec0 virtual table) + `chunks` (path, chunk_id, chunk_text, model, mtime)
-- [ ] Tests: basic insert/query with dummy vectors
+### 2.1 — sqlite-vec + CJKSQLite Compatibility Spike ✅ (2026-03-05)
+- [x] Vendored sqlite-vec v0.1.6 into swift-cjk-sqlite v0.2.0 (symbol conflict solved)
+- [x] FTS5 + CJK + vec0 coexist in same index.db ✅
+- [x] `VectorIndex.swift` in MahoNotesKit: vec0 virtual table + chunks metadata table
+- [x] Schema: `vec_chunks` (vec0) + `chunks` (path, chunk_id, chunk_text, model, mtime)
+- [x] 8 tests (insert, query, incremental, model mismatch detection)
+- [x] 176 tests total, all passing
 
 ### 2.2 — Embedding Pipeline
 - [ ] Add `swift-embeddings` SPM dependency to Package.swift

@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import MahoNotesKit
 
-struct SearchCommand: ParsableCommand {
+struct SearchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "search",
         abstract: "Search notes by text (FTS5 with CJK support)"
@@ -17,7 +17,24 @@ struct SearchCommand: ParsableCommand {
     @Flag(name: .long, help: "Search across all registered vaults (default when --vault is not specified)")
     var all = false
 
-    func run() throws {
+    @Flag(name: .long, help: "Semantic search using vector embeddings")
+    var semantic = false
+
+    @Flag(name: .long, help: "Hybrid search combining keyword + semantic (RRF)")
+    var hybrid = false
+
+    func run() async throws {
+        if semantic || hybrid {
+            try vaultOption.validateVaultExists()
+            let vault = vaultOption.makeVault()
+            if #available(macOS 15.0, *) {
+                try await runSemanticOrHybrid(vault: vault)
+            } else {
+                throw ValidationError("Semantic search requires macOS 15+")
+            }
+            return
+        }
+
         // Default to all vaults unless --vault is explicitly specified
         let searchAll = all || vaultOption.vault == nil
         if searchAll, let entries = vaultOption.allVaultEntries(), !entries.isEmpty {
@@ -41,6 +58,106 @@ struct SearchCommand: ParsableCommand {
             )
             let results = try vault.searchNotes(query: query)
             outputSubstringResults(results, vaultName: nil)
+        }
+    }
+
+    // MARK: - Semantic / Hybrid
+
+    @available(macOS 15.0, *)
+    private func runSemanticOrHybrid(vault: Vault) async throws {
+        guard VectorIndex.vectorIndexExists(vaultPath: vault.path) else {
+            throw ValidationError("No vector index found. Run `mn index --model minilm` first.")
+        }
+
+        let vecIndex = try VectorIndex(vaultPath: vault.path)
+        guard let modelName = try vecIndex.currentModel(),
+              let embeddingModel = EmbeddingModel(rawValue: modelName) else {
+            throw ValidationError("Could not determine embedding model from vector index.")
+        }
+
+        let provider = SwiftEmbeddingsProvider(model: embeddingModel)
+        let queryVector = try await provider.embed(query)
+
+        if semantic {
+            let results = try vecIndex.search(queryVector: queryVector, limit: 10)
+            outputVectorResults(results)
+        } else {
+            // hybrid
+            let ftsResults = try ftsSearch(vault: vault)
+            let vecResults = try vecIndex.search(queryVector: queryVector, limit: 20)
+            let merged = HybridSearch.merge(ftsResults: ftsResults, vectorResults: vecResults, limit: 10)
+            outputHybridResults(merged)
+        }
+    }
+
+    private func outputVectorResults(_ results: [VectorSearchResult]) {
+        if outputOption.json {
+            let jsonArray = results.map { r -> [String: Any] in
+                [
+                    "path": r.path,
+                    "snippet": r.chunkText,
+                    "score": r.score,
+                ]
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
+               let str = String(data: data, encoding: .utf8) {
+                print(str)
+            }
+            return
+        }
+
+        if results.isEmpty {
+            print("No results for: \(query)")
+            return
+        }
+
+        print("Found \(results.count) result(s) for \"\(query)\" (semantic):\n")
+        for result in results {
+            print("  \(result.path)  (score: \(String(format: "%.3f", result.score)))")
+            if !result.chunkText.isEmpty {
+                let snippet = String(result.chunkText.prefix(120))
+                print("    … \(snippet)")
+            }
+            print()
+        }
+    }
+
+    private func outputHybridResults(_ results: [HybridSearchResult]) {
+        if outputOption.json {
+            let jsonArray = results.map { r -> [String: Any] in
+                [
+                    "path": r.path,
+                    "title": r.title,
+                    "tags": r.tags,
+                    "snippet": r.snippet,
+                    "rrfScore": r.rrfScore,
+                    "sources": Array(r.sources),
+                ]
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
+               let str = String(data: data, encoding: .utf8) {
+                print(str)
+            }
+            return
+        }
+
+        if results.isEmpty {
+            print("No results for: \(query)")
+            return
+        }
+
+        print("Found \(results.count) result(s) for \"\(query)\" (hybrid):\n")
+        for result in results {
+            let sources = result.sources.sorted().joined(separator: "+")
+            print("  \(result.path)  [\(sources)]  (rrf: \(String(format: "%.4f", result.rrfScore)))")
+            if !result.title.isEmpty {
+                let tags = result.tags.isEmpty ? "" : " [\(result.tags.joined(separator: ", "))]"
+                print("    \(result.title)\(tags)")
+            }
+            if !result.snippet.isEmpty {
+                print("    … \(String(result.snippet.prefix(120)))")
+            }
+            print()
         }
     }
 

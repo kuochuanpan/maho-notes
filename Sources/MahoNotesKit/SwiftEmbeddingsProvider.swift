@@ -1,0 +1,68 @@
+import CoreML
+import Embeddings
+import Foundation
+
+/// Supported embedding model aliases.
+public enum EmbeddingModel: String, Sendable, CaseIterable {
+    case minilm
+    case e5small = "e5-small"
+
+    public var huggingFaceId: String {
+        switch self {
+        case .minilm: return "sentence-transformers/all-MiniLM-L6-v2"
+        case .e5small: return "intfloat/multilingual-e5-small"
+        }
+    }
+
+    public var dimensions: Int { 384 }
+}
+
+/// Wraps swift-embeddings for text embedding using Bert or XLMRoberta models.
+@available(macOS 15.0, *)
+public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendable {
+    private let model: EmbeddingModel
+    private var bertBundle: Bert.ModelBundle?
+    private var xlmBundle: XLMRoberta.ModelBundle?
+    private var loaded = false
+
+    public var dimensions: Int { model.dimensions }
+    public var modelIdentifier: String { model.rawValue }
+
+    public init(model: EmbeddingModel = .minilm) {
+        self.model = model
+    }
+
+    private func ensureLoaded() async throws {
+        guard !loaded else { return }
+        switch model {
+        case .minilm:
+            bertBundle = try await Bert.loadModelBundle(from: model.huggingFaceId)
+        case .e5small:
+            xlmBundle = try await XLMRoberta.loadModelBundle(
+                from: model.huggingFaceId,
+                loadConfig: .addWeightKeyPrefix("roberta.")
+            )
+        }
+        loaded = true
+    }
+
+    public func embed(_ text: String) async throws -> [Float] {
+        try await ensureLoaded()
+        let tensor: MLTensor
+        switch model {
+        case .minilm:
+            tensor = try bertBundle!.encode(text, maxLength: 512)
+        case .e5small:
+            tensor = try xlmBundle!.encode(text, maxLength: 512)
+        }
+        return await tensor.cast(to: Float.self).shapedArray(of: Float.self).scalars
+    }
+
+    public func embedBatch(_ texts: [String]) async throws -> [[Float]] {
+        var results: [[Float]] = []
+        for text in texts {
+            try await results.append(embed(text))
+        }
+        return results
+    }
+}
