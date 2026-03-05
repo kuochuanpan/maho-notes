@@ -30,9 +30,8 @@ public struct Vault: Sendable {
                   !definedIds.contains(name)
             else { continue }
 
-            // Only count as collection if it has at least one .md file (recursively)
-            let hasMarkdown = hasMarkdownFiles(in: item.path, fileManager: fm)
-            guard hasMarkdown else { continue }
+            // Include all directories as collections — empty ones represent
+            // user-created collections that don't have notes yet.
 
             // Check _index.md for metadata
             let indexPath = item.appendingPathComponent("_index.md").path

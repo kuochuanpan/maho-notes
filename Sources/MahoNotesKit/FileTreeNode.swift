@@ -138,9 +138,8 @@ extension Vault {
                 ))
             }
 
-            // Skip empty directories (no children at all)
-            guard !children.isEmpty else { return nil }
-
+            // Show all directories — empty ones represent user-created collections
+            // that just don't have notes yet.
             return FileTreeNode(
                 id: relativePath,
                 name: name,

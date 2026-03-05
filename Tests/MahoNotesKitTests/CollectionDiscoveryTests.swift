@@ -80,17 +80,17 @@ struct CollectionDiscoveryTests {
         #expect(withindex?.description == "A fancy collection")
     }
 
-    @Test func emptyDirectoryNotDiscovered() throws {
+    @Test func emptyDirectoryDiscoveredAsCollection() throws {
         let (vault, tmp) = try makeTestVault()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        // Empty directory — should NOT appear as collection
+        // Empty directory — SHOULD appear as collection (user created it, just no notes yet)
         let emptyDir = tmp.appendingPathComponent("emptycoll")
         try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
 
         let collections = try vault.collections()
         let ids = collections.map { $0.id }
-        #expect(!ids.contains("emptycoll"))
+        #expect(ids.contains("emptycoll"))
     }
 
     @Test func hiddenDirectoryNotDiscovered() throws {
