@@ -87,8 +87,29 @@ struct FrontmatterParserTests {
         let notePath = tmp.appendingPathComponent("note.md")
         try noteContent.write(to: notePath, atomically: true, encoding: .utf8)
 
+        // Note should still be parsed — title falls back to filename
         let note = try parseNote(at: notePath.path, relativeTo: tmp.path)
-        #expect(note == nil)
+        #expect(note != nil)
+        #expect(note?.title == "note")
+        #expect(note?.tags == ["test"])
+
+        try fm.removeItem(at: tmp)
+    }
+
+    @Test func parseNoteWithNoFrontmatter() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("test-vault-\(UUID().uuidString)")
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+
+        let noteContent = "# Just a markdown file\n\nNo frontmatter at all."
+        let notePath = tmp.appendingPathComponent("003-my-cool-note.md")
+        try noteContent.write(to: notePath, atomically: true, encoding: .utf8)
+
+        // Note should still be parsed — title falls back to filename sans prefix
+        let note = try parseNote(at: notePath.path, relativeTo: tmp.path)
+        #expect(note != nil)
+        #expect(note?.title == "my-cool-note")
+        #expect(note?.tags == [])
 
         try fm.removeItem(at: tmp)
     }

@@ -4,14 +4,26 @@ import Yams
 /// Splits a markdown file into (YAML frontmatter string, body content).
 /// Returns nil for frontmatter if no valid `---` delimiters are found.
 public func splitFrontmatter(_ content: String) -> (yaml: String?, body: String) {
-    guard content.hasPrefix("---") else {
+    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("---") else {
         return (nil, content)
     }
 
     let lines = content.components(separatedBy: "\n")
+    // Find the opening --- line (may not be line 0 if there's leading whitespace)
+    var openingIndex: Int?
+    for i in 0..<lines.count {
+        if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
+            openingIndex = i
+            break
+        }
+    }
+    guard let startIdx = openingIndex else {
+        return (nil, content)
+    }
     // Find closing ---
     var closingIndex: Int?
-    for i in 1..<lines.count {
+    for i in (startIdx + 1)..<lines.count {
         if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
             closingIndex = i
             break
@@ -22,7 +34,7 @@ public func splitFrontmatter(_ content: String) -> (yaml: String?, body: String)
         return (nil, content)
     }
 
-    let yamlLines = lines[1..<endIdx]
+    let yamlLines = lines[(startIdx + 1)..<endIdx]
     let yamlStr = yamlLines.joined(separator: "\n")
     let bodyLines = lines[(endIdx + 1)...]
     let body = bodyLines.joined(separator: "\n")
@@ -75,17 +87,38 @@ public func setFrontmatterPublic(filePath: String, isPublic: Bool) throws {
 /// Parses a markdown file at the given path into a Note
 public func parseNote(at filePath: String, relativeTo vaultPath: String) throws -> Note? {
     let content = try String(contentsOfFile: filePath, encoding: .utf8)
-    let (yamlStr, body) = splitFrontmatter(content)
 
-    guard let yamlStr,
-          let yaml = try Yams.load(yaml: yamlStr) as? [String: Any]
-    else {
-        return nil
+    // Strip BOM if present
+    let cleaned = content.hasPrefix("\u{FEFF}") ? String(content.dropFirst()) : content
+
+    let (yamlStr, body) = splitFrontmatter(cleaned)
+
+    // Compute relative path from vault root
+    let vaultURL = URL(fileURLWithPath: vaultPath).standardizedFileURL
+    let fileURL = URL(fileURLWithPath: filePath).standardizedFileURL
+    let relPath = fileURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
+
+    // Fallback title from filename (without extension and leading number prefix like "001-")
+    let fallbackTitle: String = {
+        var name = (filePath as NSString).lastPathComponent
+        if name.hasSuffix(".md") { name = String(name.dropLast(3)) }
+        // Strip leading number prefix like "001-"
+        if let range = name.range(of: #"^\d+-"#, options: .regularExpression) {
+            name = String(name[range.upperBound...])
+        }
+        return name
+    }()
+
+    // Parse frontmatter if present; notes without frontmatter still show up
+    let yaml: [String: Any]
+    if let yamlStr,
+       let parsed = try? Yams.load(yaml: yamlStr) as? [String: Any] {
+        yaml = parsed
+    } else {
+        yaml = [:]
     }
 
-    guard let title = yaml["title"] as? String else {
-        return nil
-    }
+    let title = yaml["title"] as? String ?? fallbackTitle
 
     let tags: [String]
     if let tagArray = yaml["tags"] as? [String] {
@@ -95,11 +128,6 @@ public func parseNote(at filePath: String, relativeTo vaultPath: String) throws 
     } else {
         tags = []
     }
-
-    // Compute relative path from vault root
-    let vaultURL = URL(fileURLWithPath: vaultPath).standardizedFileURL
-    let fileURL = URL(fileURLWithPath: filePath).standardizedFileURL
-    let relPath = fileURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
 
     return Note(
         relativePath: relPath,
