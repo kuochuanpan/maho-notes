@@ -226,6 +226,26 @@ struct VectorIndexTests {
         #expect(!vecResults.isEmpty)
     }
 
+    @Test func dimensionMismatchThrows() throws {
+        let (_, tmp) = try makeTempVault()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        // Create index with 384 dimensions
+        _ = try VectorIndex(vaultPath: tmp.path, dimensions: 384)
+
+        // Opening with different dimensions should throw
+        #expect(throws: VectorIndexError.self) {
+            _ = try VectorIndex(vaultPath: tmp.path, dimensions: 1024)
+        }
+    }
+
+    @Test func dimensionMismatchErrorMessage() throws {
+        let error = VectorIndexError.dimensionMismatch(stored: 384, requested: 1024)
+        #expect(error.errorDescription?.contains("384") == true)
+        #expect(error.errorDescription?.contains("1024") == true)
+        #expect(error.errorDescription?.contains("mn index --full") == true)
+    }
+
     @Test func noteLevelAggregation() throws {
         let (_, tmp) = try makeTempVault()
         defer { try? FileManager.default.removeItem(at: tmp) }

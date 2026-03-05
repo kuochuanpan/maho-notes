@@ -17,7 +17,7 @@ struct IndexCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Index all registered vaults")
     var all = false
 
-    @Option(name: .long, help: "Embedding model for vector index (minilm, e5-small)")
+    @Option(name: .long, help: "Embedding model for vector index (minilm, e5-small, bge-m3)")
     var model: String?
 
     func run() async throws {

@@ -46,4 +46,35 @@ struct EmbeddingProviderTests {
         #expect(EmbeddingModel(rawValue: "minilm") == .minilm)
         #expect(EmbeddingModel(rawValue: "e5-small") == .e5small)
     }
+
+    @Test func bgeM3ModelProperties() {
+        let model = EmbeddingModel.bgeM3
+        #expect(model.rawValue == "bge-m3")
+        #expect(model.huggingFaceId == "BAAI/bge-m3")
+        #expect(model.dimensions == 1024)
+        #expect(EmbeddingModel(rawValue: "bge-m3") == .bgeM3)
+    }
+
+    @Test func dimensionsPerCase() {
+        #expect(EmbeddingModel.minilm.dimensions == 384)
+        #expect(EmbeddingModel.e5small.dimensions == 384)
+        #expect(EmbeddingModel.bgeM3.dimensions == 1024)
+    }
+
+    @Test func displayNameForAllModels() {
+        #expect(EmbeddingModel.minilm.displayName == "MiniLM-L6-v2")
+        #expect(EmbeddingModel.e5small.displayName == "Multilingual E5 Small")
+        #expect(EmbeddingModel.bgeM3.displayName == "BGE-M3")
+    }
+
+    @Test func approximateSizeForAllModels() {
+        #expect(EmbeddingModel.minilm.approximateSize == "~80 MB")
+        #expect(EmbeddingModel.e5small.approximateSize == "~120 MB")
+        #expect(EmbeddingModel.bgeM3.approximateSize == "~2.2 GB")
+    }
+
+    @Test func allCasesIncludesBgeM3() {
+        #expect(EmbeddingModel.allCases.count == 3)
+        #expect(EmbeddingModel.allCases.contains(.bgeM3))
+    }
 }

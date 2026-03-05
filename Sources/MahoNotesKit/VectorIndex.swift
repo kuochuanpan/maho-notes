@@ -22,6 +22,7 @@ public enum VectorIndexError: Error, LocalizedError {
     case indexCorrupt(message: String)
     case queryFailed(message: String)
     case modelMismatch(stored: String, requested: String)
+    case dimensionMismatch(stored: Int, requested: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -29,6 +30,8 @@ public enum VectorIndexError: Error, LocalizedError {
         case .queryFailed(let msg): return "Vector query failed: \(msg)"
         case .modelMismatch(let stored, let requested):
             return "Model mismatch: index uses '\(stored)' but '\(requested)' was requested. Rebuild with fullRebuild: true."
+        case .dimensionMismatch(let stored, let requested):
+            return "Dimension mismatch: index has \(stored) dimensions but \(requested) requested. Run `mn index --full` to rebuild."
         }
     }
 }
@@ -76,19 +79,24 @@ public final class VectorIndex: @unchecked Sendable {
 
     private func ensureSchema() throws {
         try db.execute("""
-            CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER)
+            CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)
         """)
 
-        let rows = try db.query("SELECT version FROM _vec_schema LIMIT 1")
+        let rows = try db.query("SELECT version, dimensions FROM _vec_schema LIMIT 1")
         let existingVersion = rows.first.flatMap { $0["version"] }.flatMap { Int($0) }
+        let storedDimensions = rows.first.flatMap { $0["dimensions"] }.flatMap { Int($0) }
 
         if let v = existingVersion, v == currentVecSchemaVersion {
+            // Check dimension mismatch on existing index
+            if let stored = storedDimensions, stored != dimensions {
+                throw VectorIndexError.dimensionMismatch(stored: stored, requested: dimensions)
+            }
             return
         }
 
         if existingVersion != nil {
             try dropVecTables()
-            try db.execute("CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER)")
+            try db.execute("CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)")
         }
 
         try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
@@ -107,9 +115,9 @@ public final class VectorIndex: @unchecked Sendable {
         try db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)")
 
         if existingVersion == nil {
-            try db.execute("INSERT INTO _vec_schema(version) VALUES (\(currentVecSchemaVersion))")
+            try db.execute("INSERT INTO _vec_schema(version, dimensions) VALUES (\(currentVecSchemaVersion), \(dimensions))")
         } else {
-            try db.execute("UPDATE _vec_schema SET version = \(currentVecSchemaVersion)")
+            try db.execute("UPDATE _vec_schema SET version = \(currentVecSchemaVersion), dimensions = \(dimensions)")
         }
     }
 

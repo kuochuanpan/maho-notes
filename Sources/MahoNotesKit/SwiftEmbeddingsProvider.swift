@@ -6,15 +6,39 @@ import Foundation
 public enum EmbeddingModel: String, Sendable, CaseIterable {
     case minilm
     case e5small = "e5-small"
+    case bgeM3 = "bge-m3"
 
     public var huggingFaceId: String {
         switch self {
         case .minilm: return "sentence-transformers/all-MiniLM-L6-v2"
         case .e5small: return "intfloat/multilingual-e5-small"
+        case .bgeM3: return "BAAI/bge-m3"
         }
     }
 
-    public var dimensions: Int { 384 }
+    public var dimensions: Int {
+        switch self {
+        case .minilm: return 384
+        case .e5small: return 384
+        case .bgeM3: return 1024
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .minilm: return "MiniLM-L6-v2"
+        case .e5small: return "Multilingual E5 Small"
+        case .bgeM3: return "BGE-M3"
+        }
+    }
+
+    public var approximateSize: String {
+        switch self {
+        case .minilm: return "~80 MB"
+        case .e5small: return "~120 MB"
+        case .bgeM3: return "~2.2 GB"
+        }
+    }
 }
 
 /// Wraps swift-embeddings for text embedding using Bert or XLMRoberta models.
@@ -42,6 +66,11 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
                 from: model.huggingFaceId,
                 loadConfig: .addWeightKeyPrefix("roberta.")
             )
+        case .bgeM3:
+            xlmBundle = try await XLMRoberta.loadModelBundle(
+                from: model.huggingFaceId,
+                loadConfig: .init()
+            )
         }
         loaded = true
     }
@@ -52,7 +81,7 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         switch model {
         case .minilm:
             tensor = try bertBundle!.encode(text, maxLength: 512)
-        case .e5small:
+        case .e5small, .bgeM3:
             tensor = try xlmBundle!.encode(text, maxLength: 512)
         }
         return await tensor.cast(to: Float.self).shapedArray(of: Float.self).scalars
