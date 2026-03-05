@@ -28,8 +28,25 @@ struct ContentView: View {
                 }
 
                 // C — Content
-                NoteContentView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ZStack(alignment: .top) {
+                    NoteContentView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if appState.showSearchPanel {
+                        // Dismiss backdrop
+                        Color.black.opacity(0.15)
+                            .ignoresSafeArea()
+                            .onTapGesture {
+                                appState.toggleSearch()
+                            }
+
+                        SearchPanelView()
+                            .padding(.top, 40)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(.easeOut(duration: 0.2), value: appState.showSearchPanel)
             }
             .animation(.easeInOut(duration: 0.2), value: appState.showNavigator)
             .animation(.easeInOut(duration: 0.2), value: appState.showVaultRail)

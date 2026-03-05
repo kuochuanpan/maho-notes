@@ -85,6 +85,59 @@ final class AppState {
         userShowNavigator = showNavigator
     }
 
+    // MARK: - Search
+
+    /// Whether the search panel is visible.
+    var showSearchPanel: Bool = false
+
+    /// Current search query text.
+    var searchQuery: String = ""
+
+    /// Search results from FTS.
+    private(set) var searchResults: [Note] = []
+
+    /// Toggle search panel visibility.
+    func toggleSearch() {
+        showSearchPanel.toggle()
+        if !showSearchPanel {
+            searchQuery = ""
+            searchResults = []
+        }
+    }
+
+    /// Perform search against current vault using FTS.
+    func performSearch() {
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty, let entry = selectedVault else {
+            searchResults = []
+            return
+        }
+
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+
+        do {
+            let results = try vault.searchNotes(query: query)
+            searchResults = Array(results.prefix(20))
+        } catch {
+            searchResults = []
+        }
+    }
+
+    /// Clear the search query and results.
+    func clearSearch() {
+        searchQuery = ""
+        searchResults = []
+    }
+
+    /// Select a note from search results and dismiss the panel.
+    func selectSearchResult(_ note: Note) {
+        selectedNotePath = note.relativePath
+        showSearchPanel = false
+        searchQuery = ""
+        searchResults = []
+    }
+
     // MARK: - Note Selection
 
     /// Relative path of the currently selected note.

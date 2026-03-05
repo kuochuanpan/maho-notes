@@ -27,6 +27,18 @@ struct MahoNotesApp: App {
                 }
                 .keyboardShortcut("\\", modifiers: .command)
             }
+
+            CommandGroup(after: .textEditing) {
+                Button("Search Notes") {
+                    appState.toggleSearch()
+                }
+                .keyboardShortcut("k", modifiers: .command)
+
+                Button("Find in Notes") {
+                    appState.toggleSearch()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
         }
     }
 }
