@@ -159,7 +159,13 @@
 - [x] Model cache detection: `~/Documents/huggingface/models/{org}/{model}` (+ alt `models--{org}--{model}`)
 - [ ] Download progress: stderr output during download (deferred — swift-embeddings/HubApi doesn't expose progress callbacks)
 
-**Phase 2b-CLI complete! 🎉** 176 → 187 tests, commits `902c7f4`, `a69de1e`.
+**Phase 2b-CLI complete! 🎉** 176 → 187 tests, commits `902c7f4`, `6fea291`, `44dcf7c`.
+
+#### Bugs Found During Testing
+- [x] `String(format:)` + `NSString.utf8String!` → SIGSEGV in `mn model list` (replaced with Swift `.padding`)
+- [x] Model cache path was `models--org--model` but HubApi uses `models/org/model` (fixed to check both)
+- [x] `_vec_schema` migration: old DBs lack `dimensions` column → added `ALTER TABLE` + backfill
+- [x] e5-small `loadConfig`: doesn't need `.addWeightKeyPrefix("roberta.")` (weights don't have prefix)
 
 #### Already Done
 - [x] Standard tier: multilingual-e5-small — implemented in Phase 2.2 (`EmbeddingModel.e5small`)
