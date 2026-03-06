@@ -48,7 +48,7 @@ final class AppState {
     // MARK: - Cloud Sync
 
     /// Current cloud sync mode (read from global config).
-    var cloudSyncMode: CloudSyncMode = .icloud
+    var cloudSyncMode: CloudSyncMode = .off
 
     /// Load cloud sync mode from global config.
     func loadCloudSyncMode() {

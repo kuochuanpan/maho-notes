@@ -222,13 +222,13 @@ struct VaultRegistryTests {
 
     // MARK: - loadCloudSyncMode default
 
-    @Test func loadCloudSyncModeDefaultsToICloud() throws {
+    @Test func loadCloudSyncModeDefaultsToOff() throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
 
-        // No config.yaml in dir → default is .icloud
+        // No config.yaml in dir → default is .off (opt-in)
         let mode = loadCloudSyncMode(globalConfigDir: dir)
-        #expect(mode == .icloud)
+        #expect(mode == .off)
     }
 
     @Test func loadCloudSyncModeReadsOffFromConfig() throws {

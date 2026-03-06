@@ -113,7 +113,7 @@ public func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncM
           let sync = yaml["sync"] as? [String: Any],
           let cloud = sync["cloud"] as? String,
           let mode = CloudSyncMode(rawValue: cloud)
-    else { return .icloud }
+    else { return .off }
     return mode
 }
 
