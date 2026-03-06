@@ -16,6 +16,14 @@ public struct SearchResult: Sendable {
     public let tags: [String]
     public let snippet: String
     public let rank: Double
+
+    public init(path: String, title: String, tags: [String], snippet: String, rank: Double) {
+        self.path = path
+        self.title = title
+        self.tags = tags
+        self.snippet = snippet
+        self.rank = rank
+    }
 }
 
 /// Errors specific to SearchIndex operations.

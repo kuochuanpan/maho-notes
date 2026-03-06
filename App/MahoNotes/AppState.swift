@@ -208,12 +208,22 @@ final class AppState {
             queryVector = try await provider.embed(query)
         } catch {
             searchError = "Embedding failed: \(error.localizedDescription)"
-            // Fall back to FTS
             performFTSSearch(query: query)
             return
         }
 
-        var allResults: [Note] = []
+        // For cross-vault search: collect ALL results across vaults, then rank globally.
+        // This prevents per-vault "top result" pollution — a vault with irrelevant
+        // content won't show up just because something is its "best match."
+
+        // Semantic: collect (score, Note) pairs, sort globally by cosine similarity
+        var scoredNotes: [(score: Double, note: Note)] = []
+
+        // Hybrid: collect raw FTS + vector results across vaults with vault-prefixed paths,
+        // then do ONE global RRF merge to get fair cross-vault ranking.
+        var globalFtsResults: [SearchResult] = []
+        var globalVecResults: [VectorSearchResult] = []
+        var notesByPrefixedPath: [String: Note] = [:]
 
         for entry in entries {
             let vaultPath = resolvedPath(for: entry)
@@ -225,25 +235,60 @@ final class AppState {
                 continue
             }
 
-            if mode == "semantic" {
-                // Pure semantic search
-                let results = vectorSearch(vaultPath: vaultPath, queryVector: queryVector, notes: notes)
-                allResults.append(contentsOf: results)
-            } else {
-                // Hybrid: FTS + Vector → RRF merge
-                let ftsResults = ftsSearchResults(entry: entry, query: query)
-                let vecResults = vectorSearchResults(vaultPath: vaultPath, queryVector: queryVector)
-                let merged = HybridSearch.merge(ftsResults: ftsResults, vectorResults: vecResults, limit: 20)
+            let vecResults = vectorSearchResults(vaultPath: vaultPath, queryVector: queryVector)
 
-                // Map merged results back to Note objects
-                let matched = merged.compactMap { result in
-                    notes.first { $0.relativePath == result.path }
+            if mode == "semantic" {
+                // Map vector results → Note with score
+                for r in vecResults {
+                    if let note = notes.first(where: { $0.relativePath == r.path }) {
+                        scoredNotes.append((score: r.score, note: note))
+                    }
                 }
-                allResults.append(contentsOf: matched)
+            } else {
+                // Hybrid: prefix paths with vault name to avoid collision across vaults
+                let vaultPrefix = entry.name + "::"
+                for note in notes {
+                    notesByPrefixedPath[vaultPrefix + note.relativePath] = note
+                }
+
+                // Collect FTS results with prefixed paths
+                let ftsResults = ftsSearchResults(entry: entry, query: query)
+                for r in ftsResults {
+                    globalFtsResults.append(SearchResult(
+                        path: vaultPrefix + r.path,
+                        title: r.title,
+                        tags: r.tags,
+                        snippet: r.snippet,
+                        rank: r.rank
+                    ))
+                }
+                // Collect vector results with prefixed paths
+                for r in vecResults {
+                    globalVecResults.append(VectorSearchResult(
+                        path: vaultPrefix + r.path,
+                        chunkText: r.chunkText,
+                        score: r.score,
+                        chunkId: r.chunkId
+                    ))
+                }
             }
         }
 
-        searchResults = Array(allResults.prefix(20))
+        if mode == "semantic" {
+            // Sort globally by cosine similarity — absolute scores are comparable across vaults
+            searchResults = scoredNotes
+                .sorted { $0.score > $1.score }
+                .prefix(20)
+                .map { $0.note }
+        } else {
+            // Global RRF merge: one ranking across all vaults
+            let merged = HybridSearch.merge(
+                ftsResults: globalFtsResults,
+                vectorResults: globalVecResults,
+                limit: 20
+            )
+            searchResults = merged.compactMap { notesByPrefixedPath[$0.path] }
+        }
     }
 
     /// FTS search returning Note objects for a single vault.

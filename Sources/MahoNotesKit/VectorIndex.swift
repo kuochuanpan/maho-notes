@@ -7,6 +7,13 @@ public struct VectorSearchResult: Sendable {
     public let chunkText: String
     public let score: Double
     public let chunkId: Int
+
+    public init(path: String, chunkText: String, score: Double, chunkId: Int) {
+        self.path = path
+        self.chunkText = chunkText
+        self.score = score
+        self.chunkId = chunkId
+    }
 }
 
 /// Statistics from a vector index build operation.
