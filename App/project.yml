@@ -34,8 +34,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: YES
         CODE_SIGN_STYLE: Automatic
-        # Leave DEVELOPMENT_TEAM empty — user sets in Xcode
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: K867NAPA93
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
