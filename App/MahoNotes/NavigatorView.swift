@@ -498,22 +498,19 @@ private struct TreeNodeView: View {
                 .buttonStyle(.plain)
                 .padding(.leading, 28)
 
-                // Notes — draggable for reorder (per-item drag/drop to scope within collection)
+                // Notes — reorder via onDrag/onDrop (.move proposal, scoped to collection)
                 ForEach(noteChildren, id: \.id) { child in
                     noteLeafRowFor(child)
                         .padding(.leading, 12)
-                        .draggable(child.id)
-                        .dropDestination(for: String.self) { droppedIds, _ in
-                            guard let droppedId = droppedIds.first,
-                                  droppedId != child.id else { return false }
-                            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
-                            guard let fromIdx = paths.firstIndex(of: droppedId),
-                                  let toIdx = paths.firstIndex(of: child.id) else { return false }
-                            paths.remove(at: fromIdx)
-                            paths.insert(droppedId, at: toIdx)
-                            onReorderNotes?(node.id, paths)
-                            return true
+                        .onDrag {
+                            NSItemProvider(object: child.id as NSString)
                         }
+                        .onDrop(of: [.text], delegate: NoteReorderDropDelegate(
+                            targetId: child.id,
+                            noteChildren: noteChildren,
+                            collectionId: node.id,
+                            onReorderNotes: onReorderNotes
+                        ))
                 }
             }
         } else {
@@ -580,5 +577,42 @@ private struct TreeNodeView: View {
                 Label("Delete Note", systemImage: "trash")
             }
         }
+    }
+}
+
+// MARK: - Note Reorder Drop Delegate
+
+/// Custom DropDelegate that uses .move proposal (no "+" badge) and scopes
+/// reorder to notes within a single collection.
+private struct NoteReorderDropDelegate: DropDelegate {
+    let targetId: String
+    let noteChildren: [FileTreeNode]
+    let collectionId: String
+    var onReorderNotes: ((String, [String]) -> Void)?
+
+    func dropEntered(info: DropInfo) {}
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let item = info.itemProviders(for: [.text]).first else { return false }
+        item.loadObject(ofClass: NSString.self) { reading, _ in
+            guard let droppedId = reading as? String, droppedId != targetId else { return }
+            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+            guard let fromIdx = paths.firstIndex(of: droppedId),
+                  let toIdx = paths.firstIndex(of: targetId) else { return }
+            paths.remove(at: fromIdx)
+            paths.insert(droppedId, at: toIdx)
+            DispatchQueue.main.async {
+                onReorderNotes?(collectionId, paths)
+            }
+        }
+        return true
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.text])
     }
 }
