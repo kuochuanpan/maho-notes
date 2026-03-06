@@ -152,7 +152,7 @@ struct VaultAddSubcommand: ParsableCommand {
     // MARK: iCloud
 
     private func addICloud(globalConfigDir: String) throws {
-        let base = ("~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        let base = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents/vaults" as NSString).expandingTildeInPath
         let vaultPath = (base as NSString).appendingPathComponent(name)
 
         try initVault(

@@ -33,7 +33,7 @@ final class iCloudSyncManager: @unchecked Sendable {
     // MARK: - Container URL
 
     static func iCloudContainerURL() -> URL? {
-        FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.com.pcca.mahonotes")
+        FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.dev.pcca.mahonotes")
     }
 
     static func iCloudDocumentsURL() -> URL? {

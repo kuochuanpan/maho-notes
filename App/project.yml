@@ -22,7 +22,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.pcca.mahonotes
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pcca.mahonotes
         PRODUCT_NAME: Maho Notes
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"

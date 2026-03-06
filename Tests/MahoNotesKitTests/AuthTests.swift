@@ -181,7 +181,7 @@ struct AuthTests {
     }
 
     @Test func iCloudCheckICloudPath() throws {
-        let warning = PreflightCheck.checkICloudStatus(vaultPath: "~/Library/Mobile Documents/iCloud~com.pcca.mahonotes/Documents")
+        let warning = PreflightCheck.checkICloudStatus(vaultPath: "~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents")
         // May or may not warn depending on system; just ensure no crash
         _ = warning
     }
