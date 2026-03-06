@@ -133,7 +133,22 @@ final class AppState {
         }
     }
 
-    /// Perform search against current vault (or all vaults) using the configured search mode.
+    /// Embedding provider (lazy-loaded, reused across searches).
+    private var embeddingProvider: (any EmbeddingProvider)?
+
+    /// Get or create the embedding provider for the current model setting.
+    private func getEmbeddingProvider() -> any EmbeddingProvider {
+        if let provider = embeddingProvider, provider.modelIdentifier == embeddingModel {
+            return provider
+        }
+        let model = EmbeddingModel(rawValue: embeddingModel) ?? .minilm
+        let provider = SwiftEmbeddingsProvider(model: model)
+        embeddingProvider = provider
+        return provider
+    }
+
+    /// Perform search (async — supports FTS, semantic, and hybrid modes).
+    @MainActor
     func performSearch() {
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
@@ -142,67 +157,143 @@ final class AppState {
             return
         }
 
+        let mode = searchMode
+        if mode == "text" {
+            // Synchronous FTS — no async needed
+            performFTSSearch(query: query)
+        } else {
+            // Semantic or Hybrid — need async embedding
+            Task {
+                await performAsyncSearch(query: query, mode: mode)
+            }
+        }
+    }
+
+    /// Synchronous FTS-only search.
+    @MainActor
+    private func performFTSSearch(query: String) {
+        searchError = nil
         if searchScope == "allVaults" {
             var merged: [Note] = []
             for entry in vaults {
-                let results = searchVault(entry: entry, query: query)
-                merged.append(contentsOf: results)
+                merged.append(contentsOf: ftsSearch(entry: entry, query: query))
             }
             searchResults = Array(merged.prefix(20))
+        } else if let entry = selectedVault {
+            searchResults = Array(ftsSearch(entry: entry, query: query).prefix(20))
         } else {
-            guard let entry = selectedVault else {
-                searchResults = []
-                return
-            }
-            searchResults = Array(searchVault(entry: entry, query: query).prefix(20))
+            searchResults = []
         }
     }
 
-    /// Search a single vault using the configured search mode.
-    private func searchVault(entry: VaultEntry, query: String) -> [Note] {
+    /// Async search for semantic and hybrid modes.
+    @MainActor
+    private func performAsyncSearch(query: String, mode: String) async {
+        let entries = searchScope == "allVaults" ? vaults : (selectedVault.map { [$0] } ?? [])
+
+        // Check vector index exists for at least one vault
+        let hasVectorIndex = entries.contains { VectorIndex.vectorIndexExists(vaultPath: resolvedPath(for: $0)) }
+        guard hasVectorIndex else {
+            searchError = "Build search index first (Settings → Search or `mn index`)"
+            searchResults = []
+            return
+        }
+
+        searchError = nil
+
+        // Embed the query
+        let provider = getEmbeddingProvider()
+        let queryVector: [Float]
+        do {
+            queryVector = try await provider.embed(query)
+        } catch {
+            searchError = "Embedding failed: \(error.localizedDescription)"
+            // Fall back to FTS
+            performFTSSearch(query: query)
+            return
+        }
+
+        var allResults: [Note] = []
+
+        for entry in entries {
+            let vaultPath = resolvedPath(for: entry)
+            let vault = Vault(path: vaultPath)
+            let notes: [Note]
+            do {
+                notes = try vault.allNotes()
+            } catch {
+                continue
+            }
+
+            if mode == "semantic" {
+                // Pure semantic search
+                let results = vectorSearch(vaultPath: vaultPath, queryVector: queryVector, notes: notes)
+                allResults.append(contentsOf: results)
+            } else {
+                // Hybrid: FTS + Vector → RRF merge
+                let ftsResults = ftsSearchResults(entry: entry, query: query)
+                let vecResults = vectorSearchResults(vaultPath: vaultPath, queryVector: queryVector)
+                let merged = HybridSearch.merge(ftsResults: ftsResults, vectorResults: vecResults, limit: 20)
+
+                // Map merged results back to Note objects
+                let matched = merged.compactMap { result in
+                    notes.first { $0.relativePath == result.path }
+                }
+                allResults.append(contentsOf: matched)
+            }
+        }
+
+        searchResults = Array(allResults.prefix(20))
+    }
+
+    /// FTS search returning Note objects for a single vault.
+    private func ftsSearch(entry: VaultEntry, query: String) -> [Note] {
         let vaultPath = resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
-        let mode = searchMode
-
-        switch mode {
-        case "semantic":
-            guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else {
-                searchError = "Build search index first in Settings"
-                return []
-            }
-            searchError = nil
-            // Semantic search requires async embedding — fall back to FTS for now
-            // (async search is handled by performSearchAsync)
-            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
-
-        case "hybrid":
-            guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else {
-                searchError = "Build search index first in Settings"
-                return []
-            }
-            searchError = nil
-            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
-
-        default: // "text"
-            searchError = nil
-            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
-        }
-    }
-
-    /// FTS5 search against a vault's SearchIndex.
-    private func ftsSearch(vault: Vault, vaultPath: String, query: String) -> [Note] {
         do {
             let index = try SearchIndex(vaultPath: vaultPath)
             let notes = try vault.allNotes()
             let _ = try index.buildIndex(notes: notes)
             let results = try index.search(query: query)
-            // Map SearchResult paths back to Note objects
             return results.compactMap { result in
                 notes.first { $0.relativePath == result.path }
             }
         } catch {
-            // Fallback to naive vault search
             return (try? vault.searchNotes(query: query)) ?? []
+        }
+    }
+
+    /// FTS search returning raw SearchResult (for hybrid merge).
+    private func ftsSearchResults(entry: VaultEntry, query: String) -> [SearchResult] {
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        do {
+            let index = try SearchIndex(vaultPath: vaultPath)
+            let notes = try vault.allNotes()
+            let _ = try index.buildIndex(notes: notes)
+            return try index.search(query: query)
+        } catch {
+            return []
+        }
+    }
+
+    /// Vector search returning Note objects.
+    private func vectorSearch(vaultPath: String, queryVector: [Float], notes: [Note]) -> [Note] {
+        let results = vectorSearchResults(vaultPath: vaultPath, queryVector: queryVector)
+        return results.compactMap { result in
+            notes.first { $0.relativePath == result.path }
+        }
+    }
+
+    /// Vector search returning raw VectorSearchResult (for hybrid merge).
+    private func vectorSearchResults(vaultPath: String, queryVector: [Float]) -> [VectorSearchResult] {
+        guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else { return [] }
+        do {
+            let dimensions = queryVector.count
+            let vecIndex = try VectorIndex(vaultPath: vaultPath, dimensions: dimensions, skipDimensionCheck: true)
+            return try vecIndex.search(queryVector: queryVector)
+        } catch {
+            return []
         }
     }
 
