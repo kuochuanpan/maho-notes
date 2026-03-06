@@ -17,6 +17,9 @@ targets:
     platform: [macOS, iOS]
     sources:
       - MahoNotes
+    resources:
+      - path: MahoNotes/Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pcca.mahonotes

@@ -16,7 +16,9 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown)
-        webView.loadHTMLString(html, baseURL: nil)
+        // Use bundle resource URL as base so KaTeX can resolve relative font paths
+        let baseURL = Bundle.main.resourceURL
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -37,7 +39,8 @@ struct MarkdownWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown)
-        webView.loadHTMLString(html, baseURL: nil)
+        let baseURL = Bundle.main.resourceURL
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -66,6 +69,57 @@ extension MarkdownWebView {
             }
         }
     }
+
+    // MARK: - Bundled vendor assets
+
+    /// Resolve a bundled resource file URL. XcodeGen flattens resources into the bundle root.
+    private static func bundleURL(_ name: String, ext: String) -> String {
+        if let url = Bundle.main.url(forResource: name, withExtension: ext) {
+            return url.absoluteString
+        }
+        return ""
+    }
+
+    /// <head> tags for KaTeX and highlight.js
+    static var vendorHead: String {
+        let katexCSS = bundleURL("katex.min", ext: "css")
+        let katexJS = bundleURL("katex.min", ext: "js")
+        let autoRenderJS = bundleURL("auto-render.min", ext: "js")
+        let hljsJS = bundleURL("highlight.min", ext: "js")
+        let hljsLight = bundleURL("github.min", ext: "css")
+        let hljsDark = bundleURL("github-dark.min", ext: "css")
+
+        return """
+        <link rel="stylesheet" href="\(katexCSS)">
+        <script defer src="\(katexJS)"></script>
+        <script defer src="\(autoRenderJS)"></script>
+        <link rel="stylesheet" href="\(hljsLight)" media="(prefers-color-scheme: light)">
+        <link rel="stylesheet" href="\(hljsDark)" media="(prefers-color-scheme: dark)">
+        <script defer src="\(hljsJS)"></script>
+        """
+    }
+
+    /// Post-body initialization script
+    static let vendorScript = """
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        if (typeof hljs !== "undefined") {
+            document.querySelectorAll("pre code").forEach(function(block) {
+                hljs.highlightElement(block);
+            });
+        }
+        if (typeof renderMathInElement !== "undefined") {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: "$$", right: "$$", display: true},
+                    {left: "$", right: "$", display: false}
+                ],
+                throwOnError: false
+            });
+        }
+    });
+    </script>
+    """
 
     func buildHTML(from markdown: String) -> String {
         let renderer = MarkdownHTMLRenderer()
@@ -225,38 +279,11 @@ extension MarkdownWebView {
             padding: 0;
         }
         </style>
-        <!-- KaTeX for LaTeX rendering -->
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
-        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
-        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
-        <!-- highlight.js for syntax highlighting -->
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github.min.css" media="(prefers-color-scheme: light)">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-        <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
+        \(Self.vendorHead)
         </head>
         <body>
         \(body)
-        <script>
-        // Initialize highlight.js and KaTeX after page load
-        document.addEventListener("DOMContentLoaded", function() {
-            // Syntax highlighting
-            if (typeof hljs !== "undefined") {
-                document.querySelectorAll("pre code").forEach(function(block) {
-                    hljs.highlightElement(block);
-                });
-            }
-            // KaTeX auto-render
-            if (typeof renderMathInElement !== "undefined") {
-                renderMathInElement(document.body, {
-                    delimiters: [
-                        {left: "$$", right: "$$", display: true},
-                        {left: "$", right: "$", display: false}
-                    ],
-                    throwOnError: false
-                });
-            }
-        });
-        </script>
+        \(Self.vendorScript)
         </body>
         </html>
         """
