@@ -1,8 +1,8 @@
 import SwiftUI
 import MahoNotesKit
-import Combine
 
-/// Floating search panel triggered by ⌘K, overlaid on the content area.
+/// Search dropdown panel shown below the title bar search field.
+/// Includes scope toggle, mode toggle, and results list.
 struct SearchPanelView: View {
     @Environment(AppState.self) private var appState
     @FocusState private var isFieldFocused: Bool
@@ -11,24 +11,20 @@ struct SearchPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchField
+            Divider()
+            togglesSection
+            Divider()
+
             if !appState.searchQuery.isEmpty {
-                Divider()
                 resultsList
             } else {
                 placeholder
             }
         }
-        .frame(width: 500)
-        .frame(maxHeight: 460)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
+        .frame(width: 480)
+        .frame(maxHeight: 500)
         .onAppear {
             isFieldFocused = true
-        }
-        .onKeyPress(.escape) {
-            appState.toggleSearch()
-            return .handled
         }
     }
 
@@ -38,7 +34,7 @@ struct SearchPanelView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search across all notes...", text: Binding(
+            TextField("Search notes...", text: Binding(
                 get: { appState.searchQuery },
                 set: { newValue in
                     appState.searchQuery = newValue
@@ -67,11 +63,74 @@ struct SearchPanelView: View {
         .padding(12)
     }
 
+    // MARK: - Scope & Mode Toggles
+
+    private var togglesSection: some View {
+        VStack(spacing: 8) {
+            // Scope toggle
+            HStack {
+                Text("SCOPE")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.semibold)
+                Spacer()
+                Picker("Scope", selection: Binding(
+                    get: { appState.searchScope },
+                    set: { newValue in
+                        appState.searchScope = newValue
+                        scheduleSearch()
+                    }
+                )) {
+                    Text("All Vaults").tag("allVaults")
+                    Text("This Vault").tag("thisVault")
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+            }
+
+            // Mode toggle
+            HStack {
+                Text("MODE")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.semibold)
+                Spacer()
+                Picker("Mode", selection: Binding(
+                    get: { appState.searchMode },
+                    set: { newValue in
+                        appState.searchMode = newValue
+                        scheduleSearch()
+                    }
+                )) {
+                    Text("Text").tag("text")
+                    Text("Semantic").tag("semantic")
+                    Text("Hybrid").tag("hybrid")
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 260)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
     // MARK: - Results List
 
     private var resultsList: some View {
         Group {
-            if appState.searchResults.isEmpty {
+            if let error = appState.searchError {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title3)
+                        .foregroundStyle(.orange)
+                    Text(error)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(20)
+            } else if appState.searchResults.isEmpty {
                 noResults
             } else {
                 ScrollView {
@@ -81,7 +140,7 @@ struct SearchPanelView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 400)
+                .frame(maxHeight: 360)
             }
         }
     }
@@ -109,9 +168,6 @@ struct SearchPanelView: View {
         .background {
             Rectangle().fill(Color.primary.opacity(0.001))
         }
-        .onHover { hovering in
-            // Hover effect handled via background
-        }
     }
 
     private var noResults: some View {
@@ -125,11 +181,48 @@ struct SearchPanelView: View {
     // MARK: - Placeholder
 
     private var placeholder: some View {
-        Text("Type to search across all notes")
-            .font(.subheadline)
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity)
-            .padding(20)
+        VStack(spacing: 12) {
+            Text("Type to search")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+
+            if !appState.recentNotes.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("QUICK ACCESS")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+
+                    ForEach(appState.recentNotes.prefix(5), id: \.relativePath) { note in
+                        Button {
+                            appState.selectSearchResult(note)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc.text")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                                Text(note.title)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(note.collection)
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
     }
 
     // MARK: - Debounced Search

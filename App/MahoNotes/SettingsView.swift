@@ -10,6 +10,11 @@ struct SettingsView: View {
                     Label("Vaults", systemImage: "externaldrive")
                 }
 
+            SearchSettingsTab()
+                .tabItem {
+                    Label("Search & Embedding", systemImage: "magnifyingglass")
+                }
+
             AppearanceSettingsTab()
                 .tabItem {
                     Label("Appearance", systemImage: "paintbrush")
@@ -20,7 +25,7 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 450, height: 340)
+        .frame(width: 500, height: 400)
     }
 }
 #endif
@@ -159,6 +164,151 @@ struct AppearanceSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+// MARK: - Search & Embedding Tab
+
+struct SearchSettingsTab: View {
+    @Environment(AppState.self) private var appState
+    @AppStorage("searchMode") private var searchMode: String = "text"
+    @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
+    @State private var isBuilding = false
+    @State private var buildStatus: String?
+
+    var body: some View {
+        Form {
+            // Search Mode
+            Picker("Default Search Mode", selection: $searchMode) {
+                Text("Text (FTS5)").tag("text")
+                Text("Semantic").tag("semantic")
+                Text("Hybrid").tag("hybrid")
+            }
+            .pickerStyle(.segmented)
+
+            // Embedding Model
+            Section {
+                ForEach(EmbeddingModel.allCases, id: \.rawValue) { model in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.displayName)
+                                .fontWeight(embeddingModel == model.rawValue ? .semibold : .regular)
+                            HStack(spacing: 8) {
+                                Text("\(model.dimensions) dimensions")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(model.approximateSize)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if embeddingModel == model.rawValue {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        embeddingModel = model.rawValue
+                    }
+                }
+            } header: {
+                Text("Embedding Model")
+            } footer: {
+                Text("Model downloads automatically from HuggingFace on first use.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Index Status
+            Section("Index Status") {
+                if let entry = appState.selectedVault {
+                    let vaultPath = resolvedPath(for: entry)
+                    let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
+                    let indexPath = (vaultPath as NSString).appendingPathComponent(".maho/index.db")
+                    let indexExists = FileManager.default.fileExists(atPath: indexPath)
+
+                    HStack {
+                        Text("FTS Index")
+                        Spacer()
+                        Text(indexExists ? "Available" : "Not built")
+                            .foregroundStyle(indexExists ? .green : .secondary)
+                    }
+                    HStack {
+                        Text("Vector Index")
+                        Spacer()
+                        Text(hasVectorIndex ? "Available" : "Not built")
+                            .foregroundStyle(hasVectorIndex ? .green : .secondary)
+                    }
+                    HStack {
+                        Text("Vault")
+                        Spacer()
+                        Text(entry.name)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("No vault selected")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Rebuild Index
+            Section {
+                Button {
+                    rebuildIndex()
+                } label: {
+                    HStack {
+                        if isBuilding {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Building index...")
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Rebuild Search Index")
+                        }
+                    }
+                }
+                .disabled(isBuilding || appState.selectedVault == nil)
+
+                if let status = buildStatus {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private func rebuildIndex() {
+        guard let entry = appState.selectedVault else { return }
+        isBuilding = true
+        buildStatus = nil
+
+        Task {
+            let vaultPath = resolvedPath(for: entry)
+            let vault = Vault(path: vaultPath)
+
+            do {
+                let notes = try vault.allNotes()
+
+                // Build FTS index
+                let searchIndex = try SearchIndex(vaultPath: vaultPath)
+                let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+
+                await MainActor.run {
+                    buildStatus = "FTS: \(ftsStats.total) notes indexed"
+                    isBuilding = false
+                }
+            } catch {
+                await MainActor.run {
+                    buildStatus = "Error: \(error.localizedDescription)"
+                    isBuilding = false
+                }
+            }
+        }
     }
 }
 

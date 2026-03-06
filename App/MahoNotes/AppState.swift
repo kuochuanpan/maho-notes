@@ -99,31 +99,110 @@ final class AppState {
     /// Search results from FTS.
     private(set) var searchResults: [Note] = []
 
+    /// Search mode: "text", "semantic", or "hybrid".
+    var searchMode: String {
+        get { UserDefaults.standard.string(forKey: "searchMode") ?? "text" }
+        set { UserDefaults.standard.set(newValue, forKey: "searchMode") }
+    }
+
+    /// Search scope: "thisVault" or "allVaults".
+    var searchScope: String {
+        get { UserDefaults.standard.string(forKey: "searchScope") ?? "thisVault" }
+        set { UserDefaults.standard.set(newValue, forKey: "searchScope") }
+    }
+
+    /// Embedding model identifier: "minilm", "e5-small", or "e5-large".
+    var embeddingModel: String {
+        get { UserDefaults.standard.string(forKey: "embeddingModel") ?? "minilm" }
+        set { UserDefaults.standard.set(newValue, forKey: "embeddingModel") }
+    }
+
+    /// Error message from search (e.g., vector index not built).
+    private(set) var searchError: String?
+
+    /// Whether a search index build is in progress.
+    var isIndexBuilding: Bool = false
+
     /// Toggle search panel visibility.
     func toggleSearch() {
         showSearchPanel.toggle()
         if !showSearchPanel {
             searchQuery = ""
             searchResults = []
+            searchError = nil
         }
     }
 
-    /// Perform search against current vault using FTS.
+    /// Perform search against current vault (or all vaults) using the configured search mode.
     func performSearch() {
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty, let entry = selectedVault else {
+        guard !query.isEmpty else {
             searchResults = []
+            searchError = nil
             return
         }
 
+        if searchScope == "allVaults" {
+            var merged: [Note] = []
+            for entry in vaults {
+                let results = searchVault(entry: entry, query: query)
+                merged.append(contentsOf: results)
+            }
+            searchResults = Array(merged.prefix(20))
+        } else {
+            guard let entry = selectedVault else {
+                searchResults = []
+                return
+            }
+            searchResults = Array(searchVault(entry: entry, query: query).prefix(20))
+        }
+    }
+
+    /// Search a single vault using the configured search mode.
+    private func searchVault(entry: VaultEntry, query: String) -> [Note] {
         let vaultPath = resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
+        let mode = searchMode
 
+        switch mode {
+        case "semantic":
+            guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else {
+                searchError = "Build search index first in Settings"
+                return []
+            }
+            searchError = nil
+            // Semantic search requires async embedding — fall back to FTS for now
+            // (async search is handled by performSearchAsync)
+            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
+
+        case "hybrid":
+            guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else {
+                searchError = "Build search index first in Settings"
+                return []
+            }
+            searchError = nil
+            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
+
+        default: // "text"
+            searchError = nil
+            return ftsSearch(vault: vault, vaultPath: vaultPath, query: query)
+        }
+    }
+
+    /// FTS5 search against a vault's SearchIndex.
+    private func ftsSearch(vault: Vault, vaultPath: String, query: String) -> [Note] {
         do {
-            let results = try vault.searchNotes(query: query)
-            searchResults = Array(results.prefix(20))
+            let index = try SearchIndex(vaultPath: vaultPath)
+            let notes = try vault.allNotes()
+            let _ = try index.buildIndex(notes: notes)
+            let results = try index.search(query: query)
+            // Map SearchResult paths back to Note objects
+            return results.compactMap { result in
+                notes.first { $0.relativePath == result.path }
+            }
         } catch {
-            searchResults = []
+            // Fallback to naive vault search
+            return (try? vault.searchNotes(query: query)) ?? []
         }
     }
 
@@ -131,6 +210,7 @@ final class AppState {
     func clearSearch() {
         searchQuery = ""
         searchResults = []
+        searchError = nil
     }
 
     /// Select a note from search results and dismiss the panel.
@@ -139,6 +219,12 @@ final class AppState {
         showSearchPanel = false
         searchQuery = ""
         searchResults = []
+        searchError = nil
+    }
+
+    /// Check if vector index exists for a given vault path.
+    func vectorIndexExists(for vaultPath: String) -> Bool {
+        VectorIndex.vectorIndexExists(vaultPath: vaultPath)
     }
 
     // MARK: - View Mode & Editing

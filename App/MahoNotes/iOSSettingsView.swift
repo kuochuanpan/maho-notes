@@ -7,7 +7,11 @@ struct iOSSettingsView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("appTheme") private var appTheme: String = "system"
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
+    @AppStorage("searchMode") private var searchMode: String = "text"
+    @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
+    @State private var isBuilding = false
+    @State private var buildStatus: String?
 
     var body: some View {
         NavigationStack {
@@ -22,6 +26,56 @@ struct iOSSettingsView: View {
                         Image(systemName: "info.circle")
                             .foregroundStyle(.secondary)
                         Text("Use `mn vault add` from the CLI to add vaults.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // Search & Embedding
+                Section("Search & Embedding") {
+                    Picker("Default Search Mode", selection: $searchMode) {
+                        Text("Text").tag("text")
+                        Text("Semantic").tag("semantic")
+                        Text("Hybrid").tag("hybrid")
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("Embedding Model", selection: $embeddingModel) {
+                        ForEach(EmbeddingModel.allCases, id: \.rawValue) { model in
+                            Text("\(model.displayName) (\(model.approximateSize))")
+                                .tag(model.rawValue)
+                        }
+                    }
+
+                    if let entry = appState.selectedVault {
+                        let vaultPath = resolvedPath(for: entry)
+                        let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
+                        HStack {
+                            Text("Vector Index")
+                            Spacer()
+                            Text(hasVectorIndex ? "Available" : "Not built")
+                                .foregroundStyle(hasVectorIndex ? .green : .secondary)
+                        }
+                    }
+
+                    Button {
+                        rebuildIndex()
+                    } label: {
+                        HStack {
+                            if isBuilding {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Building...")
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Rebuild Search Index")
+                            }
+                        }
+                    }
+                    .disabled(isBuilding || appState.selectedVault == nil)
+
+                    if let status = buildStatus {
+                        Text(status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -127,6 +181,33 @@ struct iOSSettingsView: View {
         case .icloud: return "icloud"
         case .github: return "network"
         case .local: return "folder"
+        }
+    }
+
+    private func rebuildIndex() {
+        guard let entry = appState.selectedVault else { return }
+        isBuilding = true
+        buildStatus = nil
+
+        Task {
+            let vaultPath = resolvedPath(for: entry)
+            let vault = Vault(path: vaultPath)
+
+            do {
+                let notes = try vault.allNotes()
+                let searchIndex = try SearchIndex(vaultPath: vaultPath)
+                let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+
+                await MainActor.run {
+                    buildStatus = "FTS: \(ftsStats.total) notes indexed"
+                    isBuilding = false
+                }
+            } catch {
+                await MainActor.run {
+                    buildStatus = "Error: \(error.localizedDescription)"
+                    isBuilding = false
+                }
+            }
         }
     }
 

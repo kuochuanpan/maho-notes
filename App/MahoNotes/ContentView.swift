@@ -62,25 +62,8 @@ struct MacContentView: View {
                 }
 
                 // C — Content
-                ZStack(alignment: .top) {
-                    NoteContentView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    if appState.showSearchPanel {
-                        // Dismiss backdrop
-                        Color.black.opacity(0.15)
-                            .ignoresSafeArea()
-                            .onTapGesture {
-                                appState.toggleSearch()
-                            }
-
-                        SearchPanelView()
-                            .padding(.top, 40)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .animation(.easeOut(duration: 0.2), value: appState.showSearchPanel)
+                NoteContentView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .animation(.easeInOut(duration: 0.2), value: appState.showNavigator)
             .animation(.easeInOut(duration: 0.2), value: appState.showVaultRail)
@@ -89,22 +72,17 @@ struct MacContentView: View {
             }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
+            ToolbarItem(placement: .navigation) {
                 Button {
                     appState.toggleNavigator()
                 } label: {
                     Image(systemName: "sidebar.left")
                 }
                 .help("Toggle Navigator (⌘⇧B)")
+            }
 
-                Spacer()
-
-                Button {
-                    appState.toggleSearch()
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .help("Search Notes (⌘K)")
+            ToolbarItem(placement: .principal) {
+                TitleBarSearchField()
             }
         }
     }
@@ -148,6 +126,47 @@ struct MacContentView: View {
         } else {
             appState.showVaultRail = appState.userShowVaultRail
             appState.showNavigator = appState.userShowNavigator
+        }
+    }
+}
+
+// MARK: - Title Bar Search Field
+
+/// Search field embedded in the macOS title bar (like Slack).
+/// Clicking or pressing ⌘K shows the search dropdown panel.
+struct TitleBarSearchField: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Button {
+            appState.toggleSearch()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                Text("Search Maho Notes")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("⌘K")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(width: 300)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: Binding(
+            get: { appState.showSearchPanel },
+            set: { newValue in
+                if !newValue { appState.toggleSearch() }
+            }
+        ), arrowEdge: .bottom) {
+            SearchPanelView()
         }
     }
 }
