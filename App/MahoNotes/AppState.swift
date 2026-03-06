@@ -50,18 +50,98 @@ final class AppState {
     /// Current cloud sync mode (read from global config).
     var cloudSyncMode: CloudSyncMode = .off
 
+    /// Whether the merge confirmation sheet is showing.
+    var showMergeSheet: Bool = false
+
+    /// Cloud registry found when activating sync (for merge flow).
+    var pendingCloudRegistry: VaultRegistry?
+
+    /// Summary of conflicts after a merge, for display.
+    var lastMergeConflicts: [VaultNameConflict] = []
+
+    /// Whether to show the post-merge summary.
+    var showMergeResult: Bool = false
+
     /// Load cloud sync mode from global config.
     func loadCloudSyncMode() {
         cloudSyncMode = MahoNotesKit.loadCloudSyncMode()
     }
 
-    /// Update cloud sync mode and persist to global config.
-    func setCloudSyncMode(_ mode: CloudSyncMode) {
+    /// Called when user toggles cloud sync. Checks for merge needs before applying.
+    func requestCloudSyncChange(to mode: CloudSyncMode) {
+        if mode == .off {
+            // Turning off is always safe
+            applyCloudSyncMode(.off)
+            return
+        }
+
+        // Turning on — check if iCloud already has a registry
+        let check = checkCloudRegistryExists()
+        switch check {
+        case .noCloudRegistry:
+            // No conflict — activate and upload
+            applyCloudSyncMode(.icloud)
+            // Save current local registry to iCloud
+            if let localRegistry = try? MahoNotesKit.loadRegistry() {
+                try? saveRegistry(localRegistry)
+            }
+        case .cloudRegistryExists(let cloudRegistry):
+            // Need merge — show confirmation
+            pendingCloudRegistry = cloudRegistry
+            showMergeSheet = true
+        }
+    }
+
+    /// Merge local vaults with cloud registry.
+    func performMerge() {
+        guard let cloudRegistry = pendingCloudRegistry,
+              let localRegistry = try? MahoNotesKit.loadRegistry() ?? VaultRegistry(primary: "default", vaults: [])
+        else {
+            pendingCloudRegistry = nil
+            showMergeSheet = false
+            return
+        }
+
+        let (merged, conflicts) = mergeRegistries(local: localRegistry, cloud: cloudRegistry)
+
+        // Activate cloud sync first, then save merged registry
+        applyCloudSyncMode(.icloud)
+        try? saveRegistry(merged)
+
+        // Update local state
+        self.vaults = merged.vaults
+        self.primaryVaultName = merged.primary
+        self.lastMergeConflicts = conflicts
+        self.pendingCloudRegistry = nil
+        self.showMergeSheet = false
+
+        if !conflicts.isEmpty {
+            self.showMergeResult = true
+        }
+    }
+
+    /// Replace cloud registry with local registry (discard cloud).
+    func replaceCloudWithLocal() {
+        applyCloudSyncMode(.icloud)
+        if let localRegistry = try? MahoNotesKit.loadRegistry() {
+            try? saveRegistry(localRegistry)
+        }
+        pendingCloudRegistry = nil
+        showMergeSheet = false
+    }
+
+    /// Cancel merge — don't turn on cloud sync.
+    func cancelMerge() {
+        pendingCloudRegistry = nil
+        showMergeSheet = false
+    }
+
+    /// Internal: persist cloud sync mode.
+    private func applyCloudSyncMode(_ mode: CloudSyncMode) {
         do {
             try MahoNotesKit.setGlobalSyncMode(mode)
             cloudSyncMode = mode
         } catch {
-            // Silently fail — the UI will stay in sync with the actual state
             loadCloudSyncMode()
         }
     }

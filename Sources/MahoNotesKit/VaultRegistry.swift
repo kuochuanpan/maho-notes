@@ -137,6 +137,132 @@ public func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "
     try Yams.dump(object: yaml).write(toFile: configPath, atomically: true, encoding: .utf8)
 }
 
+// MARK: - Device Name
+
+/// Returns a short, filesystem-safe device name for conflict resolution.
+public func currentDeviceName() -> String {
+    #if os(macOS)
+    let name = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+    #else
+    let name = UIDevice.current.name
+    #endif
+    // Make filesystem-safe: lowercase, replace spaces/special chars with hyphens
+    let safe = name
+        .lowercased()
+        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    return safe.isEmpty ? "device" : safe
+}
+
+// MARK: - Registry Merge
+
+/// Result of checking whether iCloud already has a registry when enabling cloud sync.
+public enum CloudSyncActivationCheck: Sendable {
+    /// No iCloud registry exists — safe to upload local registry directly.
+    case noCloudRegistry
+    /// iCloud registry exists with these vaults. Merge needed.
+    case cloudRegistryExists(cloud: VaultRegistry)
+}
+
+/// Checks whether iCloud already has a vault registry.
+public func checkCloudRegistryExists(globalConfigDir: String = "~/.maho") -> CloudSyncActivationCheck {
+    let fm = FileManager.default
+    let iCloudConfig = iCloudConfigPath()
+    let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
+
+    if fm.fileExists(atPath: iCloudRegistryPath),
+       let content = try? String(contentsOfFile: iCloudRegistryPath, encoding: .utf8),
+       let registry = try? YAMLDecoder().decode(VaultRegistry.self, from: content) {
+        return .cloudRegistryExists(cloud: registry)
+    }
+    return .noCloudRegistry
+}
+
+/// Describes a name conflict found during merge.
+public struct VaultNameConflict: Sendable {
+    public let originalName: String
+    public let localRenamed: String
+    public let cloudRenamed: String
+}
+
+/// Merges a local registry with a cloud registry.
+/// - Same name + same resolved path → deduplicate (keep one)
+/// - Same name + different path → rename both with device suffix
+/// - Different names → include both
+/// - Returns the merged registry and any conflicts that were resolved.
+public func mergeRegistries(
+    local: VaultRegistry,
+    cloud: VaultRegistry,
+    localDeviceName: String? = nil
+) -> (merged: VaultRegistry, conflicts: [VaultNameConflict]) {
+    let deviceName = localDeviceName ?? currentDeviceName()
+    var merged: [VaultEntry] = []
+    var conflicts: [VaultNameConflict] = []
+    var processedCloudNames: Set<String> = []
+
+    for localEntry in local.vaults {
+        if let cloudEntry = cloud.vaults.first(where: { $0.name == localEntry.name }) {
+            processedCloudNames.insert(cloudEntry.name)
+
+            // Same name — check if same vault (same resolved path)
+            let localPath = resolvedPath(for: localEntry)
+            let cloudPath = resolvedPath(for: cloudEntry)
+
+            if localPath == cloudPath && localEntry.type == cloudEntry.type {
+                // Same vault, deduplicate — keep the cloud version (it's the "existing" one)
+                merged.append(cloudEntry)
+            } else {
+                // Conflict: same name, different vaults → rename both
+                let localRenamed = "\(localEntry.name)-\(deviceName)"
+                let cloudRenamed = "\(cloudEntry.name)-cloud"
+
+                let renamedLocal = VaultEntry(
+                    name: localRenamed,
+                    type: localEntry.type,
+                    github: localEntry.github,
+                    path: localEntry.path,
+                    access: localEntry.access
+                )
+                let renamedCloud = VaultEntry(
+                    name: cloudRenamed,
+                    type: cloudEntry.type,
+                    github: cloudEntry.github,
+                    path: cloudEntry.path,
+                    access: cloudEntry.access
+                )
+                merged.append(renamedLocal)
+                merged.append(renamedCloud)
+
+                conflicts.append(VaultNameConflict(
+                    originalName: localEntry.name,
+                    localRenamed: localRenamed,
+                    cloudRenamed: cloudRenamed
+                ))
+            }
+        } else {
+            // No conflict, include local entry
+            merged.append(localEntry)
+        }
+    }
+
+    // Add remaining cloud entries not yet processed
+    for cloudEntry in cloud.vaults where !processedCloudNames.contains(cloudEntry.name) {
+        merged.append(cloudEntry)
+    }
+
+    // Primary: keep cloud's primary if it exists in merged, else local's, else first
+    let primary: String
+    if merged.contains(where: { $0.name == cloud.primary }) {
+        primary = cloud.primary
+    } else if merged.contains(where: { $0.name == local.primary }) {
+        primary = local.primary
+    } else {
+        primary = merged.first?.name ?? "default"
+    }
+
+    return (VaultRegistry(primary: primary, vaults: merged), conflicts)
+}
+
 // MARK: - Load / Save
 
 private let iCloudDocumentsPath = "~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents"

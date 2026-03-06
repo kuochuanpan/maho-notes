@@ -58,7 +58,7 @@ struct VaultsSettingsTab: View {
 
                     Picker("", selection: Binding(
                         get: { appState.cloudSyncMode },
-                        set: { appState.setCloudSyncMode($0) }
+                        set: { appState.requestCloudSyncChange(to: $0) }
                     )) {
                         Text("iCloud").tag(CloudSyncMode.icloud)
                         Text("Off").tag(CloudSyncMode.off)
@@ -104,6 +104,94 @@ struct VaultsSettingsTab: View {
         } message: {
             Text("Remove \"\(vaultToRemove ?? "")\" from the registry? Files on disk will not be deleted.")
         }
+        // MARK: - Cloud Sync Merge Sheet
+        .sheet(isPresented: Binding(
+            get: { appState.showMergeSheet },
+            set: { if !$0 { appState.cancelMerge() } }
+        )) {
+            cloudSyncMergeSheet
+        }
+        // MARK: - Merge Result Alert
+        .alert("Merge Complete", isPresented: Binding(
+            get: { appState.showMergeResult },
+            set: { _ in appState.showMergeResult = false }
+        )) {
+            Button("OK") { appState.showMergeResult = false }
+        } message: {
+            let conflicts = appState.lastMergeConflicts
+            if conflicts.isEmpty {
+                Text("Vaults merged successfully with no conflicts.")
+            } else {
+                Text("Merged with \(conflicts.count) rename(s):\n" +
+                     conflicts.map { "• \"\($0.originalName)\" → \"\($0.localRenamed)\" (local) & \"\($0.cloudRenamed)\" (cloud)" }
+                         .joined(separator: "\n"))
+            }
+        }
+    }
+
+    // MARK: - Merge Sheet View
+
+    @ViewBuilder
+    private var cloudSyncMergeSheet: some View {
+        let cloudVaults = appState.pendingCloudRegistry?.vaults ?? []
+        VStack(spacing: 16) {
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.largeTitle)
+                .foregroundStyle(.blue)
+
+            Text("iCloud Already Has Vaults")
+                .font(.headline)
+
+            Text("Found \(cloudVaults.count) vault(s) in iCloud. How would you like to proceed?")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(cloudVaults, id: \.name) { vault in
+                        HStack(spacing: 6) {
+                            Image(systemName: typeIcon(vault.type))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16)
+                            Text(vault.name)
+                                .font(.callout)
+                        }
+                    }
+                }
+                .padding(4)
+            }
+            .frame(maxWidth: 280)
+
+            VStack(spacing: 8) {
+                Button(action: { appState.performMerge() }) {
+                    Label("Merge", systemImage: "arrow.triangle.merge")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button(action: { appState.replaceCloudWithLocal() }) {
+                    Label("Replace with Local", systemImage: "arrow.up.to.line")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button("Cancel", role: .cancel) {
+                    appState.cancelMerge()
+                }
+                .controlSize(.large)
+            }
+            .frame(width: 240)
+
+            Text("Merge combines both sets of vaults.\nConflicting names will be renamed with a device suffix.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(width: 360)
     }
 
     private func vaultRow(_ entry: VaultEntry) -> some View {

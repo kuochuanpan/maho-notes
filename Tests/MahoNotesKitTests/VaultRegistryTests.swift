@@ -266,4 +266,89 @@ struct VaultRegistryTests {
         #expect(loaded!.primary == registry.primary)
         #expect(loaded!.vaults.count == registry.vaults.count)
     }
+
+    // MARK: - Registry Merge
+
+    @Test func mergeWithNoConflicts() throws {
+        let local = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .device, access: .readWrite),
+        ])
+        let cloud = VaultRegistry(primary: "work", vaults: [
+            VaultEntry(name: "work", type: .icloud, access: .readWrite),
+        ])
+
+        let (merged, conflicts) = mergeRegistries(local: local, cloud: cloud, localDeviceName: "macmini")
+
+        #expect(conflicts.isEmpty)
+        #expect(merged.vaults.count == 2)
+        #expect(merged.vaults.contains { $0.name == "notes" })
+        #expect(merged.vaults.contains { $0.name == "work" })
+    }
+
+    @Test func mergeDeduplicatesSamePathSameName() throws {
+        let entry = VaultEntry(name: "notes", type: .icloud, access: .readWrite)
+        let local = VaultRegistry(primary: "notes", vaults: [entry])
+        let cloud = VaultRegistry(primary: "notes", vaults: [entry])
+
+        let (merged, conflicts) = mergeRegistries(local: local, cloud: cloud, localDeviceName: "macmini")
+
+        #expect(conflicts.isEmpty)
+        #expect(merged.vaults.count == 1)
+        #expect(merged.vaults[0].name == "notes")
+    }
+
+    @Test func mergeRenamesConflictingNames() throws {
+        let local = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .device, access: .readWrite),
+        ])
+        let cloud = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .icloud, access: .readWrite),
+        ])
+
+        let (merged, conflicts) = mergeRegistries(local: local, cloud: cloud, localDeviceName: "macmini")
+
+        #expect(conflicts.count == 1)
+        #expect(merged.vaults.count == 2)
+        #expect(merged.vaults.contains { $0.name == "notes-macmini" })
+        #expect(merged.vaults.contains { $0.name == "notes-cloud" })
+        #expect(conflicts[0].originalName == "notes")
+        #expect(conflicts[0].localRenamed == "notes-macmini")
+        #expect(conflicts[0].cloudRenamed == "notes-cloud")
+    }
+
+    @Test func mergePrefersCloudPrimary() throws {
+        let local = VaultRegistry(primary: "local-vault", vaults: [
+            VaultEntry(name: "local-vault", type: .device, access: .readWrite),
+        ])
+        let cloud = VaultRegistry(primary: "cloud-vault", vaults: [
+            VaultEntry(name: "cloud-vault", type: .icloud, access: .readWrite),
+        ])
+
+        let (merged, _) = mergeRegistries(local: local, cloud: cloud, localDeviceName: "macmini")
+        #expect(merged.primary == "cloud-vault")
+    }
+
+    @Test func mergeHandlesMultipleConflicts() throws {
+        let local = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .device, access: .readWrite),
+            VaultEntry(name: "work", type: .device, access: .readWrite),
+            VaultEntry(name: "personal", type: .device, access: .readWrite),
+        ])
+        let cloud = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .icloud, access: .readWrite),
+            VaultEntry(name: "work", type: .icloud, access: .readWrite),
+            VaultEntry(name: "journal", type: .icloud, access: .readWrite),
+        ])
+
+        let (merged, conflicts) = mergeRegistries(local: local, cloud: cloud, localDeviceName: "mbp")
+
+        #expect(conflicts.count == 2) // notes and work conflict
+        #expect(merged.vaults.count == 6) // 2+2 renamed + personal + journal
+        #expect(merged.vaults.contains { $0.name == "personal" })
+        #expect(merged.vaults.contains { $0.name == "journal" })
+        #expect(merged.vaults.contains { $0.name == "notes-mbp" })
+        #expect(merged.vaults.contains { $0.name == "notes-cloud" })
+        #expect(merged.vaults.contains { $0.name == "work-mbp" })
+        #expect(merged.vaults.contains { $0.name == "work-cloud" })
+    }
 }
