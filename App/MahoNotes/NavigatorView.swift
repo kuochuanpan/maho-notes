@@ -4,6 +4,14 @@ import MahoNotesKit
 /// B — Tree navigator panel (~240pt) showing collections and recent notes.
 struct NavigatorView: View {
     @Environment(AppState.self) private var appState
+    @State private var showingNewCollection = false
+    @State private var newCollectionName = ""
+    @State private var newCollectionIcon = "folder"
+    @State private var collectionError: String?
+    @State private var showingNewNote = false
+    @State private var newNoteTitle = ""
+    @State private var newNoteCollectionId = ""
+    @State private var noteError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -13,6 +21,12 @@ struct NavigatorView: View {
         }
         .frame(width: appState.navigatorWidth)
         .background(.background)
+        .sheet(isPresented: $showingNewCollection) {
+            newCollectionSheet
+        }
+        .sheet(isPresented: $showingNewNote) {
+            newNoteSheet
+        }
     }
 
     // MARK: - Header
@@ -55,10 +69,34 @@ struct NavigatorView: View {
     private var collectionsSection: some View {
         Section {
             ForEach(appState.fileTree, id: \.id) { node in
-                TreeNodeView(node: node, appState: appState)
+                TreeNodeView(
+                    node: node,
+                    appState: appState,
+                    onNewNote: { collectionId in
+                        newNoteCollectionId = collectionId
+                        newNoteTitle = ""
+                        noteError = nil
+                        showingNewNote = true
+                    }
+                )
             }
         } header: {
-            Text("COLLECTIONS")
+            HStack {
+                Text("COLLECTIONS")
+                Spacer()
+                Button {
+                    newCollectionName = ""
+                    newCollectionIcon = "folder"
+                    collectionError = nil
+                    showingNewCollection = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("New Collection")
+            }
         }
     }
 
@@ -97,6 +135,137 @@ struct NavigatorView: View {
         }
     }
 
+    // MARK: - New Collection Sheet
+
+    private var newCollectionSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Collection")
+                .font(.headline)
+
+            TextField("Collection Name", text: $newCollectionName)
+                .textFieldStyle(.roundedBorder)
+
+            iconPicker
+
+            if let error = collectionError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showingNewCollection = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Create") {
+                    createCollection()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    private var iconPicker: some View {
+        let icons = [
+            "folder", "book.closed", "doc.text", "star", "lightbulb",
+            "terminal", "globe", "flask", "graduationcap", "heart",
+            "music.note", "photo", "gamecontroller", "wrench.and.screwdriver",
+            "sparkles", "atom",
+        ]
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Icon")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(32)), count: 8), spacing: 6) {
+                ForEach(icons, id: \.self) { icon in
+                    Button {
+                        newCollectionIcon = icon
+                    } label: {
+                        Image(systemName: icon)
+                            .font(.system(size: 14))
+                            .frame(width: 28, height: 28)
+                            .background(
+                                newCollectionIcon == icon
+                                    ? Color.accentColor.opacity(0.2)
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                            .foregroundStyle(newCollectionIcon == icon ? .primary : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func createCollection() {
+        let name = newCollectionName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        do {
+            try appState.createCollection(name: name, icon: newCollectionIcon)
+            showingNewCollection = false
+        } catch {
+            collectionError = error.localizedDescription
+        }
+    }
+
+    // MARK: - New Note Sheet
+
+    private var newNoteSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Note")
+                .font(.headline)
+
+            Text("in \(newNoteCollectionId)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("Note Title", text: $newNoteTitle)
+                .textFieldStyle(.roundedBorder)
+
+            if let error = noteError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showingNewNote = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Create") {
+                    createNote()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newNoteTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    private func createNote() {
+        let title = newNoteTitle.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return }
+        do {
+            try appState.createNote(title: title, collectionId: newNoteCollectionId)
+            showingNewNote = false
+        } catch {
+            noteError = error.localizedDescription
+        }
+    }
+
     // MARK: - Helpers
 
     private func vaultIcon(for vault: VaultEntry) -> String {
@@ -117,14 +286,22 @@ struct NavigatorView: View {
 private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
+    var onNewNote: ((String) -> Void)?
     @State private var isExpanded: Bool = false
 
     var body: some View {
         if node.isDirectory {
             directoryRow
+                .contextMenu {
+                    Button {
+                        onNewNote?(node.id)
+                    } label: {
+                        Label("New Note", systemImage: "doc.badge.plus")
+                    }
+                }
             if isExpanded {
                 ForEach(node.children, id: \.id) { child in
-                    TreeNodeView(node: child, appState: appState)
+                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote)
                         .padding(.leading, 12)
                 }
             }

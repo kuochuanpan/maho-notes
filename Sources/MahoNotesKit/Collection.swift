@@ -82,3 +82,78 @@ public func loadCollections(from vaultPath: String) throws -> [Collection] {
         )
     }
 }
+
+/// Add a new collection to the vault's maho.yaml and create its directory.
+/// - Parameters:
+///   - vaultPath: Absolute path to the vault root.
+///   - id: Directory name / collection id (e.g. "my-notes"). Auto-generated from name if nil.
+///   - name: Display name (e.g. "My Notes").
+///   - icon: SF Symbol name (defaults to "folder").
+///   - description: Optional description.
+/// - Throws: If maho.yaml can't be read/written or directory creation fails.
+public func addCollection(
+    vaultPath: String,
+    id: String? = nil,
+    name: String,
+    icon: String = "folder",
+    description: String = ""
+) throws {
+    let collectionId = id ?? makeSlug(from: name)
+    guard !collectionId.isEmpty else {
+        throw CollectionError.invalidName
+    }
+
+    let fm = FileManager.default
+    let mahoURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("maho.yaml")
+
+    // Load existing maho.yaml
+    var yaml: [String: Any] = [:]
+    if let content = try? String(contentsOf: mahoURL, encoding: .utf8),
+       let loaded = try? Yams.load(yaml: content) as? [String: Any] {
+        yaml = loaded
+    }
+
+    // Get existing collections array
+    var collections = yaml["collections"] as? [[String: Any]] ?? []
+
+    // Check for duplicate id
+    if collections.contains(where: { ($0["id"] as? String) == collectionId }) {
+        throw CollectionError.alreadyExists(collectionId)
+    }
+
+    // Add new collection entry
+    var entry: [String: Any] = [
+        "id": collectionId,
+        "name": name,
+    ]
+    if !icon.isEmpty && icon != "folder" {
+        entry["icon"] = icon
+    }
+    if !description.isEmpty {
+        entry["description"] = description
+    }
+    collections.append(entry)
+    yaml["collections"] = collections
+
+    // Write back maho.yaml
+    let output = try Yams.dump(object: yaml)
+    try output.write(to: mahoURL, atomically: true, encoding: .utf8)
+
+    // Create the collection directory
+    let collectionDir = (vaultPath as NSString).appendingPathComponent(collectionId)
+    if !fm.fileExists(atPath: collectionDir) {
+        try fm.createDirectory(atPath: collectionDir, withIntermediateDirectories: true)
+    }
+}
+
+public enum CollectionError: Error, LocalizedError {
+    case invalidName
+    case alreadyExists(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidName: return "Collection name is invalid."
+        case .alreadyExists(let id): return "Collection '\(id)' already exists."
+        }
+    }
+}

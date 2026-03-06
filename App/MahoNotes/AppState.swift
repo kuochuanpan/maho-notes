@@ -900,4 +900,39 @@ final class AppState {
         loadRegistry()
         selectedVaultName = registeredName
     }
+
+    // MARK: - Collection & Note Creation
+
+    /// Create a new collection in the current vault.
+    @MainActor
+    func createCollection(name: String, icon: String = "folder") throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        try addCollection(vaultPath: vaultPath, name: name, icon: icon)
+        reloadCurrentVault()
+    }
+
+    /// Create a new note in a collection directory.
+    /// - Parameters:
+    ///   - title: Note title.
+    ///   - collectionId: The collection directory name (relative path from vault root).
+    /// - Returns: The relative path of the created note.
+    @discardableResult
+    @MainActor
+    func createNote(title: String, collectionId: String) throws -> String {
+        guard let entry = selectedVault else { throw CollectionError.invalidName }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let author = authorName ?? ""
+        let relativePath = try vault.createNote(
+            title: title,
+            collection: collectionId,
+            tags: [],
+            author: author
+        )
+        reloadCurrentVault()
+        // Auto-select the new note
+        selectedNotePath = relativePath
+        return relativePath
+    }
 }
