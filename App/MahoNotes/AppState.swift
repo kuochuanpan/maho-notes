@@ -932,7 +932,8 @@ final class AppState {
         )
         reloadCurrentVault()
         // Auto-select the new note and enter editor mode
-        selectedNotePath = relativePath
+        // Use selectNote() to trigger auto-save of any unsaved changes first
+        selectNote(path: relativePath)
         viewMode = .editor
         startEditing()
         return relativePath
