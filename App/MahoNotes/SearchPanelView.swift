@@ -16,11 +16,11 @@ struct SearchPanelView: View {
             if !appState.searchQuery.isEmpty {
                 resultsList
             } else {
-                placeholder
+                quickAccessSection
             }
         }
         .frame(width: 480)
-        .frame(maxHeight: 500)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Search Field
@@ -136,7 +136,7 @@ struct SearchPanelView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 360)
+                .frame(maxHeight: 400)
             }
         }
     }
@@ -174,51 +174,45 @@ struct SearchPanelView: View {
             .padding(20)
     }
 
-    // MARK: - Placeholder
+    // MARK: - Quick Access
 
-    private var placeholder: some View {
-        VStack(spacing: 12) {
-            Text("Type to search")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+    @ViewBuilder
+    private var quickAccessSection: some View {
+        if !appState.recentNotes.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("QUICK ACCESS")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
 
-            if !appState.recentNotes.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("QUICK ACCESS")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 4)
-
-                    ForEach(appState.recentNotes.prefix(5), id: \.relativePath) { note in
-                        Button {
-                            appState.selectSearchResult(note)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.text")
-                                    .foregroundStyle(.secondary)
-                                    .font(.caption)
-                                Text(note.title)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text(note.collection)
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
+                ForEach(appState.recentNotes.prefix(5), id: \.relativePath) { note in
+                    Button {
+                        appState.selectSearchResult(note)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                            Text(note.title)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(note.collection)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.bottom, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
     }
 
     // MARK: - Debounced Search
