@@ -38,10 +38,12 @@ struct ContentView: View {
 /// A: VaultRailView (48pt) | B: NavigatorView (240pt) | C: NoteContentView (flexible)
 struct MacContentView: View {
     @Environment(AppState.self) private var appState
+    @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
-        ZStack(alignment: .top) {
-            // Main A+B+C content
+        @Bindable var state = appState
+
+        NavigationStack {
             GeometryReader { geo in
                 HStack(spacing: 0) {
                     if appState.isLoaded {
@@ -73,58 +75,87 @@ struct MacContentView: View {
                     handleAutoCollapse(width: newWidth)
                 }
             }
+            .navigationTitle("Maho Notes")
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        appState.toggleNavigator()
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .help("Toggle Navigator (⌘⇧B)")
+                }
 
-            // Search panel overlay — drops down from top center when active
-            if appState.showSearchPanel {
-                searchOverlay
+                // Search mode picker in the toolbar
+                ToolbarItem(placement: .automatic) {
+                    Picker("Mode", selection: $state.searchMode) {
+                        Text("Text").tag("text")
+                        Text("Semantic").tag("semantic")
+                        Text("Hybrid").tag("hybrid")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                    .opacity(appState.showSearchPanel ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.15), value: appState.showSearchPanel)
+                }
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    appState.toggleNavigator()
-                } label: {
-                    Image(systemName: "sidebar.left")
+        .searchable(
+            text: $state.searchQuery,
+            isPresented: $state.showSearchPanel,
+            placement: .toolbar,
+            prompt: "Search Maho Notes"
+        )
+        .searchScopes($state.searchScope) {
+            Text("All Vaults").tag("allVaults")
+            Text("This Vault").tag("thisVault")
+        }
+        .searchSuggestions {
+            if let error = appState.searchError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            } else {
+                ForEach(appState.searchResults, id: \.relativePath) { note in
+                    Button {
+                        appState.selectSearchResult(note)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(note.title)
+                                .font(.body)
+                                .fontWeight(.medium)
+                            Text(note.collection)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .help("Toggle Navigator (⌘⇧B)")
             }
-
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    appState.toggleSearch()
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .help("Search (⌘K)")
+        }
+        .onChange(of: appState.searchQuery) {
+            scheduleSearch()
+        }
+        .onChange(of: appState.searchScope) { _, _ in
+            scheduleSearch()
+        }
+        .onChange(of: appState.searchMode) { _, _ in
+            scheduleSearch()
+        }
+        .onChange(of: appState.showSearchPanel) { _, isPresented in
+            if !isPresented {
+                appState.clearSearch()
             }
         }
     }
 
-    // MARK: - Search Overlay
+    // MARK: - Debounced Search
 
-    /// Floating search panel that drops down from the top center of the window.
-    private var searchOverlay: some View {
-        ZStack(alignment: .top) {
-            // Dimmed backdrop — click to dismiss
-            Color.black.opacity(0.15)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    appState.toggleSearch()
-                }
-
-            // Search panel — clicks here do NOT dismiss
-            SearchPanelView()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
-                .frame(width: 480)
-                .padding(.top, 8)
-                .onTapGesture { /* absorb tap — prevent dismiss */ }
+    private func scheduleSearch() {
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            appState.performSearch()
         }
-        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Edge Handle
