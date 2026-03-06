@@ -5,6 +5,7 @@ import MahoNotesKit
 struct VaultRailView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAddAlert = false
+    @State private var showingAuthorPopover = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,26 +44,39 @@ struct VaultRailView: View {
 
             Spacer()
 
-            // Settings button pinned at bottom (global, not per-vault)
+            // Author + Settings pinned at bottom
             Divider()
                 .padding(.horizontal, 6)
+
+            // Author initials
+            Button {
+                showingAuthorPopover.toggle()
+            } label: {
+                authorInitialsView
+            }
+            .buttonStyle(.plain)
+            .help(appState.authorName ?? "Author")
+            .popover(isPresented: $showingAuthorPopover, arrowEdge: .trailing) {
+                authorPopoverContent
+            }
+            .padding(.top, 6)
+
+            // Settings gear
             #if os(macOS)
             SettingsLink {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 15))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .help("Settings (⌘,)")
             .padding(.bottom, 8)
             #else
             Image(systemName: "gearshape")
-                .font(.system(size: 15))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-                .frame(width: 36, height: 36)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                .frame(width: 28, height: 28)
                 .padding(.bottom, 8)
             #endif
         }
@@ -129,6 +143,64 @@ struct VaultRailView: View {
                     .offset(x: -6)
             }
         }
+    }
+
+    // MARK: - Author Section
+
+    private var authorInitialsView: some View {
+        Group {
+            if let name = appState.authorName {
+                Text(initials(for: name))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(color(for: name), in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                Image(systemName: "questionmark")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private var authorPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let name = appState.authorName {
+                Text(name)
+                    .font(.headline)
+            } else {
+                Text("No author set")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let vault = appState.selectedVault {
+                Text(vault.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+                .padding(.vertical, 4)
+
+            #if os(macOS)
+            SettingsLink {
+                Label("Vault Settings", systemImage: "gearshape")
+            }
+            .buttonStyle(.plain)
+            #endif
+
+            Button {
+                showingAuthorPopover = false
+            } label: {
+                Label("About Maho Notes", systemImage: "info.circle")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(minWidth: 180)
     }
 
     // MARK: - Helpers

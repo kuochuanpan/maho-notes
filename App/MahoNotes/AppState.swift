@@ -523,6 +523,18 @@ final class AppState {
     var githubVaults: [VaultEntry] { vaults.filter { $0.type == .github } }
     var localVaults: [VaultEntry] { vaults.filter { $0.type == .local } }
 
+    /// Author name from the current vault's maho.yaml (author.name key).
+    var authorName: String? {
+        guard let entry = selectedVault else { return nil }
+        let vaultPath = resolvedPath(for: entry)
+        let config = Config(vaultPath: vaultPath)
+        guard let vaultConfig = try? config.loadVaultConfig(),
+              let author = vaultConfig["author"] as? [String: Any],
+              let name = author["name"] as? String,
+              !name.isEmpty else { return nil }
+        return name
+    }
+
     // MARK: - iCloud Sync
 
     var iCloudManager = iCloudSyncManager()
