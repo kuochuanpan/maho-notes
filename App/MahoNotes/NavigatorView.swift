@@ -438,6 +438,7 @@ private struct TreeNodeView: View {
     var onDeleteNote: ((String, String) -> Void)?       // (relativePath, title)
     var onDeleteCollection: ((String, String, Bool, Bool) -> Void)?  // (id, name, isTopLevel, hasContents)
     @State private var isExpanded: Bool = false
+    @State private var noteDropTargetId: String?
 
     var body: some View {
         if node.isDirectory {
@@ -502,6 +503,14 @@ private struct TreeNodeView: View {
                 ForEach(noteChildren, id: \.id) { child in
                     noteLeafRowFor(child)
                         .padding(.leading, 12)
+                        .overlay(alignment: .top) {
+                            if noteDropTargetId == child.id {
+                                Rectangle()
+                                    .fill(Color.accentColor)
+                                    .frame(height: 2)
+                                    .transition(.opacity)
+                            }
+                        }
                         .onDrag {
                             NSItemProvider(object: child.id as NSString)
                         }
@@ -509,7 +518,8 @@ private struct TreeNodeView: View {
                             targetId: child.id,
                             noteChildren: noteChildren,
                             collectionId: node.id,
-                            onReorderNotes: onReorderNotes
+                            onReorderNotes: onReorderNotes,
+                            currentDropTarget: $noteDropTargetId
                         ))
                 }
             }
@@ -582,21 +592,35 @@ private struct TreeNodeView: View {
 
 // MARK: - Note Reorder Drop Delegate
 
-/// Custom DropDelegate that uses .move proposal (no "+" badge) and scopes
-/// reorder to notes within a single collection.
+/// Custom DropDelegate that uses .move proposal (no "+" badge), shows a
+/// visual insertion indicator, and scopes reorder to notes within a single collection.
 private struct NoteReorderDropDelegate: DropDelegate {
     let targetId: String
     let noteChildren: [FileTreeNode]
     let collectionId: String
     var onReorderNotes: ((String, [String]) -> Void)?
+    @Binding var currentDropTarget: String?
 
-    func dropEntered(info: DropInfo) {}
+    func dropEntered(info: DropInfo) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            currentDropTarget = targetId
+        }
+    }
+
+    func dropExited(info: DropInfo) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if currentDropTarget == targetId {
+                currentDropTarget = nil
+            }
+        }
+    }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        currentDropTarget = nil
         guard let item = info.itemProviders(for: [.text]).first else { return false }
         item.loadObject(ofClass: NSString.self) { reading, _ in
             guard let droppedId = reading as? String, droppedId != targetId else { return }
