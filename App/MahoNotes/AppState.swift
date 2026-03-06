@@ -937,4 +937,27 @@ final class AppState {
         startEditing()
         return relativePath
     }
+
+    /// Reorder top-level collections in maho.yaml.
+    @MainActor
+    func reorderCollections(orderedIds: [String]) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        try? MahoNotesKit.reorderCollections(vaultPath: vaultPath, orderedIds: orderedIds)
+        reloadCurrentVault()
+    }
+
+    /// Reorder notes within a collection directory by renumbering file prefixes.
+    @MainActor
+    func reorderNotes(collectionId: String, orderedPaths: [String]) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let renames = try? vault.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
+        // Update selectedNotePath if it was renamed
+        if let selected = selectedNotePath, let newPath = renames?[selected] {
+            selectedNotePath = newPath
+        }
+        reloadCurrentVault()
+    }
 }

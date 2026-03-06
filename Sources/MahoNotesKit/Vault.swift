@@ -171,6 +171,57 @@ public struct Vault: Sendable {
         let fileURL = URL(fileURLWithPath: filePath).standardizedFileURL
         return fileURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
     }
+
+    /// Reorder notes in a collection by renumbering their file prefixes.
+    /// - Parameters:
+    ///   - collectionId: Directory relative path from vault root (e.g. "blog" or "blog/drafts").
+    ///   - orderedPaths: The note relative paths in desired order.
+    /// - Returns: A mapping of old relative paths → new relative paths.
+    @discardableResult
+    public func reorderNotes(collectionId: String, orderedPaths: [String]) throws -> [String: String] {
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+        var renames: [String: String] = [:]
+
+        // First pass: rename to temp names to avoid collisions
+        var tempPaths: [(old: String, temp: String, newName: String)] = []
+        for (index, relPath) in orderedPaths.enumerated() {
+            let filename = (relPath as NSString).lastPathComponent
+            // Strip existing numeric prefix (e.g. "001-slug.md" → "slug.md")
+            let slug: String
+            let prefixEnd = filename.prefix(while: { $0.isNumber })
+            if !prefixEnd.isEmpty && filename.dropFirst(prefixEnd.count).hasPrefix("-") {
+                slug = String(filename.dropFirst(prefixEnd.count + 1)) // drop "NNN-"
+            } else {
+                slug = filename
+            }
+
+            let newFilename = String(format: "%03d-%@", index + 1, slug)
+            let newRelPath = (collectionId as NSString).appendingPathComponent(newFilename)
+
+            if relPath != newRelPath {
+                let oldAbs = vaultURL.appendingPathComponent(relPath).path
+                let tempFilename = ".reorder-tmp-\(index)-\(slug)"
+                let tempRelPath = (collectionId as NSString).appendingPathComponent(tempFilename)
+                let tempAbs = vaultURL.appendingPathComponent(tempRelPath).path
+
+                guard fm.fileExists(atPath: oldAbs) else { continue }
+                try fm.moveItem(atPath: oldAbs, toPath: tempAbs)
+                tempPaths.append((old: relPath, temp: tempRelPath, newName: newFilename))
+                renames[relPath] = newRelPath
+            }
+        }
+
+        // Second pass: rename from temp to final
+        for item in tempPaths {
+            let tempAbs = vaultURL.appendingPathComponent(item.temp).path
+            let finalRelPath = (collectionId as NSString).appendingPathComponent(item.newName)
+            let finalAbs = vaultURL.appendingPathComponent(finalRelPath).path
+            try fm.moveItem(atPath: tempAbs, toPath: finalAbs)
+        }
+
+        return renames
+    }
 }
 
 // MARK: - Helpers

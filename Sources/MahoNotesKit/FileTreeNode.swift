@@ -126,8 +126,12 @@ extension Vault {
                 buildNode(relativePath: childDir, depth: depth + 1)
             }
 
-            // Add note leaves for this directory
-            let dirNotes = (notesByDir[relativePath] ?? []).sorted { $0.title < $1.title }
+            // Add note leaves for this directory (sorted by filename to preserve numeric prefix order)
+            let dirNotes = (notesByDir[relativePath] ?? []).sorted {
+                let f0 = ($0.relativePath as NSString).lastPathComponent
+                let f1 = ($1.relativePath as NSString).lastPathComponent
+                return f0.localizedStandardCompare(f1) == .orderedAscending
+            }
             for note in dirNotes {
                 children.append(FileTreeNode(
                     id: note.relativePath,

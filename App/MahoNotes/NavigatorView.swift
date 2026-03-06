@@ -77,8 +77,16 @@ struct NavigatorView: View {
                         newNoteTitle = ""
                         noteError = nil
                         showingNewNote = true
+                    },
+                    onReorderNotes: { collectionId, orderedPaths in
+                        appState.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
                     }
                 )
+            }
+            .onMove { source, destination in
+                var ids = appState.fileTree.map { $0.id }
+                ids.move(fromOffsets: source, toOffset: destination)
+                appState.reorderCollections(orderedIds: ids)
             }
         } header: {
             HStack {
@@ -290,6 +298,7 @@ private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
     var onNewNote: ((String) -> Void)?
+    var onReorderNotes: ((String, [String]) -> Void)?
     @State private var isExpanded: Bool = false
 
     var body: some View {
@@ -303,9 +312,40 @@ private struct TreeNodeView: View {
                     }
                 }
             if isExpanded {
-                ForEach(node.children, id: \.id) { child in
-                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote)
+                // "+ Add Note" row at the top
+                Button {
+                    onNewNote?(node.id)
+                } label: {
+                    Label {
+                        Text("Add Note")
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "plus.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 28)
+
+                // Children (subdirectories and notes)
+                let noteChildren = node.children.filter { !$0.isDirectory }
+                let dirChildren = node.children.filter { $0.isDirectory }
+
+                // Subdirectories first (not draggable)
+                ForEach(dirChildren, id: \.id) { child in
+                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onReorderNotes: onReorderNotes)
                         .padding(.leading, 12)
+                }
+
+                // Notes — draggable for reorder
+                ForEach(noteChildren, id: \.id) { child in
+                    noteLeafRowFor(child)
+                        .padding(.leading, 12)
+                }
+                .onMove { source, destination in
+                    var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+                    paths.move(fromOffsets: source, toOffset: destination)
+                    onReorderNotes?(node.id, paths)
                 }
             }
         } else {
@@ -344,11 +384,15 @@ private struct TreeNodeView: View {
     // MARK: - Note Leaf
 
     private var noteLeafRow: some View {
+        noteLeafRowFor(node)
+    }
+
+    private func noteLeafRowFor(_ child: FileTreeNode) -> some View {
         Label {
             HStack(spacing: 4) {
-                Text(node.name)
+                Text(child.name)
                     .lineLimit(1)
-                if let note = node.note,
+                if let note = child.note,
                    appState.conflict(for: note.relativePath) != nil {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
@@ -360,6 +404,6 @@ private struct TreeNodeView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.leading, 16)
-        .tag(node.note?.relativePath ?? node.id)
+        .tag(child.note?.relativePath ?? child.id)
     }
 }

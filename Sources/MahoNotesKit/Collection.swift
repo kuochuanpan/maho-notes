@@ -146,6 +146,34 @@ public func addCollection(
     }
 }
 
+/// Reorder collections in maho.yaml to match the given id order.
+/// Any ids not in `orderedIds` are appended at the end.
+public func reorderCollections(vaultPath: String, orderedIds: [String]) throws {
+    let mahoURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("maho.yaml")
+
+    guard let content = try? String(contentsOf: mahoURL, encoding: .utf8),
+          var yaml = try? Yams.load(yaml: content) as? [String: Any],
+          let items = yaml["collections"] as? [[String: Any]]
+    else { return }
+
+    let itemMap = Dictionary(items.compactMap { item -> (String, [String: Any])? in
+        guard let id = item["id"] as? String else { return nil }
+        return (id, item)
+    }, uniquingKeysWith: { first, _ in first })
+
+    // Ordered items first, then any remaining
+    var reordered: [[String: Any]] = orderedIds.compactMap { itemMap[$0] }
+    let remaining = items.filter { item in
+        guard let id = item["id"] as? String else { return true }
+        return !orderedIds.contains(id)
+    }
+    reordered.append(contentsOf: remaining)
+
+    yaml["collections"] = reordered
+    let output = try Yams.dump(object: yaml)
+    try output.write(to: mahoURL, atomically: true, encoding: .utf8)
+}
+
 public enum CollectionError: Error, LocalizedError {
     case invalidName
     case alreadyExists(String)
