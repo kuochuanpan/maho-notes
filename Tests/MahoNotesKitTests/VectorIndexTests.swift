@@ -122,7 +122,7 @@ struct VectorIndexTests {
         try vi.indexNote(path: "notes/b.md", chunks: [(id: 0, text: "Beta content")], vectors: [vec2], model: "test", mtime: 100.0)
 
         // Query with vec1 — should rank notes/a.md higher
-        let results = try vi.search(queryVector: vec1, limit: 10)
+        let results = try vi.search(queryVector: vec1, limit: 10, minScore: 0)
         #expect(results.count == 2)
         #expect(results[0].path == "notes/a.md")
         #expect(results[0].score > results[1].score)
@@ -195,7 +195,7 @@ struct VectorIndexTests {
         #expect(stats2.totalChunks >= 1)
 
         // Search still works
-        let results = try vi.search(queryVector: dummyEmbedder(["Content here."])[0], limit: 5)
+        let results = try vi.search(queryVector: dummyEmbedder(["Content here."])[0], limit: 5, minScore: 0)
         #expect(!results.isEmpty)
     }
 
@@ -222,7 +222,7 @@ struct VectorIndexTests {
         #expect(!ftsResults.isEmpty)
 
         // Vector search works
-        let vecResults = try vecIndex.search(queryVector: dummyEmbedder(["Both FTS5 and vec0 in the same DB."])[0], limit: 5)
+        let vecResults = try vecIndex.search(queryVector: dummyEmbedder(["Both FTS5 and vec0 in the same DB."])[0], limit: 5, minScore: 0)
         #expect(!vecResults.isEmpty)
     }
 
@@ -270,7 +270,7 @@ struct VectorIndexTests {
         // Also insert a second note with a moderately similar vector
         try vi.indexNote(path: "notes/other.md", chunks: [(id: 0, text: "Other note")], vectors: [makeVector(seed: 5.0)], model: "test", mtime: 100.0)
 
-        let results = try vi.search(queryVector: queryVec, limit: 10)
+        let results = try vi.search(queryVector: queryVec, limit: 10, minScore: 0)
 
         // Should have exactly 2 results (one per note, not 4)
         #expect(results.count == 2)

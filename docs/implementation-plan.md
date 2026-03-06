@@ -228,10 +228,11 @@
 - [x] Register in `MahoNotes.swift`
 - [x] Tests: 13 new PublishManifest tests (223 total)
 
-### 3.4 — Our Instance (notes.pcca.dev)
-- [ ] Set up GitHub Pages repo for `kuochuanpan/maho-vault` or separate publishing repo
-- [ ] Configure custom domain `notes.pcca.dev`
-- [ ] Publish existing public notes as proof of concept
+### 3.4 — Our Instance (notes.pcca.dev) 🔧 (2026-03-05)
+- [x] Set up GitHub Pages repo for `kuochuanpan/maho-vault` — workflow deployed (`e438266`)
+- [x] Publish existing public notes as proof of concept — 10 notes (getting-started + astronomy), 14 pages generated
+- [ ] Configure custom domain `notes.pcca.dev` — needs repo admin to enable Pages + DNS CNAME
+- [ ] Repo admin: enable Pages in Settings → Pages → Source: GitHub Actions
 
 **Estimated effort:** 4–5 sessions  
 **Dependencies:** Phase 0, Phase 1 (multi-vault for `--vault` flag)  

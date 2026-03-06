@@ -348,10 +348,23 @@ public final class VectorIndex: @unchecked Sendable {
 
     // MARK: - Search
 
+    /// Default minimum cosine similarity score for vector search results.
+    /// Results below this threshold are considered irrelevant and filtered out.
+    /// 0.35 is a reasonable default for sentence-transformers / E5 models:
+    /// - >0.7: very similar
+    /// - 0.5-0.7: related
+    /// - 0.35-0.5: loosely related
+    /// - <0.35: likely irrelevant
+    public static let defaultMinScore: Double = 0.35
+
     /// Search for notes matching the query vector. Returns results aggregated by note path (best chunk score per note).
-    public func search(queryVector: [Float], limit: Int = 10) throws -> [VectorSearchResult] {
-        // Fetch more raw results than limit to allow aggregation
-        let rawLimit = limit * 3
+    /// - Parameters:
+    ///   - queryVector: The embedding vector for the search query.
+    ///   - limit: Maximum number of results to return.
+    ///   - minScore: Minimum cosine similarity score (0.0–1.0). Results below this are filtered out.
+    public func search(queryVector: [Float], limit: Int = 10, minScore: Double = VectorIndex.defaultMinScore) throws -> [VectorSearchResult] {
+        // Fetch more raw results than limit to allow aggregation + filtering
+        let rawLimit = limit * 5
         let vecResults = try db.searchVectors(table: "vec_chunks", query: queryVector, limit: rawLimit)
 
         guard !vecResults.isEmpty else { return [] }
@@ -360,14 +373,17 @@ public final class VectorIndex: @unchecked Sendable {
         var bestByPath: [String: VectorSearchResult] = [:]
 
         for result in vecResults {
+            let score = 1.0 - result.distance
+
+            // Skip results below minimum relevance threshold
+            guard score >= minScore else { continue }
+
             let rows = try db.query("SELECT path, chunk_text, chunk_id FROM chunks WHERE id = \(result.rowid)")
             guard let row = rows.first,
                   let path = row["path"],
                   let chunkText = row["chunk_text"],
                   let chunkIdStr = row["chunk_id"],
                   let chunkId = Int(chunkIdStr) else { continue }
-
-            let score = 1.0 - result.distance
 
             if let existing = bestByPath[path] {
                 if score > existing.score {
