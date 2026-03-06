@@ -60,7 +60,9 @@ struct TitleBarSearchField: NSViewRepresentable {
         field.sendsWholeSearchString = false
         field.sendsSearchStringImmediately = true
         field.translatesAutoresizingMaskIntoConstraints = false
-        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // Expand to fill all available toolbar space
+        field.setContentHuggingPriority(.init(1), for: .horizontal)
+        field.setContentCompressionResistancePriority(.init(1), for: .horizontal)
 
         // Listen for programmatic focus requests (⌘K)
         context.coordinator.observer = NotificationCenter.default.addObserver(
@@ -172,7 +174,13 @@ struct MacContentView: View {
                         }
                     }
                 )
-                .frame(maxWidth: 500)
+                .frame(minWidth: 300, idealWidth: 500, maxWidth: 600)
+                .padding(.vertical, 2)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.primary.opacity(0.06))
+                )
             }
         }
         } // NavigationStack
