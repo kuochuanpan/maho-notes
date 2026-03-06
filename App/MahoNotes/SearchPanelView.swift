@@ -10,8 +10,6 @@ struct SearchPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            searchField
-            Divider()
             togglesSection
             Divider()
 
@@ -23,9 +21,6 @@ struct SearchPanelView: View {
         }
         .frame(width: 480)
         .frame(maxHeight: 500)
-        .onAppear {
-            isFieldFocused = true
-        }
     }
 
     // MARK: - Search Field

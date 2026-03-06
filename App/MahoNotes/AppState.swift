@@ -126,7 +126,12 @@ final class AppState {
     /// Toggle search panel visibility.
     func toggleSearch() {
         showSearchPanel.toggle()
-        if !showSearchPanel {
+        if showSearchPanel {
+            // Focus the title bar search field
+            #if os(macOS)
+            NotificationCenter.default.post(name: .focusTitleBarSearch, object: nil)
+            #endif
+        } else {
             searchQuery = ""
             searchResults = []
             searchError = nil

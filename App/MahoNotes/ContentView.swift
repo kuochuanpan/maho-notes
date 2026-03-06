@@ -34,6 +34,74 @@ struct ContentView: View {
 // MARK: - macOS Layout
 
 #if os(macOS)
+import AppKit
+
+// MARK: - NSSearchField wrapper for title bar
+
+/// Notification name used to programmatically focus the title bar search field (e.g. via ⌘K).
+extension Notification.Name {
+    static let focusTitleBarSearch = Notification.Name("focusTitleBarSearch")
+}
+
+/// A native macOS search field for embedding in the toolbar title bar area.
+/// Uses NSViewRepresentable so the toolbar reliably renders it (unlike complex SwiftUI views).
+struct TitleBarSearchField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String = "Search Maho Notes"
+    var onActivate: () -> Void = {}
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = placeholder
+        field.delegate = context.coordinator
+        field.focusRingType = .none
+        field.bezelStyle = .roundedBezel
+        field.controlSize = .large
+        field.sendsWholeSearchString = false
+        field.sendsSearchStringImmediately = true
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        // Listen for programmatic focus requests (⌘K)
+        context.coordinator.observer = NotificationCenter.default.addObserver(
+            forName: .focusTitleBarSearch, object: nil, queue: .main
+        ) { _ in
+            field.window?.makeFirstResponder(field)
+        }
+
+        return field
+    }
+
+    func updateNSView(_ nsView: NSSearchField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, NSSearchFieldDelegate {
+        var parent: TitleBarSearchField
+        var observer: NSObjectProtocol?
+        init(_ parent: TitleBarSearchField) { self.parent = parent }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSSearchField else { return }
+            parent.text = field.stringValue
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            parent.onActivate()
+        }
+    }
+}
+
 /// A+B+C three-zone layout with collapsible panels.
 /// A: VaultRailView (48pt) | B: NavigatorView (240pt) | C: NoteContentView (flexible)
 struct MacContentView: View {
@@ -44,6 +112,8 @@ struct MacContentView: View {
         @Bindable var state = appState
 
         NavigationStack {
+        ZStack(alignment: .top) {
+            // Main A+B+C content
             GeometryReader { geo in
                 HStack(spacing: 0) {
                     if appState.isLoaded {
@@ -75,76 +145,70 @@ struct MacContentView: View {
                     handleAutoCollapse(width: newWidth)
                 }
             }
-            .navigationTitle("Maho Notes")
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        appState.toggleNavigator()
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                    .help("Toggle Navigator (⌘⇧B)")
-                }
 
-                // Search mode picker in the toolbar
-                ToolbarItem(placement: .automatic) {
-                    Picker("Mode", selection: $state.searchMode) {
-                        Text("Text").tag("text")
-                        Text("Semantic").tag("semantic")
-                        Text("Hybrid").tag("hybrid")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .opacity(appState.showSearchPanel ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.15), value: appState.showSearchPanel)
-                }
+            // Search panel overlay — drops down from top center when active
+            if appState.showSearchPanel {
+                searchOverlay
             }
         }
-        .searchable(
-            text: $state.searchQuery,
-            isPresented: $state.showSearchPanel,
-            placement: .toolbar,
-            prompt: "Search Maho Notes"
-        )
-        .searchScopes($state.searchScope) {
-            Text("All Vaults").tag("allVaults")
-            Text("This Vault").tag("thisVault")
-        }
-        .searchSuggestions {
-            if let error = appState.searchError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-            } else {
-                ForEach(appState.searchResults, id: \.relativePath) { note in
-                    Button {
-                        appState.selectSearchResult(note)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(note.title)
-                                .font(.body)
-                                .fontWeight(.medium)
-                            Text(note.collection)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        .navigationTitle("")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    appState.toggleNavigator()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Toggle Navigator (⌘⇧B)")
+            }
+
+            // Centered search field in the title bar (Slack-style)
+            ToolbarItem(placement: .principal) {
+                TitleBarSearchField(
+                    text: $state.searchQuery,
+                    onActivate: {
+                        if !appState.showSearchPanel {
+                            appState.showSearchPanel = true
                         }
                     }
-                }
+                )
+                .frame(maxWidth: 500)
             }
         }
+        } // NavigationStack
         .onChange(of: appState.searchQuery) {
-            scheduleSearch()
-        }
-        .onChange(of: appState.searchScope) { _, _ in
-            scheduleSearch()
-        }
-        .onChange(of: appState.searchMode) { _, _ in
-            scheduleSearch()
-        }
-        .onChange(of: appState.showSearchPanel) { _, isPresented in
-            if !isPresented {
-                appState.clearSearch()
+            if !appState.searchQuery.isEmpty && !appState.showSearchPanel {
+                appState.showSearchPanel = true
             }
+            scheduleSearch()
         }
+    }
+
+    // MARK: - Search Overlay
+
+    /// Floating search panel that drops down from the top center of the window.
+    /// Reuses SearchPanelView which has scope/mode toggles and results list.
+    private var searchOverlay: some View {
+        ZStack(alignment: .top) {
+            // Dimmed backdrop — click to dismiss
+            Color.black.opacity(0.15)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.showSearchPanel = false
+                }
+
+            // Search panel dropdown — positioned below the title bar
+            SearchPanelView()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+                .padding(.top, 8)
+                .onTapGesture { /* absorb tap — prevent dismiss */ }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Debounced Search
