@@ -45,3 +45,7 @@ targets:
         product: MahoNotesKit
     entitlements:
       path: MahoNotes/MahoNotes.entitlements
+    attributes:
+      SystemCapabilities:
+        com.apple.iCloud:
+          enabled: true
