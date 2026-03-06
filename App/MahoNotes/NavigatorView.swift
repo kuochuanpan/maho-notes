@@ -498,15 +498,22 @@ private struct TreeNodeView: View {
                 .buttonStyle(.plain)
                 .padding(.leading, 28)
 
-                // Notes — draggable for reorder
+                // Notes — draggable for reorder (per-item drag/drop to scope within collection)
                 ForEach(noteChildren, id: \.id) { child in
                     noteLeafRowFor(child)
                         .padding(.leading, 12)
-                }
-                .onMove { source, destination in
-                    var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
-                    paths.move(fromOffsets: source, toOffset: destination)
-                    onReorderNotes?(node.id, paths)
+                        .draggable(child.id)
+                        .dropDestination(for: String.self) { droppedIds, _ in
+                            guard let droppedId = droppedIds.first,
+                                  droppedId != child.id else { return false }
+                            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+                            guard let fromIdx = paths.firstIndex(of: droppedId),
+                                  let toIdx = paths.firstIndex(of: child.id) else { return false }
+                            paths.remove(at: fromIdx)
+                            paths.insert(droppedId, at: toIdx)
+                            onReorderNotes?(node.id, paths)
+                            return true
+                        }
                 }
             }
         } else {
