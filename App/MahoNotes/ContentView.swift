@@ -81,7 +81,7 @@ struct MacContentView: View {
                 .help("Toggle Navigator (⌘⇧B)")
             }
 
-            ToolbarItem(placement: .automatic) {
+            ToolbarItem(placement: .principal) {
                 TitleBarSearchField()
             }
         }
