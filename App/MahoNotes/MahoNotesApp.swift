@@ -11,7 +11,7 @@ struct MahoNotesApp: App {
                 .environment(appState)
         }
         #if os(macOS)
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unified(showsTitle: false))
         #endif
         #if os(macOS)
         .commands {
