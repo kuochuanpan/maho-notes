@@ -25,12 +25,7 @@ struct NoteContentView: View {
 
             // Breadcrumb header
             HStack(spacing: 4) {
-                Text(note.collection)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(note.title)
+                breadcrumb(for: note)
                 if appState.hasUnsavedChanges {
                     Circle()
                         .fill(.orange)
@@ -99,6 +94,37 @@ struct NoteContentView: View {
                 }
                 .onAppear { appState.startEditing() }
             }
+        }
+    }
+
+    // MARK: - Breadcrumb
+
+    /// Build a breadcrumb from the note's relative path.
+    /// Shows up to 3 path segments + title. If the path has more than 3 segments,
+    /// the leading ones are collapsed into "…".
+    private func breadcrumb(for note: Note) -> some View {
+        let segments = note.relativePath
+            .components(separatedBy: "/")
+            .dropLast() // remove filename
+
+        // Show at most 3 directory segments; collapse earlier ones into "…"
+        let maxSegments = 3
+        let display: [String]
+        if segments.count > maxSegments {
+            display = ["…"] + Array(segments.suffix(maxSegments))
+        } else {
+            display = Array(segments)
+        }
+
+        return HStack(spacing: 4) {
+            ForEach(Array(display.enumerated()), id: \.offset) { _, segment in
+                Text(segment)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(note.title)
         }
     }
 
