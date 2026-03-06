@@ -227,49 +227,40 @@ struct MacContentView: View {
 
     // MARK: - Onboarding Overlay
 
-    /// First-launch overlay: dims the screen and highlights the "+ Add Vault" button
-    /// with a callout message guiding the new user.
+    /// First-launch overlay: dims the screen and shows a tooltip-style callout
+    /// right next to the "+" button so users know exactly where to click.
     private var onboardingOverlay: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             // Dimmed background
             Color.black.opacity(0.55)
                 .ignoresSafeArea()
 
-            // Centered welcome card
-            VStack(spacing: 20) {
-                Image(systemName: "tray.2")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.white.opacity(0.9))
-
-                Text("Welcome to Maho Notes")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+            // Tooltip card positioned next to the + button (top-left area)
+            HStack(spacing: 12) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28))
                     .foregroundStyle(.white)
+                    .shadow(color: .cyan.opacity(0.6), radius: 8)
 
-                Text("Get started by adding your first vault.\nTap the  ＋  button in the top-left corner.")
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Welcome to Maho Notes!")
+                        .font(.headline)
+                        .foregroundStyle(.white)
 
-                // Arrow pointing to top-left
-                HStack {
-                    VStack(spacing: 4) {
-                        Image(systemName: "arrow.up.left")
-                            .font(.title)
-                            .foregroundStyle(.white.opacity(0.7))
-                        Text("Add Vault")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    Spacer()
+                    Text("Click the  ＋  button to add your first vault.")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
                 }
-                .padding(.leading, 8)
             }
-            .padding(32)
-            .frame(maxWidth: 360)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.accentColor.opacity(0.85))
+                    .shadow(color: .accentColor.opacity(0.4), radius: 12, y: 4)
+            )
+            // Position: offset from top-left to sit right beside the + button
+            .padding(.top, 52)
+            .padding(.leading, 56)
         }
         .allowsHitTesting(false) // Let clicks through to the + button
         .transition(.opacity)
