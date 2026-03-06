@@ -40,7 +40,8 @@ struct MacContentView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        NavigationStack {
+        ZStack(alignment: .top) {
+            // Main A+B+C content
             GeometryReader { geo in
                 HStack(spacing: 0) {
                     if appState.isLoaded {
@@ -72,21 +73,58 @@ struct MacContentView: View {
                     handleAutoCollapse(width: newWidth)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        appState.toggleNavigator()
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                    .help("Toggle Navigator (⌘⇧B)")
-                }
 
-                ToolbarItem(placement: .principal) {
-                    TitleBarSearchField()
-                }
+            // Search panel overlay — drops down from top center when active
+            if appState.showSearchPanel {
+                searchOverlay
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    appState.toggleNavigator()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Toggle Navigator (⌘⇧B)")
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    appState.toggleSearch()
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .help("Search (⌘K)")
+            }
+        }
+    }
+
+    // MARK: - Search Overlay
+
+    /// Floating search panel that drops down from the top center of the window.
+    private var searchOverlay: some View {
+        ZStack(alignment: .top) {
+            // Dimmed backdrop — click to dismiss
+            Color.black.opacity(0.15)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState.toggleSearch()
+                }
+
+            // Search panel — clicks here do NOT dismiss
+            SearchPanelView()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+                .frame(width: 480)
+                .padding(.top, 8)
+                .onTapGesture { /* absorb tap — prevent dismiss */ }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Edge Handle
@@ -128,47 +166,6 @@ struct MacContentView: View {
         } else {
             appState.showVaultRail = appState.userShowVaultRail
             appState.showNavigator = appState.userShowNavigator
-        }
-    }
-}
-
-// MARK: - Title Bar Search Field
-
-/// Search field embedded in the macOS title bar (like Slack).
-/// Clicking or pressing ⌘K shows the search dropdown panel.
-struct TitleBarSearchField: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        Button {
-            appState.toggleSearch()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                Text("Search Maho Notes")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("⌘K")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .frame(width: 300)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: Binding(
-            get: { appState.showSearchPanel },
-            set: { newValue in
-                if !newValue { appState.toggleSearch() }
-            }
-        ), arrowEdge: .bottom) {
-            SearchPanelView()
         }
     }
 }
