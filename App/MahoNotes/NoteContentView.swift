@@ -5,6 +5,7 @@ import MahoNotesKit
 struct NoteContentView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
+    @FocusState private var editorFocused: Bool
 
     var body: some View {
         if let note = appState.selectedNote {
@@ -85,14 +86,20 @@ struct NoteContentView: View {
                 MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
             case .editor:
                 editorView
-                    .onAppear { appState.startEditing() }
+                    .onAppear {
+                        appState.startEditing()
+                        editorFocused = true
+                    }
             case .split:
                 HStack(spacing: 0) {
                     editorView
                     Divider()
                     MarkdownWebView(markdown: "# \(note.title)\n\n\(appState.editingBody)")
                 }
-                .onAppear { appState.startEditing() }
+                .onAppear {
+                    appState.startEditing()
+                    editorFocused = true
+                }
             }
         }
     }
@@ -157,6 +164,7 @@ struct NoteContentView: View {
     private var editorView: some View {
         @Bindable var state = appState
         return TextEditor(text: $state.editingBody)
+            .focused($editorFocused)
             .font(.system(size: editorFontSize, design: .monospaced))
             .scrollContentBackground(.hidden)
             .padding(12)
