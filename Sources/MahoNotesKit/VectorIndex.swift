@@ -158,6 +158,7 @@ public final class VectorIndex: @unchecked Sendable {
     // MARK: - Indexing
 
     /// Index a single note's chunks and vectors.
+    /// Vectors are normalized to unit length before storage for consistent cosine similarity scoring.
     public func indexNote(path: String, chunks: [(id: Int, text: String)], vectors: [[Float]], model: String, mtime: Double) throws {
         // Remove old chunks for this path
         try removeNote(path: path)
@@ -178,7 +179,9 @@ public final class VectorIndex: @unchecked Sendable {
                 throw VectorIndexError.indexCorrupt(message: "Failed to get last insert rowid")
             }
 
-            try db.insertVector(table: "vec_chunks", rowid: rid, vector: vectors[i])
+            // Normalize vector to unit length for proper cosine similarity with L2 distance
+            let normalizedVec = Self.normalize(vectors[i])
+            try db.insertVector(table: "vec_chunks", rowid: rid, vector: normalizedVec)
         }
     }
 
@@ -363,9 +366,14 @@ public final class VectorIndex: @unchecked Sendable {
     ///   - limit: Maximum number of results to return.
     ///   - minScore: Minimum cosine similarity score (0.0–1.0). Results below this are filtered out.
     public func search(queryVector: [Float], limit: Int = 10, minScore: Double = VectorIndex.defaultMinScore) throws -> [VectorSearchResult] {
+        // Normalize query vector to unit length for proper cosine similarity calculation.
+        // sqlite-vec uses L2² distance; for unit vectors: L2² = 2(1 - cos_sim)
+        // so cos_sim = 1 - L2²/2
+        let normalizedQuery = Self.normalize(queryVector)
+
         // Fetch more raw results than limit to allow aggregation + filtering
         let rawLimit = limit * 5
-        let vecResults = try db.searchVectors(table: "vec_chunks", query: queryVector, limit: rawLimit)
+        let vecResults = try db.searchVectors(table: "vec_chunks", query: normalizedQuery, limit: rawLimit)
 
         guard !vecResults.isEmpty else { return [] }
 
@@ -373,10 +381,11 @@ public final class VectorIndex: @unchecked Sendable {
         var bestByPath: [String: VectorSearchResult] = [:]
 
         for result in vecResults {
-            let score = 1.0 - result.distance
+            // Convert L2² distance to cosine similarity (valid for unit vectors)
+            let cosineSim = max(0, 1.0 - result.distance / 2.0)
 
             // Skip results below minimum relevance threshold
-            guard score >= minScore else { continue }
+            guard cosineSim >= minScore else { continue }
 
             let rows = try db.query("SELECT path, chunk_text, chunk_id FROM chunks WHERE id = \(result.rowid)")
             guard let row = rows.first,
@@ -386,11 +395,11 @@ public final class VectorIndex: @unchecked Sendable {
                   let chunkId = Int(chunkIdStr) else { continue }
 
             if let existing = bestByPath[path] {
-                if score > existing.score {
-                    bestByPath[path] = VectorSearchResult(path: path, chunkText: chunkText, score: score, chunkId: chunkId)
+                if cosineSim > existing.score {
+                    bestByPath[path] = VectorSearchResult(path: path, chunkText: chunkText, score: cosineSim, chunkId: chunkId)
                 }
             } else {
-                bestByPath[path] = VectorSearchResult(path: path, chunkText: chunkText, score: score, chunkId: chunkId)
+                bestByPath[path] = VectorSearchResult(path: path, chunkText: chunkText, score: cosineSim, chunkId: chunkId)
             }
         }
 
@@ -435,6 +444,13 @@ public final class VectorIndex: @unchecked Sendable {
     private func chunkNote(_ note: Note) -> [(id: Int, text: String)] {
         Chunker.chunkNote(title: note.title, body: note.body)
             .map { (id: $0.id, text: $0.text) }
+    }
+
+    /// Normalize a vector to unit length (L2 norm = 1).
+    internal static func normalize(_ vector: [Float]) -> [Float] {
+        let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
+        guard norm > 1e-10 else { return vector }
+        return vector.map { $0 / norm }
     }
 
     private func escapeSQLString(_ s: String) -> String {
