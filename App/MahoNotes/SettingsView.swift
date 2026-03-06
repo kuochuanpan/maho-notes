@@ -283,6 +283,51 @@ struct SearchSettingsTab: View {
         .padding()
     }
 
+    /// Build vector index in a nonisolated context to avoid Sendable issues.
+    private nonisolated static func buildVectorIndex(
+        vaultPath: String,
+        notes: [Note],
+        model: EmbeddingModel,
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> Int {
+        let provider = SwiftEmbeddingsProvider(model: model)
+        let embedder: @Sendable ([String]) async throws -> [[Float]] = { texts in
+            try await provider.embedBatch(texts)
+        }
+
+        let vecIndex: VectorIndex
+        do {
+            vecIndex = try VectorIndex(vaultPath: vaultPath, dimensions: model.dimensions)
+        } catch let error as VectorIndexError {
+            if case .dimensionMismatch = error {
+                let idx = try VectorIndex(
+                    vaultPath: vaultPath,
+                    dimensions: model.dimensions,
+                    skipDimensionCheck: true
+                )
+                try idx.resetSchema()
+                onStatus("Building vector index (model changed, full rebuild)...")
+                let vecStats = try await idx.buildIndex(
+                    notes: notes,
+                    asyncEmbedder: embedder,
+                    model: model.rawValue,
+                    fullRebuild: true
+                )
+                return vecStats.totalChunks
+            }
+            throw error
+        }
+
+        onStatus("Building vector index...")
+        let vecStats = try await vecIndex.buildIndex(
+            notes: notes,
+            asyncEmbedder: embedder,
+            model: model.rawValue,
+            fullRebuild: true
+        )
+        return vecStats.totalChunks
+    }
+
     private func rebuildIndex() {
         guard let entry = appState.selectedVault else { return }
         isBuilding = true
@@ -313,52 +358,19 @@ struct SearchSettingsTab: View {
                     buildStatus = "Downloading \(model.displayName) model (\(model.approximateSize))..."
                 }
 
-                let provider = SwiftEmbeddingsProvider(model: model)
-                let vecIndex: VectorIndex
-                do {
-                    vecIndex = try VectorIndex(
-                        vaultPath: vaultPath,
-                        dimensions: model.dimensions
-                    )
-                } catch let error as VectorIndexError {
-                    if case .dimensionMismatch = error {
-                        // Model changed — reset and recreate
-                        let idx = try VectorIndex(
-                            vaultPath: vaultPath,
-                            dimensions: model.dimensions,
-                            skipDimensionCheck: true
-                        )
-                        try idx.resetSchema()
-                        await MainActor.run {
-                            buildStatus = "Building vector index (model changed, full rebuild)..."
-                        }
-                        let vecStats = try await idx.buildIndex(
-                            notes: notes,
-                            asyncEmbedder: { texts in try await provider.embedBatch(texts) },
-                            model: model.rawValue,
-                            fullRebuild: true
-                        )
-                        await MainActor.run {
-                            buildStatus = "Done: \(ftsStats.total) notes, \(vecStats.totalChunks) vector chunks"
-                            isBuilding = false
-                        }
-                        return
-                    }
-                    throw error
-                }
-
-                await MainActor.run {
-                    buildStatus = "Building vector index..."
-                }
-                let vecStats = try await vecIndex.buildIndex(
+                // Build vector index off main actor to avoid Sendable warnings
+                let totalNotes = ftsStats.total
+                let vecChunks = try await Self.buildVectorIndex(
+                    vaultPath: vaultPath,
                     notes: notes,
-                    asyncEmbedder: { texts in try await provider.embedBatch(texts) },
-                    model: model.rawValue,
-                    fullRebuild: true
+                    model: model,
+                    onStatus: { status in
+                        Task { @MainActor in buildStatus = status }
+                    }
                 )
 
                 await MainActor.run {
-                    buildStatus = "Done: \(ftsStats.total) notes, \(vecStats.totalChunks) vector chunks"
+                    buildStatus = "Done: \(totalNotes) notes, \(vecChunks) vector chunks"
                     isBuilding = false
                 }
             } catch {
