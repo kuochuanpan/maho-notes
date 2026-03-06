@@ -119,7 +119,8 @@ struct NavigatorView: View {
 // MARK: - Recursive Tree Node View
 
 /// Renders a single node in the file tree — directories expand/collapse, notes are selectable leaves.
-/// Clicking anywhere on a directory row (not just the triangle) toggles expand/collapse.
+/// Uses a manual chevron + conditional children instead of DisclosureGroup to avoid
+/// macOS sidebar List conflicts with the native disclosure triangle state.
 private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
@@ -128,6 +129,12 @@ private struct TreeNodeView: View {
     var body: some View {
         if node.isDirectory {
             directoryRow
+            if isExpanded {
+                ForEach(node.children, id: \.id) { child in
+                    TreeNodeView(node: child, appState: appState)
+                        .padding(.leading, 12)
+                }
+            }
         } else {
             noteLeafRow
         }
@@ -135,19 +142,30 @@ private struct TreeNodeView: View {
 
     // MARK: - Directory
 
-    @ViewBuilder
     private var directoryRow: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            ForEach(node.children, id: \.id) { child in
-                TreeNodeView(node: child, appState: appState)
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isExpanded.toggle()
             }
         } label: {
-            Label(node.name, systemImage: node.icon)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isExpanded.toggle()
-                }
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.15), value: isExpanded)
+                    .frame(width: 12)
+
+                Image(systemName: node.icon)
+                    .foregroundStyle(.secondary)
+                Text(node.name)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Note Leaf
@@ -168,6 +186,7 @@ private struct TreeNodeView: View {
             Image(systemName: "doc.text")
                 .foregroundStyle(.secondary)
         }
+        .padding(.leading, 16)
         .tag(node.note?.relativePath ?? node.id)
     }
 }
