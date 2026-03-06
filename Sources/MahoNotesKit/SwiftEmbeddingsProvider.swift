@@ -41,6 +41,11 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
     }
 }
 
+/// Default directory for cached embedding models (device-local, not synced to iCloud).
+public let defaultModelCacheDir: String = {
+    ("~/.maho/models" as NSString).expandingTildeInPath
+}()
+
 /// Wraps swift-embeddings for text embedding using Bert or XLMRoberta models.
 @available(macOS 15.0, *)
 public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendable {
@@ -58,17 +63,23 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
 
     private func ensureLoaded() async throws {
         guard !loaded else { return }
+        let cacheURL = URL(fileURLWithPath: defaultModelCacheDir)
         switch model {
         case .minilm:
-            bertBundle = try await Bert.loadModelBundle(from: model.huggingFaceId)
+            bertBundle = try await Bert.loadModelBundle(
+                from: model.huggingFaceId,
+                downloadBase: cacheURL
+            )
         case .e5small:
             xlmBundle = try await XLMRoberta.loadModelBundle(
                 from: model.huggingFaceId,
+                downloadBase: cacheURL,
                 loadConfig: .init()
             )
         case .e5large:
             xlmBundle = try await XLMRoberta.loadModelBundle(
                 from: model.huggingFaceId,
+                downloadBase: cacheURL,
                 loadConfig: .init()
             )
         }

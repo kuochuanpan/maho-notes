@@ -51,14 +51,19 @@ struct ModelCommand: AsyncParsableCommand {
 
         static func modelCachePath(_ model: EmbeddingModel) -> String? {
             let hfId = model.huggingFaceId
-            // swift-transformers HubApi stores models under Documents/huggingface/models/{org}/{model}
+            // Models are cached under ~/.maho/models/{org}/{model}
             let subPath = "models/" + hfId
-            let basePath = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(subPath)")
+            let basePath = (defaultModelCacheDir as NSString).appendingPathComponent(subPath)
             if FileManager.default.fileExists(atPath: basePath) { return basePath }
             // Also check the alternate cache format: models--{org}--{model}
             let altDirName = "models--" + hfId.replacingOccurrences(of: "/", with: "--")
-            let altPath = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(altDirName)")
-            return FileManager.default.fileExists(atPath: altPath) ? altPath : nil
+            let altPath = (defaultModelCacheDir as NSString).appendingPathComponent(altDirName)
+            if FileManager.default.fileExists(atPath: altPath) { return altPath }
+            // Legacy: check old location ~/Documents/huggingface/
+            let legacyBase = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(subPath)")
+            if FileManager.default.fileExists(atPath: legacyBase) { return legacyBase }
+            let legacyAlt = (NSHomeDirectory() as NSString).appendingPathComponent("Documents/huggingface/\(altDirName)")
+            return FileManager.default.fileExists(atPath: legacyAlt) ? legacyAlt : nil
         }
     }
 

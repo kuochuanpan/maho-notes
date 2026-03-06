@@ -132,7 +132,11 @@ public final class VectorIndex: @unchecked Sendable {
             CREATE TABLE IF NOT EXISTS _vec_schema(version INTEGER, dimensions INTEGER)
         """)
 
-        try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
+        // vec0 virtual tables don't support IF NOT EXISTS, so check manually
+        let vecExists = try db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'")
+        if vecExists.isEmpty {
+            try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
+        }
 
         try db.execute("""
             CREATE TABLE IF NOT EXISTS chunks(
