@@ -45,6 +45,14 @@ targets:
         product: MahoNotesKit
     entitlements:
       path: MahoNotes/MahoNotes.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.dev.pcca.mahonotes
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.dev.pcca.mahonotes
     attributes:
       SystemCapabilities:
         com.apple.iCloud:
