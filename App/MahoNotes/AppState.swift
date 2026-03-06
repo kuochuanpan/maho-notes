@@ -996,6 +996,16 @@ final class AppState {
         let absPath = (vaultPath as NSString).appendingPathComponent(relativePath)
         let fileURL = URL(fileURLWithPath: absPath)
 
+        // Remove from parent _index.md order before trashing
+        let filename = (relativePath as NSString).lastPathComponent
+        let parentDir = (relativePath as NSString).deletingLastPathComponent
+        let parentDirAbs = (vaultPath as NSString).appendingPathComponent(parentDir)
+        let (order, _) = readDirectoryOrder(at: parentDirAbs)
+        if order.contains(filename) {
+            let updated = order.filter { $0 != filename }
+            try? writeDirectoryOrder(at: parentDirAbs, notes: updated)
+        }
+
         try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
 
         // Clear selection if the deleted note was selected
@@ -1014,19 +1024,29 @@ final class AppState {
         let fm = FileManager.default
 
         let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
+        let dirName = (collectionId as NSString).lastPathComponent
         let parentId = (collectionId as NSString).deletingLastPathComponent
         let parentAbsPath = parentId.isEmpty
             ? vaultPath
             : (vaultPath as NSString).appendingPathComponent(parentId)
 
-        // Move .md files (not _index.md) to parent
+        // Move .md files (not _index.md) to parent, and add to parent's _index.md order
+        var movedFiles: [String] = []
         if let contents = try? fm.contentsOfDirectory(atPath: absPath) {
             for item in contents where item.hasSuffix(".md") && item != "_index.md" && item.lowercased() != "readme.md" {
                 let src = (absPath as NSString).appendingPathComponent(item)
                 let dst = (parentAbsPath as NSString).appendingPathComponent(item)
                 try? fm.moveItem(atPath: src, toPath: dst)
+                movedFiles.append(item)
             }
         }
+
+        // Update parent's _index.md: remove from children, add moved notes to order
+        let (parentOrder, parentChildren) = readDirectoryOrder(at: parentAbsPath)
+        let updatedChildren = parentChildren.filter { $0 != dirName }
+        var updatedOrder = parentOrder
+        updatedOrder.append(contentsOf: movedFiles)
+        try? writeDirectoryOrder(at: parentAbsPath, notes: updatedOrder, children: updatedChildren)
 
         // Trash the (now mostly empty) directory
         try fm.trashItem(at: URL(fileURLWithPath: absPath), resultingItemURL: nil)

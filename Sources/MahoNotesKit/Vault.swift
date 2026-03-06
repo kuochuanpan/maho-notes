@@ -219,16 +219,22 @@ public struct Vault: Sendable {
             try fm.createDirectory(atPath: targetDirAbs, withIntermediateDirectories: true)
         }
 
-        // Handle filename conflicts
+        // Handle filename conflicts — use the base name (strip any existing -N suffix)
         var targetFilename = filename
         var targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
-        var counter = 1
-        while fm.fileExists(atPath: targetAbs) {
-            let name = (filename as NSString).deletingPathExtension
+        if fm.fileExists(atPath: targetAbs) {
             let ext = (filename as NSString).pathExtension
-            targetFilename = "\(name)-\(counter).\(ext)"
-            targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
-            counter += 1
+            var baseName = (filename as NSString).deletingPathExtension
+            // Strip existing conflict suffix (e.g., "bbbb-1" → "bbbb")
+            if let range = baseName.range(of: #"-\d+$"#, options: .regularExpression) {
+                baseName = String(baseName[..<range.lowerBound])
+            }
+            var counter = 1
+            repeat {
+                targetFilename = "\(baseName)-\(counter).\(ext)"
+                targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
+                counter += 1
+            } while fm.fileExists(atPath: targetAbs)
         }
 
         let sourceAbs = vaultURL.appendingPathComponent(relativePath).path
