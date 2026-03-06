@@ -227,7 +227,7 @@ struct SearchSettingsTab: View {
                     Text("No vaults configured")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(appState.vaults, id: \.id) { entry in
+                    ForEach(appState.vaults, id: \.name) { entry in
                         let vaultPath = resolvedPath(for: entry)
                         let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
                         let indexPath = (vaultPath as NSString).appendingPathComponent(".maho/index.db")
