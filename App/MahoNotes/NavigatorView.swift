@@ -104,6 +104,7 @@ struct NavigatorView: View {
         case .icloud: "icloud"
         case .github: "arrow.triangle.branch"
         case .local: "folder"
+        case .device: "internaldrive"
         }
     }
 }
