@@ -247,7 +247,7 @@ struct MacContentView: View {
             Color.black.opacity(0.45)
                 .ignoresSafeArea()
 
-            // Speech bubble: triangle behind the box, overlapping to look connected
+            // Speech bubble: tail connects at the top-left corner of the box
             ZStack(alignment: .topLeading) {
                 // Callout body (on top)
                 VStack(alignment: .leading, spacing: 8) {
@@ -266,19 +266,18 @@ struct MacContentView: View {
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                 )
                 .zIndex(1)
-                .padding(.top, 10) // make room for the tail to peek out
 
-                // Triangle tail (behind the box, peeking out from top-left)
+                // Triangle tail — center meets the box's top-left corner
                 Triangle()
                     .fill(Color(.windowBackgroundColor))
-                    .frame(width: 20, height: 16)
+                    .frame(width: 18, height: 14)
                     .rotationEffect(.degrees(-45))
-                    .offset(x: 8, y: 0)
+                    .offset(x: -5, y: -3)
                     .zIndex(0)
             }
-            // Position below-right of the + button
-            .padding(.top, 42)
-            .padding(.leading, 14)
+            // Position: B column area (vault rail ~48pt + some padding)
+            .padding(.top, 48)
+            .padding(.leading, 54)
         }
         .allowsHitTesting(false) // Let clicks through to the + button
         .transition(.opacity)
