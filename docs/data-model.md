@@ -37,7 +37,7 @@ Content here...
 | `order` | number | ❌ | Sort order within collection |
 | `series` | string | ❌ | Group notes into a series (e.g., "日語基礎") |
 
-> **Note:** Collection is determined by the note's directory path, not by a frontmatter field. A note at `japanese/grammar/001-xxx.md` belongs to the `japanese` collection. This avoids redundancy and prevents path/metadata inconsistency.
+> **Note:** Collection is determined by the note's directory path, not by a frontmatter field. A note at `japanese/grammar/kunyomi-onyomi.md` belongs to the `japanese` collection. This avoids redundancy and prevents path/metadata inconsistency.
 
 ## Configuration
 

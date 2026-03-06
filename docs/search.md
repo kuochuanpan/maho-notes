@@ -69,7 +69,7 @@ All models run via `swift-embeddings` (MLTensor). No CoreML conversion needed â€
 | **Vault-scoped** | `mn search --vault personal "query"` | Limit to one vault |
 | **Cross-vault** | `mn search "query"` (default) | Search across all vaults |
 
-Cross-vault search results include vault name prefix: `[personal] japanese/grammar/001-...` vs `[cheatsheets] git/basics.md`.
+Cross-vault search results include vault name prefix: `[personal] japanese/grammar/kunyomi-onyomi` vs `[cheatsheets] git/basics.md`.
 
 ## Chunking Strategy
 

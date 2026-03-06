@@ -68,7 +68,7 @@ Use `mn publish --force` to regenerate all HTML (e.g., after a theme change).
 ```bash
 mn publish                          # incremental — only changed notes
 mn publish --force                  # full rebuild
-mn publish japanese/grammar/001-kunyomi-onyomi.md  # publish single note
+mn publish japanese/grammar/kunyomi-onyomi.md  # publish single note
 mn unpublish <path>                 # remove from published site
 mn publish --preview                # local preview before pushing
 ```
