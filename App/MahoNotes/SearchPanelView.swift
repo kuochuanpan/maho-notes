@@ -69,18 +69,13 @@ struct SearchPanelView: View {
                     .foregroundStyle(.secondary)
                     .fontWeight(.semibold)
                 Spacer()
-                Picker("Scope", selection: Binding(
-                    get: { appState.searchScope },
-                    set: { newValue in
-                        appState.searchScope = newValue
-                        scheduleSearch()
-                    }
-                )) {
-                    Text("All Vaults").tag("allVaults")
-                    Text("This Vault").tag("thisVault")
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
+                ThemePicker(
+                    selection: Binding(
+                        get: { appState.searchScope },
+                        set: { appState.searchScope = $0; scheduleSearch() }
+                    ),
+                    options: [("allVaults", "All Vaults"), ("thisVault", "This Vault")]
+                )
             }
 
             // Mode toggle
@@ -90,19 +85,13 @@ struct SearchPanelView: View {
                     .foregroundStyle(.secondary)
                     .fontWeight(.semibold)
                 Spacer()
-                Picker("Mode", selection: Binding(
-                    get: { appState.searchMode },
-                    set: { newValue in
-                        appState.searchMode = newValue
-                        scheduleSearch()
-                    }
-                )) {
-                    Text("Text").tag("text")
-                    Text("Semantic").tag("semantic")
-                    Text("Hybrid").tag("hybrid")
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 260)
+                ThemePicker(
+                    selection: Binding(
+                        get: { appState.searchMode },
+                        set: { appState.searchMode = $0; scheduleSearch() }
+                    ),
+                    options: [("text", "Text"), ("semantic", "Semantic"), ("hybrid", "Hybrid")]
+                )
             }
         }
         .padding(.horizontal, 12)
@@ -224,5 +213,52 @@ struct SearchPanelView: View {
             guard !Task.isCancelled else { return }
             appState.performSearch()
         }
+    }
+}
+
+// MARK: - Theme-aware Segmented Picker
+
+/// A custom segmented control that uses neutral colors matching the current theme
+/// instead of the default system blue accent.
+private struct ThemePicker: View {
+    @Binding var selection: String
+    let options: [(value: String, label: String)]
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selection = option.value
+                    }
+                } label: {
+                    Text(option.label)
+                        .font(.caption)
+                        .fontWeight(selection == option.value ? .semibold : .regular)
+                        .foregroundStyle(selection == option.value ? .primary : .secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(selection == option.value ? selectedBackground : .clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.primary.opacity(colorScheme == .dark ? 0.1 : 0.06))
+        )
+    }
+
+    private var selectedBackground: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.15)
+            : Color.white.opacity(0.9)
     }
 }
