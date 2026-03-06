@@ -153,6 +153,11 @@ struct MacContentView: View {
             if appState.showSearchPanel {
                 searchOverlay
             }
+
+            // Onboarding overlay for first-time users (no vaults)
+            if appState.isLoaded && appState.vaults.isEmpty {
+                onboardingOverlay
+            }
         }
         .navigationTitle("")
         .toolbar {
@@ -218,6 +223,56 @@ struct MacContentView: View {
                 .onTapGesture { /* absorb tap — prevent dismiss */ }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    // MARK: - Onboarding Overlay
+
+    /// First-launch overlay: dims the screen and highlights the "+ Add Vault" button
+    /// with a callout message guiding the new user.
+    private var onboardingOverlay: some View {
+        ZStack {
+            // Dimmed background
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+
+            // Centered welcome card
+            VStack(spacing: 20) {
+                Image(systemName: "tray.2")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white.opacity(0.9))
+
+                Text("Welcome to Maho Notes")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+
+                Text("Get started by adding your first vault.\nTap the  ＋  button in the top-left corner.")
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+
+                // Arrow pointing to top-left
+                HStack {
+                    VStack(spacing: 4) {
+                        Image(systemName: "arrow.up.left")
+                            .font(.title)
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text("Add Vault")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    Spacer()
+                }
+                .padding(.leading, 8)
+            }
+            .padding(32)
+            .frame(maxWidth: 360)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
+        }
+        .allowsHitTesting(false) // Let clicks through to the + button
+        .transition(.opacity)
     }
 
     // MARK: - Debounced Search
