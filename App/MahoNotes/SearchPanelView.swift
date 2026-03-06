@@ -106,7 +106,8 @@ struct SearchPanelView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
     }
 
     // MARK: - Results List
