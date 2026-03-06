@@ -11,6 +11,9 @@ struct MahoNotesApp: App {
                 .environment(appState)
         }
         #if os(macOS)
+        .windowToolbarStyle(.unified)
+        #endif
+        #if os(macOS)
         .commands {
             CommandGroup(after: .sidebar) {
                 Button("Toggle Vault Rail") {

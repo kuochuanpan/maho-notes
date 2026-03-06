@@ -71,6 +71,7 @@ struct MacContentView: View {
                 handleAutoCollapse(width: newWidth)
             }
         }
+        .navigationTitle("")
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button {
