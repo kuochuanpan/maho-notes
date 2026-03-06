@@ -16,11 +16,21 @@ struct VaultRailView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .medium))
                     .frame(width: 36, height: 36)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .background(
+                        appState.vaults.isEmpty
+                            ? AnyShapeStyle(Color.accentColor)
+                            : AnyShapeStyle(.quaternary),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                    .foregroundStyle(appState.vaults.isEmpty ? .white : .primary)
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
             .padding(.bottom, 4)
+            .shadow(
+                color: appState.vaults.isEmpty ? .accentColor.opacity(0.6) : .clear,
+                radius: appState.vaults.isEmpty ? 8 : 0
+            )
 
             Divider()
                 .padding(.horizontal, 6)

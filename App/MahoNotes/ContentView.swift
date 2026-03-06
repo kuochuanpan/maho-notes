@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// Simple triangle shape for popover arrows.
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// Root content view — routes to platform-specific layouts.
 struct ContentView: View {
     @Environment(AppState.self) private var appState
@@ -227,40 +239,43 @@ struct MacContentView: View {
 
     // MARK: - Onboarding Overlay
 
-    /// First-launch overlay: dims the screen and shows a tooltip-style callout
-    /// right next to the "+" button so users know exactly where to click.
+    /// First-launch overlay: dims the screen and shows a popover-style callout
+    /// appearing to come from the highlighted "+" button in the vault rail.
     private var onboardingOverlay: some View {
         ZStack(alignment: .topLeading) {
             // Dimmed background
-            Color.black.opacity(0.55)
+            Color.black.opacity(0.45)
                 .ignoresSafeArea()
 
-            // Tooltip card positioned next to the + button (top-left area)
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white)
-                    .shadow(color: .cyan.opacity(0.6), radius: 8)
+            // Popover-style callout with left-pointing arrow
+            HStack(alignment: .top, spacing: 0) {
+                // Left arrow triangle pointing at the + button
+                Triangle()
+                    .fill(Color(.windowBackgroundColor))
+                    .frame(width: 10, height: 18)
+                    .rotationEffect(.degrees(-90))
+                    .offset(y: 12)
 
-                VStack(alignment: .leading, spacing: 4) {
+                // Callout body
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Welcome to Maho Notes!")
                         .font(.headline)
-                        .foregroundStyle(.white)
 
-                    Text("Click the  ＋  button to add your first vault.")
+                    Text("Click the highlighted  ＋  button\nto create your first vault.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
                 }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(.windowBackgroundColor))
+                        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+                )
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.accentColor.opacity(0.85))
-                    .shadow(color: .accentColor.opacity(0.4), radius: 12, y: 4)
-            )
-            // Position: offset from top-left to sit right beside the + button
-            .padding(.top, 52)
-            .padding(.leading, 56)
+            // Position right of the vault rail, aligned with the + button
+            .padding(.top, 44)
+            .padding(.leading, 50)
         }
         .allowsHitTesting(false) // Let clicks through to the + button
         .transition(.opacity)
