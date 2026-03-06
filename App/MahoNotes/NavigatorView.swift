@@ -12,6 +12,10 @@ struct NavigatorView: View {
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
     @State private var noteError: String?
+    @State private var showingNewSubCollection = false
+    @State private var newSubCollectionName = ""
+    @State private var newSubCollectionParent = ""
+    @State private var subCollectionError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,6 +30,9 @@ struct NavigatorView: View {
         }
         .sheet(isPresented: $showingNewNote) {
             newNoteSheet
+        }
+        .sheet(isPresented: $showingNewSubCollection) {
+            newSubCollectionSheet
         }
     }
 
@@ -78,15 +85,29 @@ struct NavigatorView: View {
                         noteError = nil
                         showingNewNote = true
                     },
+                    onNewSubCollection: { parentId in
+                        newSubCollectionParent = parentId
+                        newSubCollectionName = ""
+                        subCollectionError = nil
+                        showingNewSubCollection = true
+                    },
                     onReorderNotes: { collectionId, orderedPaths in
                         appState.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
                     }
                 )
-            }
-            .onMove { source, destination in
-                var ids = appState.fileTree.map { $0.id }
-                ids.move(fromOffsets: source, toOffset: destination)
-                appState.reorderCollections(orderedIds: ids)
+                .draggable(node.id) // collection id as drag payload
+                .dropDestination(for: String.self) { droppedIds, _ in
+                    guard let droppedId = droppedIds.first,
+                          droppedId != node.id else { return false }
+                    // Move dragged collection to just before this one
+                    var ids = appState.fileTree.map { $0.id }
+                    guard let fromIdx = ids.firstIndex(of: droppedId),
+                          let toIdx = ids.firstIndex(of: node.id) else { return false }
+                    ids.remove(at: fromIdx)
+                    ids.insert(droppedId, at: toIdx)
+                    appState.reorderCollections(orderedIds: ids)
+                    return true
+                }
             }
         } header: {
             HStack {
@@ -277,6 +298,56 @@ struct NavigatorView: View {
         }
     }
 
+    // MARK: - New Sub-Collection Sheet
+
+    private var newSubCollectionSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Sub-Collection")
+                .font(.headline)
+
+            Text("in \(newSubCollectionParent)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("Sub-Collection Name", text: $newSubCollectionName)
+                .textFieldStyle(.roundedBorder)
+
+            if let error = subCollectionError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showingNewSubCollection = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Create") {
+                    createSubCollection()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newSubCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    private func createSubCollection() {
+        let name = newSubCollectionName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        do {
+            try appState.createSubCollection(name: name, parentId: newSubCollectionParent)
+            showingNewSubCollection = false
+        } catch {
+            subCollectionError = error.localizedDescription
+        }
+    }
+
     // MARK: - Helpers
 
     private func vaultIcon(for vault: VaultEntry) -> String {
@@ -298,6 +369,7 @@ private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
     var onNewNote: ((String) -> Void)?
+    var onNewSubCollection: ((String) -> Void)?
     var onReorderNotes: ((String, [String]) -> Void)?
     @State private var isExpanded: Bool = false
 
@@ -309,6 +381,11 @@ private struct TreeNodeView: View {
                         onNewNote?(node.id)
                     } label: {
                         Label("New Note", systemImage: "doc.badge.plus")
+                    }
+                    Button {
+                        onNewSubCollection?(node.id)
+                    } label: {
+                        Label("New Sub-Collection", systemImage: "folder.badge.plus")
                     }
                 }
             if isExpanded {
@@ -333,7 +410,7 @@ private struct TreeNodeView: View {
 
                 // Subdirectories first (not draggable)
                 ForEach(dirChildren, id: \.id) { child in
-                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onReorderNotes: onReorderNotes)
+                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onNewSubCollection: onNewSubCollection, onReorderNotes: onReorderNotes)
                         .padding(.leading, 12)
                 }
 

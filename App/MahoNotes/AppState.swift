@@ -938,6 +938,37 @@ final class AppState {
         return relativePath
     }
 
+    /// Create a sub-collection (subdirectory) under an existing collection.
+    @MainActor
+    func createSubCollection(name: String, parentId: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let slug = makeSlug(from: name)
+        guard !slug.isEmpty else { throw CollectionError.invalidName }
+
+        let subDir = (vaultPath as NSString)
+            .appendingPathComponent(parentId)
+            .appending("/\(slug)")
+        let fm = FileManager.default
+
+        if fm.fileExists(atPath: subDir) {
+            throw CollectionError.alreadyExists(slug)
+        }
+
+        try fm.createDirectory(atPath: subDir, withIntermediateDirectories: true)
+
+        // Create _index.md with title
+        let indexPath = (subDir as NSString).appendingPathComponent("_index.md")
+        let content = """
+        ---
+        title: \(name)
+        ---
+        """
+        try content.write(toFile: indexPath, atomically: true, encoding: .utf8)
+
+        reloadCurrentVault()
+    }
+
     /// Reorder top-level collections in maho.yaml.
     @MainActor
     func reorderCollections(orderedIds: [String]) {
