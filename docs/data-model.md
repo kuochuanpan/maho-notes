@@ -118,29 +118,49 @@ auth:
   github_token: ghp_xxx   # GitHub auth (from $GITHUB_TOKEN or gh auth)
 embed:
   model: e5-large          # embedding model for this device (applies to ALL vaults)
+sync:
+  cloud: icloud            # cloud sync: "icloud" (default) or "off"
 ```
 
 - Auth tokens live here, **never** in a vault (would leak to GitHub/iCloud)
 - Embedding model is per-device, not per-vault — cross-vault search needs consistent vector dimensions
-- On iOS/iPadOS: auth tokens stored in Keychain, preferences in UserDefaults
+- `sync.cloud` controls whether vaults.yaml and iCloud vaults use iCloud container or local storage
+- On iOS/iPadOS: auth tokens stored in Keychain, preferences (incl. cloud sync) in UserDefaults
 
-### Layer 4: vaults.yaml (vault registry, synced via iCloud)
+### Layer 4: vaults.yaml (vault registry)
 
-Lives in the iCloud container so it syncs across all Apple devices automatically. See [Sync Strategy](sync-strategy.md#vault-registry) for full details.
+Lives in the **iCloud container** when Cloud Sync is ON, or in **local storage** when Cloud Sync is OFF. See [Sync Strategy](sync-strategy.md#cloud-sync-setting) for full details.
+
+| Cloud Sync | vaults.yaml location |
+|------------|---------------------|
+| ON (icloud) | `iCloud~com.pcca.mahonotes/config/vaults.yaml` (syncs across Apple devices) |
+| OFF | macOS: `~/.maho/vaults.yaml` / iOS: App Documents `config/vaults.yaml` (local only) |
 
 ```yaml
-# iCloud~com.pcca.mahonotes/config/vaults.yaml
+# vaults.yaml (location depends on Cloud Sync setting)
 primary: personal    # default vault (used when no --vault flag specified)
 vaults:
   - name: personal
-    type: icloud
+    type: icloud           # requires Cloud Sync ON
     github: kuochuanpan/maho-vault
+    access: read-write
+  - name: offline-notes
+    type: device           # app-managed local storage (works with any Cloud Sync setting)
     access: read-write
   - name: cheatsheets
     type: github
     github: detailyang/awesome-cheatsheet
     access: read-only
 ```
+
+**Vault types:**
+
+| Type | Description | Platforms | Requires Cloud Sync |
+|------|-------------|-----------|---------------------|
+| `icloud` | Stored in iCloud container, auto-syncs across Apple devices | All | ✅ |
+| `device` | App-managed local storage (platform-appropriate path) | All | ❌ |
+| `github` | Cloned from GitHub repo, synced via `mn sync` / GitHub REST API | All | ❌ |
+| `local` | User-specified arbitrary path | macOS only | ❌ |
 
 CLI also maintains a local cache at `~/.maho/vaults-cache.yaml` for offline access.
 
@@ -182,9 +202,13 @@ iCloud~com.pcca.mahonotes/           # iCloud container (synced across Apple dev
         └── 2026/
 
 ~/.maho/                             # Global device config (NOT synced)
-├── config.yaml                      # Auth tokens, global defaults
-├── vaults-cache.yaml                # Offline copy of vault registry
-└── vaults/                          # GitHub-cloned vaults
+├── config.yaml                      # Auth tokens, global defaults, cloud sync setting
+├── vaults.yaml                      # Vault registry (Cloud Sync OFF only; ON → iCloud)
+├── vaults-cache.yaml                # Offline copy of vault registry (Cloud Sync ON only)
+└── vaults/                          # Device + GitHub vaults
+    ├── offline-notes/               # Device vault (app-managed local)
+    │   ├── maho.yaml
+    │   └── ...
     ├── cheatsheets/                 # GitHub vault (read-only)
     │   ├── maho.yaml
     │   └── ...

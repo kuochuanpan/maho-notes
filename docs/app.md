@@ -77,9 +77,9 @@
 
 ### App Shell
 - `@main` App struct with `WindowGroup`
-- `AppState` (`@Observable`): loads vault registry on launch, resolves vault paths
+- `AppState` (`@Observable`): checks Cloud Sync setting → loads vault registry from iCloud container (ON) or local storage (OFF) → resolves vault paths
 - Empty `NavigationSplitView` with placeholder content
-- Error state: if iCloud unavailable, show setup guidance (not a hard block — local-only mode works)
+- Error state: if iCloud unavailable, auto-set Cloud Sync OFF → app works fully with `device` vaults (not a hard block)
 
 ---
 
@@ -459,12 +459,20 @@ Organized as a standard Settings view (macOS: Preferences window; iOS: Navigatio
 
 #### Vaults
 - List of registered vaults (from registry)
-- Add vault: iCloud (new) / GitHub (repo URL) / Local (macOS only, directory picker)
+- Add vault: iCloud (new, Cloud Sync ON only) / Device (app-managed local) / GitHub (repo URL) / Local (macOS only, directory picker)
 - Remove vault (with confirmation; `--delete` option to also delete local files)
 - Set primary (default vault)
 - Per-vault info: type, access, GitHub repo, last sync time
+- Migrate vault type: `device` ↔ `icloud` (with file copy + type update)
 
-#### Sync
+#### Cloud Sync
+- **Toggle**: iCloud ON / OFF (per-device setting, stored in UserDefaults)
+- When ON: vault registry + iCloud vaults stored in iCloud container, syncs across Apple devices
+- When OFF: vault registry stored locally, `type: icloud` vaults unavailable (grayed out with explanation)
+- **Switching ON → OFF**: warns "Other devices will no longer sync"; migrates `icloud` vaults to `device` type (copies files to local)
+- **Switching OFF → ON**: migrates local registry to iCloud container; offers to convert `device` vaults to `icloud`
+
+#### GitHub Sync
 - GitHub auth status (signed in / not signed in)
 - Sign in: `ASWebAuthenticationSession` → GitHub OAuth → token stored in Keychain
 - Auto-sync toggle (for GitHub-backed vaults)
@@ -592,7 +600,10 @@ iOS has no `git` CLI — all GitHub operations via REST API:
 - **Accessibility**: VoiceOver labels, Dynamic Type, reduce motion
 - **App icon**: designed (TBD — SF Symbol placeholder during dev)
 - **Launch screen**: app name + icon (minimal)
-- **Onboarding**: first-launch flow — sign in to iCloud, create/import vault, optional GitHub auth
+- **Onboarding**: first-launch flow:
+  1. iCloud available? → "Enable iCloud Sync?" → Yes (Cloud Sync ON, `type: icloud`) / No (Cloud Sync OFF, `type: device`)
+  2. iCloud unavailable → Cloud Sync OFF automatically, `type: device`
+  3. Optional: "Connect GitHub for backup/sync?"
 - **Offline mode**: graceful degradation — hide sync UI, show "offline" indicator, all local operations work
 - **Error handling**: user-friendly error messages (not raw Swift errors), retry buttons for network failures
 

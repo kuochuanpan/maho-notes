@@ -8,9 +8,10 @@ It must support full CRUD, search, and publishing with scriptable (JSON) output.
 mn init                               # interactive first-run setup: ~/.maho/ + first vault
 mn init --no-tutorial                 # skip tutorial vault clone
 # First-time: creates global config (~/.maho/), sets up vault registry, guides user through:
-#   1. Where to store notes? (iCloud / Local / GitHub)
-#   2. Optional GitHub sync? (repo URL)
-#   3. Author info?
+#   1. Enable iCloud sync? (Yes → Cloud Sync ON, type:icloud / No → Cloud Sync OFF, type:device)
+#   2. Where to store notes? (iCloud / Device / Local / GitHub) — options depend on Cloud Sync setting
+#   3. Optional GitHub sync? (repo URL)
+#   4. Author info?
 # Creates: maho.yaml + .maho/ + .gitignore in chosen vault path
 # Also: auto-adds getting-started tutorial as read-only vault (cloned from kuochuanpan/maho-getting-started)
 # Offline: tutorial vault skipped gracefully, user can add later via mn vault add
@@ -63,7 +64,8 @@ mn publish --preview                  # local preview before push
 
 # ── Vault Management ──────────────────────────────
 mn vault list                         # list all registered vaults (name, type, access, sync status)
-mn vault add <name> --icloud          # create new iCloud vault (stored in iCloud container)
+mn vault add <name> --icloud          # create new iCloud vault (requires Cloud Sync ON)
+mn vault add <name> --device          # create new device vault (app-managed local storage, all platforms)
 mn vault add <name> --github <repo>   # add GitHub-backed vault (auto clone)
 # Auto-detects:
 #   1. Access: checks GitHub API permissions — no push access → read-only, push access → read-write
@@ -98,6 +100,8 @@ mn config set author.name "Name"      # vault-level: default author for new note
 mn config set site.domain "notes.example.com"  # vault-level: published site domain
 mn config set --device <key> <value>             # per-vault device config (.maho/config.yaml)
 mn config set --global embed.model e5-large       # global: embedding model (applies to ALL vaults on this device)
+mn config set --global sync.cloud icloud          # global: cloud sync ON (default)
+mn config set --global sync.cloud off             # global: cloud sync OFF (local-only mode)
 mn config auth                        # GitHub auth (stored in ~/.maho/config.yaml — global, not per-vault)
 mn config auth --status               # check auth status (token source, validity)
 

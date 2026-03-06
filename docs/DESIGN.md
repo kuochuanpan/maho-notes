@@ -60,8 +60,8 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
             │
   Cross-vault search spans all vaults (FTS5 + vector)
 
-Sync: iCloud (automatic per vault) + GitHub (explicit, mn sync)
-Vaults: iCloud (multi-vault in container) / GitHub (clone) / Local (macOS CLI)
+Sync: iCloud (automatic per vault, Cloud Sync ON) + GitHub (explicit, mn sync)
+Vaults: iCloud (Cloud Sync ON) / Device (app-managed local) / GitHub (clone) / Local (macOS CLI)
 Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
 ```
 
@@ -107,7 +107,7 @@ Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection whe
 | Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) v0.2.0 (SQLite 3.48 + FTS5 + CJK tokenizer + vendored sqlite-vec v0.1.6) |
 | Embeddings | Tiered: all-MiniLM-L6-v2 (~90MB, 384d, default) / multilingual-e5-small (~470MB, 384d) / multilingual-e5-large (~2.2GB, 1024d) |
 | Embedding Runtime | [`swift-embeddings`](https://github.com/jkrukowski/swift-embeddings) v0.0.26 (MLTensor, macOS 15+ / iOS 18+). Supports Bert + XLMRoberta model families. |
-| Sync | iCloud (app default) + GitHub (CLI/power user/publishing) |
+| Sync | iCloud (app default, Cloud Sync ON) + Device (local, Cloud Sync OFF) + GitHub (CLI/power user/publishing) |
 | Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
 | Auth | GitHub OAuth via `ASWebAuthenticationSession` (iOS/macOS) / `gh auth` (CLI) |
 | Hosting | GitHub Pages (user-owned, for published notes) |
