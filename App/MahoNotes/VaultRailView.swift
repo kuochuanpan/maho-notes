@@ -5,7 +5,7 @@ import MahoNotesKit
 struct VaultRailView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAddAlert = false
-    @State private var showingAuthorPopover = false
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,24 +44,10 @@ struct VaultRailView: View {
 
             Spacer()
 
-            // Author + Settings pinned at bottom
+            // Settings pinned at bottom
             Divider()
                 .padding(.horizontal, 6)
 
-            // Author initials
-            Button {
-                showingAuthorPopover.toggle()
-            } label: {
-                authorInitialsView
-            }
-            .buttonStyle(.plain)
-            .help(appState.authorName ?? "Author")
-            .popover(isPresented: $showingAuthorPopover, arrowEdge: .trailing) {
-                authorPopoverContent
-            }
-            .padding(.top, 6)
-
-            // Settings gear
             #if os(macOS)
             SettingsLink {
                 Image(systemName: "gearshape")
@@ -71,13 +57,13 @@ struct VaultRailView: View {
             }
             .buttonStyle(.plain)
             .help("Settings (⌘,)")
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
             #else
             Image(systemName: "gearshape")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
-                .padding(.bottom, 8)
+                .padding(.vertical, 8)
             #endif
         }
         .frame(width: 48)
@@ -143,75 +129,34 @@ struct VaultRailView: View {
                     .offset(x: -6)
             }
         }
-    }
-
-    // MARK: - Author Section
-
-    private var authorInitialsView: some View {
-        Group {
-            if let name = appState.authorName {
-                Text(initials(for: name))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(color(for: name), in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                Image(systemName: "questionmark")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            }
+        .contextMenu {
+            vaultContextMenu(entry)
         }
     }
 
-    private var authorPopoverContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let name = appState.authorName {
-                Text(name)
-                    .font(.headline)
-            } else {
-                Text("No author set")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
+    // MARK: - Vault Context Menu
 
-            if let vault = appState.selectedVault {
-                Text(vault.name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider()
-                .padding(.vertical, 4)
-
-            #if os(macOS)
-            SettingsLink {
-                Label("Vault Settings", systemImage: "gearshape")
-            }
-            .buttonStyle(.plain)
-            #endif
-
-            Button {
-                showingAuthorPopover = false
-            } label: {
-                Label("About Maho Notes", systemImage: "info.circle")
-            }
-            .buttonStyle(.plain)
+    @ViewBuilder
+    private func vaultContextMenu(_ entry: VaultEntry) -> some View {
+        if let name = appState.authorName {
+            Text(name)
+        } else {
+            Text("No author set")
         }
-        .padding(12)
-        .frame(minWidth: 180)
+
+        Text(entry.name)
+            .foregroundStyle(.secondary)
+
+        Divider()
+
+        #if os(macOS)
+        SettingsLink {
+            Label("Vault Settings", systemImage: "gearshape")
+        }
+        #endif
     }
 
     // MARK: - Helpers
-
-    private func initials(for name: String) -> String {
-        let words = name.split(separator: " ")
-        if words.count >= 2 {
-            return String(words[0].prefix(1) + words[1].prefix(1)).uppercased()
-        }
-        return String(name.prefix(2)).uppercased()
-    }
 
     private func color(for name: String) -> Color {
         let colors: [Color] = [
