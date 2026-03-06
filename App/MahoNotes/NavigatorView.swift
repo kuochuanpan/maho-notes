@@ -204,6 +204,7 @@ struct NavigatorView: View {
                 ForEach(appState.recentNotes, id: \.relativePath) { note in
                     noteRow(note)
                         .tag(note.relativePath)
+                        .moveDisabled(true)
                 }
             } header: {
                 Text("RECENT")
@@ -438,11 +439,11 @@ private struct TreeNodeView: View {
     var onDeleteNote: ((String, String) -> Void)?       // (relativePath, title)
     var onDeleteCollection: ((String, String, Bool, Bool) -> Void)?  // (id, name, isTopLevel, hasContents)
     @State private var isExpanded: Bool = false
-    @State private var noteDropTargetId: String?
 
     var body: some View {
         if node.isDirectory {
             directoryRow
+                .moveDisabled(true)
                 .contextMenu {
                     Button {
                         onNewNote?(node.id)
@@ -482,6 +483,7 @@ private struct TreeNodeView: View {
                         onDeleteCollection: onDeleteCollection
                     )
                     .padding(.leading, 12)
+                    .moveDisabled(true)
                 }
 
                 // "+ Add Note" row (after sub-collections, before notes)
@@ -498,29 +500,17 @@ private struct TreeNodeView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 28)
+                .moveDisabled(true)
 
-                // Notes — reorder via onDrag/onDrop (.move proposal, scoped to collection)
+                // Notes — native reorder
                 ForEach(noteChildren, id: \.id) { child in
                     noteLeafRowFor(child)
                         .padding(.leading, 12)
-                        .overlay(alignment: .top) {
-                            if noteDropTargetId == child.id {
-                                Rectangle()
-                                    .fill(Color.accentColor)
-                                    .frame(height: 2)
-                                    .transition(.opacity)
-                            }
-                        }
-                        .onDrag {
-                            NSItemProvider(object: child.id as NSString)
-                        }
-                        .onDrop(of: [.text], delegate: NoteReorderDropDelegate(
-                            targetId: child.id,
-                            noteChildren: noteChildren,
-                            collectionId: node.id,
-                            onReorderNotes: onReorderNotes,
-                            currentDropTarget: $noteDropTargetId
-                        ))
+                }
+                .onMove { source, destination in
+                    var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+                    paths.move(fromOffsets: source, toOffset: destination)
+                    onReorderNotes?(node.id, paths)
                 }
             }
         } else {
@@ -590,53 +580,4 @@ private struct TreeNodeView: View {
     }
 }
 
-// MARK: - Note Reorder Drop Delegate
 
-/// Custom DropDelegate that uses .move proposal (no "+" badge), shows a
-/// visual insertion indicator, and scopes reorder to notes within a single collection.
-private struct NoteReorderDropDelegate: DropDelegate {
-    let targetId: String
-    let noteChildren: [FileTreeNode]
-    let collectionId: String
-    var onReorderNotes: ((String, [String]) -> Void)?
-    @Binding var currentDropTarget: String?
-
-    func dropEntered(info: DropInfo) {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            currentDropTarget = targetId
-        }
-    }
-
-    func dropExited(info: DropInfo) {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            if currentDropTarget == targetId {
-                currentDropTarget = nil
-            }
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        currentDropTarget = nil
-        guard let item = info.itemProviders(for: [.text]).first else { return false }
-        item.loadObject(ofClass: NSString.self) { reading, _ in
-            guard let droppedId = reading as? String, droppedId != targetId else { return }
-            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
-            guard let fromIdx = paths.firstIndex(of: droppedId),
-                  let toIdx = paths.firstIndex(of: targetId) else { return }
-            paths.remove(at: fromIdx)
-            paths.insert(droppedId, at: toIdx)
-            DispatchQueue.main.async {
-                onReorderNotes?(collectionId, paths)
-            }
-        }
-        return true
-    }
-
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.text])
-    }
-}
