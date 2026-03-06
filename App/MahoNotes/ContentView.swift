@@ -249,11 +249,12 @@ struct MacContentView: View {
 
             // Popover-style callout with top-left pointing arrow
             VStack(alignment: .leading, spacing: 0) {
-                // Arrow pointing toward upper-left (the + button)
+                // Arrow rotated 45° to point toward upper-left (the + button)
                 Triangle()
                     .fill(Color(.windowBackgroundColor))
-                    .frame(width: 16, height: 10)
-                    .padding(.leading, 12)
+                    .frame(width: 14, height: 10)
+                    .rotationEffect(.degrees(-45))
+                    .padding(.leading, 16)
 
                 // Callout body
                 VStack(alignment: .leading, spacing: 8) {
