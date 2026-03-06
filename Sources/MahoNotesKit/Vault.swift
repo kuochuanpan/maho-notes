@@ -72,8 +72,10 @@ public struct Vault: Sendable {
 
         var files: [String] = []
         for case let fileURL as URL in enumerator {
+            let filename = fileURL.lastPathComponent
             guard fileURL.pathExtension == "md",
-                  fileURL.lastPathComponent != "_index.md"
+                  filename != "_index.md",
+                  filename.lowercased() != "readme.md"
             else { continue }
             files.append(fileURL.path)
         }
@@ -182,7 +184,9 @@ private func hasMarkdownFiles(in directoryPath: String, fileManager fm: FileMana
     ) else { return false }
 
     for case let fileURL as URL in enumerator {
-        if fileURL.pathExtension == "md" && fileURL.lastPathComponent != "_index.md" {
+        if fileURL.pathExtension == "md"
+            && fileURL.lastPathComponent != "_index.md"
+            && fileURL.lastPathComponent.lowercased() != "readme.md" {
             return true
         }
     }
@@ -206,7 +210,7 @@ public func nextFileNumber(in directory: String) throws -> Int {
     guard fm.fileExists(atPath: directory) else { return 1 }
     let contents = try fm.contentsOfDirectory(atPath: directory)
     let numbers = contents.compactMap { name -> Int? in
-        guard name.hasSuffix(".md"), name != "_index.md" else { return nil }
+        guard name.hasSuffix(".md"), name != "_index.md", name.lowercased() != "readme.md" else { return nil }
         let prefix = name.prefix(while: { $0.isNumber })
         return Int(prefix)
     }
