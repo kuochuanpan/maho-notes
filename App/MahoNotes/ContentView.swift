@@ -213,7 +213,7 @@ struct MacContentView: View {
                         .stroke(Color.primary.opacity(0.1), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
-                .padding(.top, 8)
+                .padding(.top, 2)
                 .onTapGesture { /* absorb tap — prevent dismiss */ }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
