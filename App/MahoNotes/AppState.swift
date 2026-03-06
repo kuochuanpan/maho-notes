@@ -665,7 +665,7 @@ final class AppState {
     /// Vaults grouped by type for the rail.
     var icloudVaults: [VaultEntry] { vaults.filter { $0.type == .icloud } }
     var githubVaults: [VaultEntry] { vaults.filter { $0.type == .github } }
-    var localVaults: [VaultEntry] { vaults.filter { $0.type == .local } }
+    var localVaults: [VaultEntry] { vaults.filter { $0.type == .local || $0.type == .device } }
 
     /// Author name from the current vault's maho.yaml (author.name key).
     var authorName: String? {
@@ -860,5 +860,44 @@ final class AppState {
         try? registry.setPrimary(name)
         try? MahoNotesKit.saveRegistry(registry)
         loadRegistry()
+    }
+
+    // MARK: - Vault Creation
+
+    /// Create a new vault. Storage location is determined by cloudSyncMode.
+    @MainActor
+    func createNewVault(name: String, authorName: String) throws {
+        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
+        let vaultRoot = resolveVaultRoot(storage: storage)
+
+        try createEmptyVault(
+            name: name,
+            vaultRoot: vaultRoot,
+            authorName: authorName,
+            skipTutorial: true,
+            globalConfigDir: globalConfigDir
+        )
+
+        loadRegistry()
+        selectedVaultName = name
+    }
+
+    /// Import a vault from GitHub.
+    @MainActor
+    func importGitHubVault(repo: String, name: String?) throws {
+        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
+        let vaultRoot = resolveVaultRoot(storage: storage)
+
+        let registeredName = try cloneGitHubVault(
+            repo: repo,
+            vaultRoot: vaultRoot,
+            name: name,
+            globalConfigDir: globalConfigDir
+        )
+
+        loadRegistry()
+        selectedVaultName = registeredName
     }
 }

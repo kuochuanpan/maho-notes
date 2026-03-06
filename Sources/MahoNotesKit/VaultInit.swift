@@ -166,13 +166,29 @@ func writeVaultFiles(
 
 /// Registers `name` in the vault registry, setting it as primary if it's the first vault.
 /// Skips silently if already registered.
-func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String, readOnly: Bool = false) throws {
+func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String, readOnly: Bool = false, vaultType: VaultType? = nil) throws {
     var registry = (try? loadRegistry(globalConfigDir: globalConfigDir)) ?? VaultRegistry(primary: "", vaults: [])
     guard registry.findVault(named: name) == nil else { return }
 
+    // Determine vault type: explicit > github > cloud sync detection > .device
+    let resolvedType: VaultType
+    if let explicit = vaultType {
+        resolvedType = explicit
+    } else if githubRepo != nil && !(githubRepo?.isEmpty ?? true) {
+        resolvedType = .github
+    } else {
+        let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
+        let iCloudRoot = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+        if cloudSync == .icloud && vaultPath.hasPrefix(iCloudRoot) {
+            resolvedType = .icloud
+        } else {
+            resolvedType = .device
+        }
+    }
+
     let entry = VaultEntry(
         name: name,
-        type: .local,
+        type: resolvedType,
         github: githubRepo,
         path: vaultPath,
         access: readOnly ? .readOnly : .readWrite
@@ -310,7 +326,7 @@ public func cloneGitHubVault(
         }
     }
 
-    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir, readOnly: readOnly)
+    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir, readOnly: readOnly, vaultType: .github)
     print("Vault '\(vaultName)' ready at \(vaultPath)")
     return vaultName
 }
