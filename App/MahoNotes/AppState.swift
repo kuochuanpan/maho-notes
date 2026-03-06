@@ -471,9 +471,52 @@ final class AppState {
                     }
                 }
                 notesByCollection = grouped
+
+                // Background: re-embed the updated note for vector search
+                reembedNoteInBackground(updated, vaultPath: vaultPath)
             }
         } catch {
             // Silently fail for now — could add error reporting later
+        }
+    }
+
+    /// Re-embed a single note's vector chunks in the background after save.
+    /// Only runs if a vector index already exists for the vault (skip if never built).
+    private func reembedNoteInBackground(_ note: Note, vaultPath: String) {
+        guard VectorIndex.vectorIndexExists(vaultPath: vaultPath) else { return }
+
+        let currentEmbeddingModel = embeddingModel
+        Task.detached {
+            do {
+                let model = EmbeddingModel(rawValue: currentEmbeddingModel) ?? .minilm
+                let provider = SwiftEmbeddingsProvider(model: model)
+
+                let vecIndex = try VectorIndex(vaultPath: vaultPath, dimensions: provider.dimensions, skipDimensionCheck: true)
+
+                // Chunk the note and embed
+                let chunks = Chunker.chunkNote(title: note.title, body: note.body)
+                guard !chunks.isEmpty else {
+                    try vecIndex.removeNote(path: note.relativePath)
+                    return
+                }
+
+                let texts = chunks.map { $0.text }
+                let vectors = try await provider.embedBatch(texts)
+
+                let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
+                let mtime = (try? FileManager.default.attributesOfItem(atPath: filePath))?[.modificationDate]
+                    .flatMap { ($0 as? Date)?.timeIntervalSince1970 } ?? Date().timeIntervalSince1970
+
+                try vecIndex.indexNote(
+                    path: note.relativePath,
+                    chunks: chunks.map { (id: $0.id, text: $0.text) },
+                    vectors: vectors,
+                    model: model.rawValue,
+                    mtime: mtime
+                )
+            } catch {
+                // Silently fail — vector re-indexing is best-effort
+            }
         }
     }
 
