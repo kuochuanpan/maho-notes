@@ -247,14 +247,13 @@ struct MacContentView: View {
             Color.black.opacity(0.45)
                 .ignoresSafeArea()
 
-            // Popover-style callout with left-pointing arrow
-            HStack(alignment: .top, spacing: 0) {
-                // Left arrow triangle pointing at the + button
+            // Popover-style callout with top-left pointing arrow
+            VStack(alignment: .leading, spacing: 0) {
+                // Arrow pointing toward upper-left (the + button)
                 Triangle()
                     .fill(Color(.windowBackgroundColor))
-                    .frame(width: 10, height: 18)
-                    .rotationEffect(.degrees(-90))
-                    .offset(y: 12)
+                    .frame(width: 16, height: 10)
+                    .padding(.leading, 12)
 
                 // Callout body
                 VStack(alignment: .leading, spacing: 8) {
@@ -273,9 +272,9 @@ struct MacContentView: View {
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                 )
             }
-            // Position right of the vault rail, aligned with the + button
-            .padding(.top, 44)
-            .padding(.leading, 50)
+            // Position below-right of the + button
+            .padding(.top, 52)
+            .padding(.leading, 12)
         }
         .allowsHitTesting(false) // Let clicks through to the + button
         .transition(.opacity)
