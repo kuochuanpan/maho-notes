@@ -247,16 +247,9 @@ struct MacContentView: View {
             Color.black.opacity(0.45)
                 .ignoresSafeArea()
 
-            // Popover-style callout with 45° arrow pointing upper-left
-            VStack(alignment: .leading, spacing: -2) {
-                // Arrow rotated 45° to point toward upper-left (the + button)
-                Triangle()
-                    .fill(Color(.windowBackgroundColor))
-                    .frame(width: 14, height: 10)
-                    .rotationEffect(.degrees(-45))
-                    .padding(.leading, 6)
-
-                // Callout body — offset right so its left edge meets the arrow
+            // Speech bubble: triangle behind the box, overlapping to look connected
+            ZStack(alignment: .topLeading) {
+                // Callout body (on top)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Welcome to Maho Notes!")
                         .font(.headline)
@@ -272,10 +265,19 @@ struct MacContentView: View {
                         .fill(Color(.windowBackgroundColor))
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                 )
-                .padding(.leading, 8)
+                .zIndex(1)
+                .padding(.top, 10) // make room for the tail to peek out
+
+                // Triangle tail (behind the box, peeking out from top-left)
+                Triangle()
+                    .fill(Color(.windowBackgroundColor))
+                    .frame(width: 20, height: 16)
+                    .rotationEffect(.degrees(-45))
+                    .offset(x: 8, y: 0)
+                    .zIndex(0)
             }
             // Position below-right of the + button
-            .padding(.top, 50)
+            .padding(.top, 42)
             .padding(.leading, 14)
         }
         .allowsHitTesting(false) // Let clicks through to the + button
