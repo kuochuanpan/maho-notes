@@ -262,10 +262,11 @@ struct SearchSettingsTab: View {
                         if isBuilding {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Building index...")
+                            Text(buildStatus ?? "Building...")
+                                .lineLimit(1)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                            Text("Rebuild Search Index")
+                            Text("Build Index (Text + Vector)")
                         }
                     }
                 }
@@ -294,12 +295,70 @@ struct SearchSettingsTab: View {
             do {
                 let notes = try vault.allNotes()
 
-                // Build FTS index
+                // 1. Build FTS index
+                await MainActor.run { buildStatus = "Building text index..." }
                 let searchIndex = try SearchIndex(vaultPath: vaultPath)
                 let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
 
+                // 2. Build vector index with selected embedding model
+                guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+                    await MainActor.run {
+                        buildStatus = "FTS: \(ftsStats.total) notes. Unknown embedding model."
+                        isBuilding = false
+                    }
+                    return
+                }
+
                 await MainActor.run {
-                    buildStatus = "FTS: \(ftsStats.total) notes indexed"
+                    buildStatus = "Downloading \(model.displayName) model (\(model.approximateSize))..."
+                }
+
+                let provider = SwiftEmbeddingsProvider(model: model)
+                let vecIndex: VectorIndex
+                do {
+                    vecIndex = try VectorIndex(
+                        vaultPath: vaultPath,
+                        dimensions: model.dimensions
+                    )
+                } catch let error as VectorIndexError {
+                    if case .dimensionMismatch = error {
+                        // Model changed — reset and recreate
+                        let idx = try VectorIndex(
+                            vaultPath: vaultPath,
+                            dimensions: model.dimensions,
+                            skipDimensionCheck: true
+                        )
+                        try idx.resetSchema()
+                        await MainActor.run {
+                            buildStatus = "Building vector index (model changed, full rebuild)..."
+                        }
+                        let vecStats = try await idx.buildIndex(
+                            notes: notes,
+                            asyncEmbedder: { texts in try await provider.embedBatch(texts) },
+                            model: model.rawValue,
+                            fullRebuild: true
+                        )
+                        await MainActor.run {
+                            buildStatus = "Done: \(ftsStats.total) notes, \(vecStats.totalChunks) vector chunks"
+                            isBuilding = false
+                        }
+                        return
+                    }
+                    throw error
+                }
+
+                await MainActor.run {
+                    buildStatus = "Building vector index..."
+                }
+                let vecStats = try await vecIndex.buildIndex(
+                    notes: notes,
+                    asyncEmbedder: { texts in try await provider.embedBatch(texts) },
+                    model: model.rawValue,
+                    fullRebuild: true
+                )
+
+                await MainActor.run {
+                    buildStatus = "Done: \(ftsStats.total) notes, \(vecStats.totalChunks) vector chunks"
                     isBuilding = false
                 }
             } catch {
