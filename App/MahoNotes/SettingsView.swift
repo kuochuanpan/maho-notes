@@ -221,42 +221,38 @@ struct SearchSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Index Status
+            // Index Status — All Vaults
             Section("Index Status") {
-                if let entry = appState.selectedVault {
-                    let vaultPath = resolvedPath(for: entry)
-                    let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
-                    let indexPath = (vaultPath as NSString).appendingPathComponent(".maho/index.db")
-                    let indexExists = FileManager.default.fileExists(atPath: indexPath)
-
-                    HStack {
-                        Text("FTS Index")
-                        Spacer()
-                        Text(indexExists ? "Available" : "Not built")
-                            .foregroundStyle(indexExists ? .green : .secondary)
-                    }
-                    HStack {
-                        Text("Vector Index")
-                        Spacer()
-                        Text(hasVectorIndex ? "Available" : "Not built")
-                            .foregroundStyle(hasVectorIndex ? .green : .secondary)
-                    }
-                    HStack {
-                        Text("Vault")
-                        Spacer()
-                        Text(entry.name)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text("No vault selected")
+                if appState.vaults.isEmpty {
+                    Text("No vaults configured")
                         .foregroundStyle(.secondary)
+                } else {
+                    ForEach(appState.vaults, id: \.id) { entry in
+                        let vaultPath = resolvedPath(for: entry)
+                        let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
+                        let indexPath = (vaultPath as NSString).appendingPathComponent(".maho/index.db")
+                        let hasFTS = FileManager.default.fileExists(atPath: indexPath)
+
+                        HStack {
+                            Image(systemName: vaultIcon(for: entry))
+                                .frame(width: 20)
+                            Text(entry.name)
+                            Spacer()
+                            Label(hasFTS ? "FTS" : "FTS", systemImage: hasFTS ? "checkmark.circle.fill" : "xmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(hasFTS ? .green : .secondary)
+                            Label(hasVectorIndex ? "Vec" : "Vec", systemImage: hasVectorIndex ? "checkmark.circle.fill" : "xmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(hasVectorIndex ? .green : .secondary)
+                        }
+                    }
                 }
             }
 
-            // Rebuild Index
+            // Build Index — All Vaults
             Section {
                 Button {
-                    rebuildIndex()
+                    rebuildAllIndexes()
                 } label: {
                     HStack {
                         if isBuilding {
@@ -266,11 +262,11 @@ struct SearchSettingsTab: View {
                                 .lineLimit(1)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                            Text("Build Index (Text + Vector)")
+                            Text("Build All Indexes (Text + Vector)")
                         }
                     }
                 }
-                .disabled(isBuilding || appState.selectedVault == nil)
+                .disabled(isBuilding || appState.vaults.isEmpty)
 
                 if let status = buildStatus {
                     Text(status)
@@ -281,6 +277,14 @@ struct SearchSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+
+    private func vaultIcon(for entry: VaultEntry) -> String {
+        switch entry.type {
+        case .icloud: "icloud"
+        case .github: "arrow.triangle.branch"
+        case .local: "folder"
+        }
     }
 
     /// Build vector index in a nonisolated context to avoid Sendable issues.
@@ -328,49 +332,54 @@ struct SearchSettingsTab: View {
         return vecStats.totalChunks
     }
 
-    private func rebuildIndex() {
-        guard let entry = appState.selectedVault else { return }
+    private func rebuildAllIndexes() {
         isBuilding = true
         buildStatus = nil
 
         Task {
-            let vaultPath = resolvedPath(for: entry)
-            let vault = Vault(path: vaultPath)
+            guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+                await MainActor.run {
+                    buildStatus = "Unknown embedding model."
+                    isBuilding = false
+                }
+                return
+            }
+
+            var totalNotes = 0
+            var totalChunks = 0
+            let vaultCount = appState.vaults.count
 
             do {
-                let notes = try vault.allNotes()
+                for (i, entry) in appState.vaults.enumerated() {
+                    let vaultPath = resolvedPath(for: entry)
+                    let vault = Vault(path: vaultPath)
+                    let notes = try vault.allNotes()
 
-                // 1. Build FTS index
-                await MainActor.run { buildStatus = "Building text index..." }
-                let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
-
-                // 2. Build vector index with selected embedding model
-                guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+                    // FTS
                     await MainActor.run {
-                        buildStatus = "FTS: \(ftsStats.total) notes. Unknown embedding model."
-                        isBuilding = false
+                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building text index..."
                     }
-                    return
+                    let searchIndex = try SearchIndex(vaultPath: vaultPath)
+                    let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+                    totalNotes += ftsStats.total
+
+                    // Vector
+                    await MainActor.run {
+                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building vector index..."
+                    }
+                    let chunks = try await Self.buildVectorIndex(
+                        vaultPath: vaultPath,
+                        notes: notes,
+                        model: model,
+                        onStatus: { status in
+                            Task { @MainActor in buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): \(status)" }
+                        }
+                    )
+                    totalChunks += chunks
                 }
 
                 await MainActor.run {
-                    buildStatus = "Downloading \(model.displayName) model (\(model.approximateSize))..."
-                }
-
-                // Build vector index off main actor to avoid Sendable warnings
-                let totalNotes = ftsStats.total
-                let vecChunks = try await Self.buildVectorIndex(
-                    vaultPath: vaultPath,
-                    notes: notes,
-                    model: model,
-                    onStatus: { status in
-                        Task { @MainActor in buildStatus = status }
-                    }
-                )
-
-                await MainActor.run {
-                    buildStatus = "Done: \(totalNotes) notes, \(vecChunks) vector chunks"
+                    buildStatus = "Done: \(vaultCount) vaults, \(totalNotes) notes, \(totalChunks) chunks"
                     isBuilding = false
                 }
             } catch {

@@ -43,29 +43,28 @@ struct VaultRailView: View {
 
             Spacer()
 
-            // Author initials pinned at bottom
-            if let vault = appState.selectedVault {
-                Divider()
-                    .padding(.horizontal, 6)
-                #if os(macOS)
-                SettingsLink {
-                    Text(initials(for: vault.name))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 8)
-                #else
-                Text(initials(for: vault.name))
-                    .font(.system(size: 13, weight: .medium))
+            // Settings button pinned at bottom (global, not per-vault)
+            Divider()
+                .padding(.horizontal, 6)
+            #if os(macOS)
+            SettingsLink {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15))
                     .foregroundStyle(.secondary)
                     .frame(width: 36, height: 36)
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.bottom, 8)
-                #endif
             }
+            .buttonStyle(.plain)
+            .help("Settings (⌘,)")
+            .padding(.bottom, 8)
+            #else
+            Image(systemName: "gearshape")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, height: 36)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.bottom, 8)
+            #endif
         }
         .frame(width: 48)
         .background(.bar)

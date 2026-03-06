@@ -40,50 +40,52 @@ struct MacContentView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        GeometryReader { geo in
-            HStack(spacing: 0) {
-                if appState.isLoaded {
-                    // A — Vault Rail
-                    if appState.showVaultRail {
-                        VaultRailView()
-                        Divider()
+        NavigationStack {
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    if appState.isLoaded {
+                        // A — Vault Rail
+                        if appState.showVaultRail {
+                            VaultRailView()
+                            Divider()
+                        }
+
+                        // B — Tree Navigator
+                        if appState.showNavigator {
+                            NavigatorView()
+                            Divider()
+                        }
                     }
 
-                    // B — Tree Navigator
-                    if appState.showNavigator {
-                        NavigatorView()
-                        Divider()
+                    // Edge handle — thin strip to restore collapsed panels
+                    if appState.isLoaded && !appState.showNavigator {
+                        edgeHandle
                     }
+
+                    // C — Content
+                    NoteContentView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .animation(.easeInOut(duration: 0.2), value: appState.showNavigator)
+                .animation(.easeInOut(duration: 0.2), value: appState.showVaultRail)
+                .onChange(of: geo.size.width) { _, newWidth in
+                    handleAutoCollapse(width: newWidth)
+                }
+            }
+            .navigationTitle("")
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        appState.toggleNavigator()
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .help("Toggle Navigator (⌘⇧B)")
                 }
 
-                // Edge handle — thin strip to restore collapsed panels
-                if appState.isLoaded && !appState.showNavigator {
-                    edgeHandle
+                ToolbarItem(placement: .principal) {
+                    TitleBarSearchField()
                 }
-
-                // C — Content
-                NoteContentView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .animation(.easeInOut(duration: 0.2), value: appState.showNavigator)
-            .animation(.easeInOut(duration: 0.2), value: appState.showVaultRail)
-            .onChange(of: geo.size.width) { _, newWidth in
-                handleAutoCollapse(width: newWidth)
-            }
-        }
-        .navigationTitle("")
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    appState.toggleNavigator()
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .help("Toggle Navigator (⌘⇧B)")
-            }
-
-            ToolbarItem(placement: .principal) {
-                TitleBarSearchField()
             }
         }
     }
