@@ -11,7 +11,7 @@ struct NavigatorView: View {
             Divider()
             list
         }
-        .frame(width: 240)
+        .frame(width: appState.navigatorWidth)
         .background(.background)
     }
 

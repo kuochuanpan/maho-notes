@@ -109,6 +109,7 @@ struct TitleBarSearchField: NSViewRepresentable {
 struct MacContentView: View {
     @Environment(AppState.self) private var appState
     @State private var debounceTask: Task<Void, Never>?
+    @State private var dragStartWidth: CGFloat?
 
     var body: some View {
         @Bindable var state = appState
@@ -128,7 +129,7 @@ struct MacContentView: View {
                         // B — Tree Navigator
                         if appState.showNavigator {
                             NavigatorView()
-                            Divider()
+                            navigatorResizeHandle
                         }
                     }
 
@@ -255,6 +256,39 @@ struct MacContentView: View {
                     NSCursor.pop()
                 }
             }
+    }
+
+    // MARK: - Navigator Resize Handle
+
+    private var navigatorResizeHandle: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 5)
+            .background(Divider())
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if dragStartWidth == nil {
+                            dragStartWidth = appState.navigatorWidth
+                        }
+                        let newWidth = (dragStartWidth ?? appState.navigatorWidth) + value.translation.width
+                        appState.navigatorWidth = min(
+                            AppState.navigatorWidthMax,
+                            max(AppState.navigatorWidthMin, newWidth)
+                        )
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = nil
+                    }
+            )
     }
 
     // MARK: - Auto-collapse

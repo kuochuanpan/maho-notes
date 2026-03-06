@@ -57,6 +57,13 @@ final class AppState {
         didSet { UserDefaults.standard.set(showNavigator, forKey: "showNavigator") }
     }
 
+    /// Navigator panel width (persisted via UserDefaults).
+    static let navigatorWidthMin: CGFloat = 180
+    static let navigatorWidthMax: CGFloat = 400
+    var navigatorWidth: CGFloat = UserDefaults.standard.object(forKey: "navigatorWidth") as? CGFloat ?? 240 {
+        didSet { UserDefaults.standard.set(navigatorWidth, forKey: "navigatorWidth") }
+    }
+
     /// Tracks user's explicit panel state (before auto-collapse overrides).
     var userShowVaultRail: Bool = true
     var userShowNavigator: Bool = true
