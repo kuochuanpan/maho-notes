@@ -93,9 +93,12 @@ struct NavigatorView: View {
                     Image(systemName: "plus")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("New Collection")
+                .padding(.trailing, 4)
             }
         }
     }
