@@ -42,11 +42,12 @@ public struct Config: Sendable {
         "site.domain", "site.title", "site.theme",
         "embed.model",
         "auth.github_token",
+        "sync.cloud",
     ]
 
     /// Section keys (groups, not leaf values)
     private static let sectionKeys: Set<String> = [
-        "author", "github", "site", "embed", "auth",
+        "author", "github", "site", "embed", "auth", "sync",
     ]
 
     public func setValue(key: String, value: String) throws {
@@ -108,6 +109,11 @@ private func getNestedValue(_ dict: [String: Any], keyPath: String) -> String? {
 }
 
 extension Config {
+    /// Resolve sync.cloud from global ~/.maho/config.yaml. Defaults to `.icloud`.
+    public static func resolveCloudSync(globalConfigDir: String) -> CloudSyncMode {
+        loadCloudSyncMode(globalConfigDir: globalConfigDir)
+    }
+
     /// Resolve embed.model: vault device config > global ~/.maho/config.yaml > nil
     public static func resolveEmbedModel(vaultPath: String) -> String? {
         // 1. Vault device config

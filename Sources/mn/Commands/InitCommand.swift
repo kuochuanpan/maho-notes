@@ -83,27 +83,45 @@ struct InitCommand: ParsableCommand {
         print("Welcome to Maho Notes!")
         print("")
 
-        var chosenStorage = storageOpt
-        if chosenStorage == nil {
-            if iCloudContainerExists() {
-                let iCloudRoot = resolveVaultRoot(storage: .icloud)
-                let localRoot = resolveVaultRoot(storage: .local)
-                print("Where would you like to store your vaults?")
-                print("  1. iCloud (syncs across Apple devices)")
-                print("     -> \(iCloudRoot)/")
-                print("  2. Local (this machine only)")
-                print("     -> \(localRoot)/")
-                print("Choice [1/2]: ", terminator: "")
-                let choice = readLine() ?? "1"
-                chosenStorage = choice == "2" ? .local : .icloud
-            } else {
-                let localRoot = resolveVaultRoot(storage: .local)
-                print("Vaults will be stored at: \(localRoot)/")
-                print("(Install the Maho Notes app for iCloud sync)")
-                chosenStorage = .local
+        // Step 1: Cloud sync
+        var useDeviceVault = false
+        if iCloudContainerExists() {
+            print("Enable iCloud sync? Syncs vaults across all your Apple devices. [Y/n]: ", terminator: "")
+            let ans = readLine() ?? ""
+            if ans.lowercased() == "n" {
+                useDeviceVault = true
+                try setGlobalSyncMode(.off, globalConfigDir: globalConfigDir)
+                print("Cloud Sync disabled. Vaults will be stored locally on this device.")
             }
         }
-        let vaultRoot = resolveVaultRoot(storage: chosenStorage)
+
+        // Step 2: Storage location (only when Cloud Sync is ON)
+        var chosenStorage = storageOpt
+        if !useDeviceVault {
+            if chosenStorage == nil {
+                if iCloudContainerExists() {
+                    let iCloudRoot = resolveVaultRoot(storage: .icloud)
+                    let localRoot = resolveVaultRoot(storage: .local)
+                    print("")
+                    print("Where would you like to store your vaults?")
+                    print("  1. iCloud (syncs across Apple devices)")
+                    print("     -> \(iCloudRoot)/")
+                    print("  2. Local (this machine only)")
+                    print("     -> \(localRoot)/")
+                    print("Choice [1/2]: ", terminator: "")
+                    let choice = readLine() ?? "1"
+                    chosenStorage = choice == "2" ? .local : .icloud
+                } else {
+                    let localRoot = resolveVaultRoot(storage: .local)
+                    print("Vaults will be stored at: \(localRoot)/")
+                    print("(Install the Maho Notes app for iCloud sync)")
+                    chosenStorage = .local
+                }
+            }
+        }
+        let vaultRoot = useDeviceVault
+            ? (globalConfigDir as NSString).appendingPathComponent("vaults")
+            : resolveVaultRoot(storage: chosenStorage)
 
         var resolvedName = name ?? ""
         var authorInput = resolvedAuthor
@@ -159,11 +177,32 @@ struct InitCommand: ParsableCommand {
                 let nameInput = readLine() ?? ""
                 resolvedName = nameInput.isEmpty ? "personal" : nameInput
             }
-            try createEmptyVault(
-                name: resolvedName, vaultRoot: vaultRoot, authorName: authorInput,
-                skipTutorial: true,  // tutorial is now a separate vault, not inside user's vault
-                globalConfigDir: globalConfigDir
-            )
+            if useDeviceVault {
+                // Device vault: create files + register with type .device
+                let vaultPath = (vaultRoot as NSString).appendingPathComponent(resolvedName)
+                let fm = FileManager.default
+                if !fm.fileExists(atPath: vaultRoot) {
+                    try fm.createDirectory(atPath: vaultRoot, withIntermediateDirectories: true)
+                }
+                try initVault(
+                    vaultPath: vaultPath, authorName: authorInput,
+                    githubRepo: "", skipTutorial: true, globalConfigDir: globalConfigDir
+                )
+                var registry = (try? loadRegistry(globalConfigDir: globalConfigDir))
+                    ?? VaultRegistry(primary: resolvedName, vaults: [])
+                if registry.findVault(named: resolvedName) == nil {
+                    let entry = VaultEntry(name: resolvedName, type: .device, access: .readWrite)
+                    try registry.addVault(entry)
+                    if registry.primary.isEmpty { registry.primary = resolvedName }
+                    try saveRegistry(registry, globalConfigDir: globalConfigDir)
+                }
+            } else {
+                try createEmptyVault(
+                    name: resolvedName, vaultRoot: vaultRoot, authorName: authorInput,
+                    skipTutorial: true,  // tutorial is now a separate vault, not inside user's vault
+                    globalConfigDir: globalConfigDir
+                )
+            }
             printSuccess(vaultName: resolvedName, vaultRoot: vaultRoot)
         }
     }

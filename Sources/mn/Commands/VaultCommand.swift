@@ -80,6 +80,7 @@ struct VaultListSubcommand: ParsableCommand {
             switch vault.type {
             case .github:  location = vault.github ?? ""
             case .icloud:  location = "(iCloud)"
+            case .device:  location = "(device)"
             case .local:   location = vault.path ?? ""
             }
             let primary = vault.name == registry.primary ? " *" : ""
@@ -97,14 +98,17 @@ struct VaultListSubcommand: ParsableCommand {
 struct VaultAddSubcommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
-        abstract: "Register a new vault (--icloud | --github <repo> | --path <local>)"
+        abstract: "Register a new vault (--icloud | --device | --github <repo> | --path <local>)"
     )
 
     @Argument(help: "Name for the vault")
     var name: String
 
-    @Flag(name: .long, help: "Create a new iCloud-backed vault")
+    @Flag(name: .long, help: "Create a new iCloud-backed vault (requires Cloud Sync ON)")
     var icloud: Bool = false
+
+    @Flag(name: .long, help: "Create a new device vault (app-managed local storage, works without iCloud)")
+    var device: Bool = false
 
     @Option(name: .long, help: "GitHub repo (owner/repo) to clone")
     var github: String?
@@ -123,9 +127,9 @@ struct VaultAddSubcommand: ParsableCommand {
     var `import`: Bool = false
 
     func validate() throws {
-        let modes = [icloud, github != nil, path != nil].filter { $0 }.count
+        let modes = [icloud, device, github != nil, path != nil].filter { $0 }.count
         guard modes == 1 else {
-            throw ValidationError("Specify exactly one of --icloud, --github <repo>, or --path <local>")
+            throw ValidationError("Specify exactly one of --icloud, --device, --github <repo>, or --path <local>")
         }
         if `import` && github == nil {
             throw ValidationError("--import requires --github")
@@ -142,6 +146,8 @@ struct VaultAddSubcommand: ParsableCommand {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         if icloud {
             try addICloud(globalConfigDir: globalConfigDir)
+        } else if device {
+            try addDevice(globalConfigDir: globalConfigDir)
         } else if let repo = github {
             try addGitHub(repo: repo, globalConfigDir: globalConfigDir)
         } else if let localPath = path {
@@ -152,6 +158,11 @@ struct VaultAddSubcommand: ParsableCommand {
     // MARK: iCloud
 
     private func addICloud(globalConfigDir: String) throws {
+        let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
+        guard cloudSync == .icloud else {
+            throw ValidationError("Cannot create an iCloud vault: Cloud Sync is OFF. Use --device instead, or enable Cloud Sync with: mn config set --global sync.cloud icloud")
+        }
+
         let base = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents/vaults" as NSString).expandingTildeInPath
         let vaultPath = (base as NSString).appendingPathComponent(name)
 
@@ -171,6 +182,30 @@ struct VaultAddSubcommand: ParsableCommand {
         try saveRegistry(registry, globalConfigDir: globalConfigDir)
 
         print("Vault '\(name)' created at \(vaultPath) and registered.")
+    }
+
+    // MARK: Device
+
+    private func addDevice(globalConfigDir: String) throws {
+        let base = (globalConfigDir as NSString).appendingPathComponent("vaults")
+        let vaultPath = (base as NSString).appendingPathComponent(name)
+
+        try initVault(
+            vaultPath: vaultPath,
+            authorName: "",
+            githubRepo: "",
+            skipTutorial: true,
+            globalConfigDir: globalConfigDir
+        )
+
+        var registry = try loadRegistry(globalConfigDir: globalConfigDir)
+            ?? VaultRegistry(primary: name, vaults: [])
+        let entry = VaultEntry(name: name, type: .device, access: .readWrite)
+        try registry.addVault(entry)
+        if registry.vaults.count == 1 { registry.primary = name }
+        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+
+        print("Vault '\(name)' created at \(vaultPath) and registered (type: device).")
     }
 
     // MARK: GitHub
