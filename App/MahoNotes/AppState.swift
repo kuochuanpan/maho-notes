@@ -930,12 +930,19 @@ final class AppState {
             tags: [],
             author: author
         )
+
+        // Auto-save any previous note before switching
+        if selectedNotePath != nil && hasUnsavedChanges {
+            saveNote()
+        }
+
         reloadCurrentVault()
-        // Auto-select the new note and enter editor mode
-        // Use selectNote() to trigger auto-save of any unsaved changes first
-        selectNote(path: relativePath)
+
+        // Directly enter editor mode — skip selectNote() to avoid
+        // preview→editor flash that breaks @FocusState
+        selectedNotePath = relativePath
         viewMode = .editor
-        startEditing()
+        editingBody = selectedNote?.body ?? ""
         return relativePath
     }
 
