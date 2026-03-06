@@ -16,6 +16,14 @@ struct NavigatorView: View {
     @State private var newSubCollectionName = ""
     @State private var newSubCollectionParent = ""
     @State private var subCollectionError: String?
+    @State private var showingDeleteNote = false
+    @State private var deleteNotePath = ""
+    @State private var deleteNoteTitle = ""
+    @State private var showingDeleteCollection = false
+    @State private var deleteCollectionId = ""
+    @State private var deleteCollectionName = ""
+    @State private var deleteCollectionIsTopLevel = false
+    @State private var deleteCollectionHasContents = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -33,6 +41,48 @@ struct NavigatorView: View {
         }
         .sheet(isPresented: $showingNewSubCollection) {
             newSubCollectionSheet
+        }
+        .confirmationDialog(
+            "Delete \"\(deleteNoteTitle)\"?",
+            isPresented: $showingDeleteNote,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                try? appState.deleteNote(relativePath: deleteNotePath)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This note will be moved to the Trash.")
+        }
+        .confirmationDialog(
+            "Delete \"\(deleteCollectionName)\"?",
+            isPresented: $showingDeleteCollection,
+            titleVisibility: .visible
+        ) {
+            if deleteCollectionIsTopLevel {
+                Button("Move to Trash", role: .destructive) {
+                    try? appState.deleteTopLevelCollection(collectionId: deleteCollectionId)
+                }
+            } else {
+                if deleteCollectionHasContents {
+                    Button("Move Notes to Parent & Delete", role: .destructive) {
+                        try? appState.deleteSubCollection(collectionId: deleteCollectionId)
+                    }
+                } else {
+                    Button("Delete", role: .destructive) {
+                        try? appState.deleteSubCollection(collectionId: deleteCollectionId)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if deleteCollectionIsTopLevel && deleteCollectionHasContents {
+                Text("This collection and all its notes will be moved to the Trash.")
+            } else if deleteCollectionHasContents {
+                Text("Notes inside will be moved to the parent collection.")
+            } else {
+                Text("This empty collection will be deleted.")
+            }
         }
     }
 
@@ -79,6 +129,7 @@ struct NavigatorView: View {
                 TreeNodeView(
                     node: node,
                     appState: appState,
+                    isTopLevel: true,
                     onNewNote: { collectionId in
                         newNoteCollectionId = collectionId
                         newNoteTitle = ""
@@ -93,6 +144,18 @@ struct NavigatorView: View {
                     },
                     onReorderNotes: { collectionId, orderedPaths in
                         appState.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
+                    },
+                    onDeleteNote: { path, title in
+                        deleteNotePath = path
+                        deleteNoteTitle = title
+                        showingDeleteNote = true
+                    },
+                    onDeleteCollection: { id, name, isTopLevel, hasContents in
+                        deleteCollectionId = id
+                        deleteCollectionName = name
+                        deleteCollectionIsTopLevel = isTopLevel
+                        deleteCollectionHasContents = hasContents
+                        showingDeleteCollection = true
                     }
                 )
                 .draggable(node.id) // collection id as drag payload
@@ -368,9 +431,12 @@ struct NavigatorView: View {
 private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
+    var isTopLevel: Bool = false
     var onNewNote: ((String) -> Void)?
     var onNewSubCollection: ((String) -> Void)?
     var onReorderNotes: ((String, [String]) -> Void)?
+    var onDeleteNote: ((String, String) -> Void)?       // (relativePath, title)
+    var onDeleteCollection: ((String, String, Bool, Bool) -> Void)?  // (id, name, isTopLevel, hasContents)
     @State private var isExpanded: Bool = false
 
     var body: some View {
@@ -387,6 +453,15 @@ private struct TreeNodeView: View {
                     } label: {
                         Label("New Sub-Collection", systemImage: "folder.badge.plus")
                     }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        let hasContents = !node.children.isEmpty
+                        onDeleteCollection?(node.id, node.name, isTopLevel, hasContents)
+                    } label: {
+                        Label("Delete Collection", systemImage: "trash")
+                    }
                 }
             if isExpanded {
                 // Children (subdirectories and notes)
@@ -395,8 +470,17 @@ private struct TreeNodeView: View {
 
                 // Sub-collections first
                 ForEach(dirChildren, id: \.id) { child in
-                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onNewSubCollection: onNewSubCollection, onReorderNotes: onReorderNotes)
-                        .padding(.leading, 12)
+                    TreeNodeView(
+                        node: child,
+                        appState: appState,
+                        isTopLevel: false,
+                        onNewNote: onNewNote,
+                        onNewSubCollection: onNewSubCollection,
+                        onReorderNotes: onReorderNotes,
+                        onDeleteNote: onDeleteNote,
+                        onDeleteCollection: onDeleteCollection
+                    )
+                    .padding(.leading, 12)
                 }
 
                 // "+ Add Note" row (after sub-collections, before notes)
@@ -482,5 +566,12 @@ private struct TreeNodeView: View {
         }
         .padding(.leading, 16)
         .tag(child.note?.relativePath ?? child.id)
+        .contextMenu {
+            Button(role: .destructive) {
+                onDeleteNote?(child.note?.relativePath ?? child.id, child.name)
+            } label: {
+                Label("Delete Note", systemImage: "trash")
+            }
+        }
     }
 }

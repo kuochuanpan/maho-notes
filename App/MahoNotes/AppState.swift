@@ -978,6 +978,75 @@ final class AppState {
         reloadCurrentVault()
     }
 
+    // MARK: - Delete
+
+    /// Delete a note by moving it to Trash.
+    @MainActor
+    func deleteNote(relativePath: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let absPath = (vaultPath as NSString).appendingPathComponent(relativePath)
+        let fileURL = URL(fileURLWithPath: absPath)
+
+        try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
+
+        // Clear selection if the deleted note was selected
+        if selectedNotePath == relativePath {
+            selectedNotePath = nil
+            viewMode = .preview
+        }
+        reloadCurrentVault()
+    }
+
+    /// Delete a sub-collection by moving its notes to the parent collection, then removing the directory.
+    @MainActor
+    func deleteSubCollection(collectionId: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let fm = FileManager.default
+
+        let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
+        let parentId = (collectionId as NSString).deletingLastPathComponent
+        let parentAbsPath = parentId.isEmpty
+            ? vaultPath
+            : (vaultPath as NSString).appendingPathComponent(parentId)
+
+        // Move .md files (not _index.md) to parent
+        if let contents = try? fm.contentsOfDirectory(atPath: absPath) {
+            for item in contents where item.hasSuffix(".md") && item != "_index.md" && item.lowercased() != "readme.md" {
+                let src = (absPath as NSString).appendingPathComponent(item)
+                let dst = (parentAbsPath as NSString).appendingPathComponent(item)
+                try? fm.moveItem(atPath: src, toPath: dst)
+            }
+        }
+
+        // Trash the (now mostly empty) directory
+        try fm.trashItem(at: URL(fileURLWithPath: absPath), resultingItemURL: nil)
+
+        reloadCurrentVault()
+    }
+
+    /// Delete a top-level collection by moving the entire directory to Trash and removing from maho.yaml.
+    @MainActor
+    func deleteTopLevelCollection(collectionId: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
+
+        // Move to Trash (recoverable)
+        try FileManager.default.trashItem(at: URL(fileURLWithPath: absPath), resultingItemURL: nil)
+
+        // Remove from maho.yaml
+        try removeCollectionFromConfig(vaultPath: vaultPath, id: collectionId)
+
+        // Clear selection if a note in this collection was selected
+        if let selected = selectedNotePath, selected.hasPrefix(collectionId + "/") {
+            selectedNotePath = nil
+            viewMode = .preview
+        }
+        reloadCurrentVault()
+    }
+
     /// Reorder notes within a collection directory by renumbering file prefixes.
     @MainActor
     func reorderNotes(collectionId: String, orderedPaths: [String]) {

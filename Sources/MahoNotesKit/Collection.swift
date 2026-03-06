@@ -146,6 +146,23 @@ public func addCollection(
     }
 }
 
+/// Remove a collection entry from maho.yaml by id.
+/// Does NOT delete the directory — caller is responsible for that.
+public func removeCollectionFromConfig(vaultPath: String, id: String) throws {
+    let mahoURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("maho.yaml")
+
+    guard let content = try? String(contentsOf: mahoURL, encoding: .utf8),
+          var yaml = try? Yams.load(yaml: content) as? [String: Any],
+          var items = yaml["collections"] as? [[String: Any]]
+    else { return }
+
+    items.removeAll { ($0["id"] as? String) == id }
+    yaml["collections"] = items
+
+    let output = try Yams.dump(object: yaml)
+    try output.write(to: mahoURL, atomically: true, encoding: .utf8)
+}
+
 /// Reorder collections in maho.yaml to match the given id order.
 /// Any ids not in `orderedIds` are appended at the end.
 public func reorderCollections(vaultPath: String, orderedIds: [String]) throws {
