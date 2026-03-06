@@ -931,8 +931,10 @@ final class AppState {
             author: author
         )
         reloadCurrentVault()
-        // Auto-select the new note
+        // Auto-select the new note and enter editor mode
         selectedNotePath = relativePath
+        viewMode = .editor
+        startEditing()
         return relativePath
     }
 }
