@@ -1048,17 +1048,46 @@ final class AppState {
         reloadCurrentVault()
     }
 
-    /// Reorder notes within a collection directory by renumbering file prefixes.
+    /// Reorder notes within a collection directory by writing order to `_index.md`.
     @MainActor
     func reorderNotes(collectionId: String, orderedPaths: [String]) {
         guard let entry = selectedVault else { return }
         let vaultPath = resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
-        let renames = try? vault.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
-        // Update selectedNotePath if it was renamed
-        if let selected = selectedNotePath, let newPath = renames?[selected] {
+        _ = try? vault.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
+        reloadCurrentVault()
+    }
+
+    /// Move a note to a different collection.
+    @MainActor
+    func moveNote(relativePath: String, toCollection: String) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let newPath = try? vault.moveNote(relativePath: relativePath, toCollection: toCollection)
+        if selectedNotePath == relativePath, let newPath {
             selectedNotePath = newPath
         }
+        reloadCurrentVault()
+    }
+
+    /// Move a collection into another parent collection.
+    @MainActor
+    func moveCollection(collectionId: String, intoParent: String) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        _ = try? vault.moveCollection(collectionId: collectionId, intoParent: intoParent)
+        reloadCurrentVault()
+    }
+
+    /// Reorder sub-collections within a parent directory.
+    @MainActor
+    func reorderSubCollections(parentId: String, orderedIds: [String]) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        try? vault.reorderSubCollections(parentId: parentId, orderedIds: orderedIds)
         reloadCurrentVault()
     }
 }

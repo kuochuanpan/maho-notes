@@ -115,22 +115,28 @@ extension Vault {
                 icon = "folder"
             }
 
+            // Read _index.md ordering for this directory
+            let (noteOrder, childOrder) = readDirectoryOrder(at: absPath)
+
             // Find child directories
             let childDirs = allDirs.filter { dirPath in
                 let parent = (dirPath as NSString).deletingLastPathComponent
                 return parent == relativePath
-            }.sorted()
+            }
+
+            // Sort child directories by _index.md children order
+            let sortedChildDirs = sortByOrder(Array(childDirs), order: childOrder) {
+                ($0 as NSString).lastPathComponent
+            }
 
             // Build child directory nodes
-            var children: [FileTreeNode] = childDirs.compactMap { childDir in
+            var children: [FileTreeNode] = sortedChildDirs.compactMap { childDir in
                 buildNode(relativePath: childDir, depth: depth + 1)
             }
 
-            // Add note leaves for this directory (sorted by filename to preserve numeric prefix order)
-            let dirNotes = (notesByDir[relativePath] ?? []).sorted {
-                let f0 = ($0.relativePath as NSString).lastPathComponent
-                let f1 = ($1.relativePath as NSString).lastPathComponent
-                return f0.localizedStandardCompare(f1) == .orderedAscending
+            // Add note leaves for this directory (sorted by _index.md order)
+            let dirNotes = sortByOrder(notesByDir[relativePath] ?? [], order: noteOrder) {
+                ($0.relativePath as NSString).lastPathComponent
             }
             for note in dirNotes {
                 children.append(FileTreeNode(

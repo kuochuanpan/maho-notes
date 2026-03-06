@@ -103,9 +103,9 @@
 │  │ COLLECTIONS   │                                          │
 │📕│ ▾ 📚 日本語   │ ## 音讀                                  │
 │  │   ▾ grammar   │                                          │
-│🔒│     001-訓讀  │ 音讀（おんよみ）是模仿漢字原來的         │
-│  │     002-長音  │ 中文發音...                               │
-│  │     003-小假名│                                          │
+│🔒│     訓讀      │ 音讀（おんよみ）是模仿漢字原來的         │
+│  │     長音      │ 中文發音...                               │
+│  │     小假名    │                                          │
 │  │   ▸ vocab     │                                          │
 │  │ ▸ ✨ 天文     │                                          │
 │  │───────────────│                                          │
@@ -191,9 +191,9 @@ A **pure tree explorer** — collections expand in-place to show sub-collections
 │ COLLECTIONS   │  ← full collection tree (expand in-place)
 │ ▾ 📚 日本語   │     click → toggle expand/collapse
 │   ▾ grammar   │     sub-collections expand too
-│     001-訓讀  │     notes appear as leaves → click → show in C
-│     002-長音  │
-│     003-小假名│
+│     訓讀      │     notes appear as leaves → click → show in C
+│     長音      │     drag notes to reorder or move between collections
+│     小假名    │
 │   ▸ vocab     │     collapsed sub-collection
 │   ▸ conversation│
 │ ▸ ✨ 天文     │  ← collapsed collection
@@ -591,7 +591,7 @@ iOS has no `git` CLI — all GitHub operations via REST API:
 | Pull-to-refresh | iOS / iPadOS | Triggers GitHub sync |
 | Keyboard shortcuts | iPad (external KB) | Same set as macOS |
 | Stage Manager | iPadOS | Multiple windows support |
-| Drag & drop | macOS, iPadOS | Drag notes between collections; drop files to attach |
+| Drag & drop | macOS, iPadOS | Drag notes between collections; drag collections into other collections; reorder notes and sub-collections via `_index.md`; drop files to attach |
 | Menu bar | macOS | Quick note creation (optional, if needed) |
 | Spotlight / Siri Shortcuts | iOS, macOS | Index notes for system search (future) |
 

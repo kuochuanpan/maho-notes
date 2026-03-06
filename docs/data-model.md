@@ -20,7 +20,7 @@ author: maho
 Content here...
 ```
 
-> Collection is inferred from the file path: `japanese/grammar/001-kunyomi-onyomi.md` → collection: `japanese`
+> Collection is inferred from the file path: `japanese/grammar/kunyomi-onyomi.md` → collection: `japanese`
 
 ## Frontmatter Fields
 
@@ -225,16 +225,18 @@ Each vault has the same internal structure, regardless of type (iCloud / GitHub 
 <vault>/
 ├── maho.yaml                  # Vault config + collections (synced)
 ├── japanese/                  # Collection: 日本語
-│   ├── _index.md              # Collection overview (optional at any directory level)
+│   ├── _index.md              # Collection metadata + ordering (order: / children:)
 │   ├── vocabulary/
-│   │   ├── 001-star.md
-│   │   └── 002-universe.md
+│   │   ├── _index.md
+│   │   ├── star.md
+│   │   └── universe.md
 │   ├── grammar/
-│   │   ├── 001-kunyomi-onyomi.md
-│   │   ├── 002-long-vowels.md
-│   │   └── 003-small-kana.md
+│   │   ├── _index.md
+│   │   ├── kunyomi-onyomi.md
+│   │   ├── long-vowels.md
+│   │   └── small-kana.md
 │   └── conversation/
-│       └── 001-shopping.md
+│       └── shopping.md
 ├── astronomy/                 # Collection: 天文
 │   ├── _index.md
 │   └── ...
@@ -259,11 +261,11 @@ Collections support **unlimited nesting**. The filesystem hierarchy IS the organ
 japanese/                  ← collection (top-level = defined in maho.yaml)
   grammar/                 ← subdirectory (any depth)
     basics/                ← deeper nesting is fine
-      001-particles.md
+      particles.md
     advanced/
-      001-keigo.md
+      keigo.md
   vocabulary/
-    001-star.md
+    star.md
 ```
 
 - Top-level directories are collections (must be listed in `maho.yaml`)
@@ -271,18 +273,28 @@ japanese/                  ← collection (top-level = defined in maho.yaml)
 - `_index.md` can appear at any level as a directory overview page
 - App UI renders the tree structure; CLI uses path-based navigation
 
-## `_index.md` (Directory Overview)
+## `_index.md` (Directory Overview + Ordering)
 
-`_index.md` is a special note that serves as the overview page for any directory level (collection or subdirectory).
+`_index.md` is a special file that serves as the overview page for any directory level and stores the ordering of its children.
 
 | Aspect | Behavior |
 |--------|----------|
-| **Frontmatter** | Same format as regular notes (`title`, `tags`, `public`, etc.) |
+| **Frontmatter** | Same format as regular notes (`title`, `tags`, `public`, etc.) plus `order:` and `children:` fields |
+| **`order:`** | Ordered list of note filenames in this directory (controls display order) |
+| **`children:`** | Ordered list of sub-directory names in this directory (controls display order) |
 | **Search** | Included in FTS5 and vector search like any other note |
 | **Publishing** | Rendered as the collection/directory landing page (e.g., `/c/japanese/` renders `japanese/_index.md`) |
 | **`mn list`** | Shown with a `[index]` marker, sorted first within its directory |
-| **`mn new`** | Not auto-created; user creates manually or via `mn new "_index" --collection japanese` |
+| **`mn new`** | Auto-created when ordering is first set; user can also create manually |
 | **`mn stats`** | Counted as a regular note in word/note counts |
+
+**Ordering rules:**
+- Files/dirs NOT listed in `order:`/`children:` are appended at the end (alphabetically) — graceful degradation for externally-created files
+- `order:` contains **filenames only** (not paths), relative to the current directory
+- `children:` contains **directory names only**, relative to the current directory
+- If `_index.md` doesn't exist, fall back to alphabetical sort
+- Top-level collection ordering uses `maho.yaml` `collections:` array (unchanged)
+- Sub-collection ordering within a collection uses parent's `_index.md` `children:` field
 
 Example:
 ```markdown
@@ -293,6 +305,14 @@ created: 2026-03-03T09:00:00-05:00
 updated: 2026-03-04T10:00:00-05:00
 public: true
 slug: japanese
+order:
+  - kunyomi-onyomi.md
+  - long-vowels.md
+  - small-kana.md
+children:
+  - grammar
+  - vocabulary
+  - conversation
 ---
 
 日語學習的總覽頁面。包含文法、單字、會話等分類。

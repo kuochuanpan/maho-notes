@@ -139,10 +139,18 @@ public struct Vault: Sendable {
             try fm.createDirectory(atPath: collectionDir, withIntermediateDirectories: true)
         }
 
-        // Find next number prefix by scanning existing files
-        let nextNum = try nextFileNumber(in: collectionDir)
-        let filename = String(format: "%03d-%@.md", nextNum, slug)
-        let filePath = (collectionDir as NSString).appendingPathComponent(filename)
+        // Use clean slug filename (no numeric prefix)
+        let filename = "\(slug).md"
+        var filePath = (collectionDir as NSString).appendingPathComponent(filename)
+
+        // Handle filename conflicts
+        var counter = 1
+        while fm.fileExists(atPath: filePath) {
+            let conflictName = "\(slug)-\(counter).md"
+            filePath = (collectionDir as NSString).appendingPathComponent(conflictName)
+            counter += 1
+        }
+        let actualFilename = (filePath as NSString).lastPathComponent
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
@@ -166,61 +174,223 @@ public struct Vault: Sendable {
 
         try content.write(toFile: filePath, atomically: true, encoding: .utf8)
 
+        // Append to _index.md order
+        let (existingOrder, _) = readDirectoryOrder(at: collectionDir)
+        var newOrder = existingOrder
+        newOrder.append(actualFilename)
+        try writeDirectoryOrder(at: collectionDir, notes: newOrder)
+
         // Return relative path
         let vaultURL = URL(fileURLWithPath: path).standardizedFileURL
         let fileURL = URL(fileURLWithPath: filePath).standardizedFileURL
         return fileURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
     }
 
-    /// Reorder notes in a collection by renumbering their file prefixes.
+    /// Reorder notes in a collection by writing the order to `_index.md`.
     /// - Parameters:
     ///   - collectionId: Directory relative path from vault root (e.g. "blog" or "blog/drafts").
     ///   - orderedPaths: The note relative paths in desired order.
-    /// - Returns: A mapping of old relative paths → new relative paths.
+    /// - Returns: An empty mapping (no file renames happen).
     @discardableResult
     public func reorderNotes(collectionId: String, orderedPaths: [String]) throws -> [String: String] {
+        let dirPath = (path as NSString).appendingPathComponent(collectionId)
+        let filenames = orderedPaths.map { ($0 as NSString).lastPathComponent }
+        try writeDirectoryOrder(at: dirPath, notes: filenames)
+        return [:]
+    }
+
+    /// Reorder sub-collections within a parent directory by writing to `_index.md`.
+    public func reorderSubCollections(parentId: String, orderedIds: [String]) throws {
+        let dirPath = (path as NSString).appendingPathComponent(parentId)
+        let dirNames = orderedIds.map { ($0 as NSString).lastPathComponent }
+        try writeDirectoryOrder(at: dirPath, children: dirNames)
+    }
+
+    /// Move a note from its current location to a target collection directory.
+    /// - Returns: The new relative path.
+    public func moveNote(relativePath: String, toCollection: String) throws -> String {
         let fm = FileManager.default
         let vaultURL = URL(fileURLWithPath: path)
-        var renames: [String: String] = [:]
+        let filename = (relativePath as NSString).lastPathComponent
+        let sourceDir = (relativePath as NSString).deletingLastPathComponent
 
-        // First pass: rename to temp names to avoid collisions
-        var tempPaths: [(old: String, temp: String, newName: String)] = []
-        for (index, relPath) in orderedPaths.enumerated() {
-            let filename = (relPath as NSString).lastPathComponent
-            // Strip existing numeric prefix (e.g. "001-slug.md" → "slug.md")
-            let slug: String
-            let prefixEnd = filename.prefix(while: { $0.isNumber })
-            if !prefixEnd.isEmpty && filename.dropFirst(prefixEnd.count).hasPrefix("-") {
-                slug = String(filename.dropFirst(prefixEnd.count + 1)) // drop "NNN-"
-            } else {
-                slug = filename
-            }
+        let targetDirAbs = vaultURL.appendingPathComponent(toCollection).path
+        if !fm.fileExists(atPath: targetDirAbs) {
+            try fm.createDirectory(atPath: targetDirAbs, withIntermediateDirectories: true)
+        }
 
-            let newFilename = String(format: "%03d-%@", index + 1, slug)
-            let newRelPath = (collectionId as NSString).appendingPathComponent(newFilename)
+        // Handle filename conflicts
+        var targetFilename = filename
+        var targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
+        var counter = 1
+        while fm.fileExists(atPath: targetAbs) {
+            let name = (filename as NSString).deletingPathExtension
+            let ext = (filename as NSString).pathExtension
+            targetFilename = "\(name)-\(counter).\(ext)"
+            targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
+            counter += 1
+        }
 
-            if relPath != newRelPath {
-                let oldAbs = vaultURL.appendingPathComponent(relPath).path
-                let tempFilename = ".reorder-tmp-\(index)-\(slug)"
-                let tempRelPath = (collectionId as NSString).appendingPathComponent(tempFilename)
-                let tempAbs = vaultURL.appendingPathComponent(tempRelPath).path
+        let sourceAbs = vaultURL.appendingPathComponent(relativePath).path
+        try fm.moveItem(atPath: sourceAbs, toPath: targetAbs)
 
-                guard fm.fileExists(atPath: oldAbs) else { continue }
-                try fm.moveItem(atPath: oldAbs, toPath: tempAbs)
-                tempPaths.append((old: relPath, temp: tempRelPath, newName: newFilename))
-                renames[relPath] = newRelPath
+        // Remove from source _index.md order
+        let sourceDirAbs = vaultURL.appendingPathComponent(sourceDir).path
+        let (sourceOrder, _) = readDirectoryOrder(at: sourceDirAbs)
+        if sourceOrder.contains(filename) {
+            let updatedOrder = sourceOrder.filter { $0 != filename }
+            try writeDirectoryOrder(at: sourceDirAbs, notes: updatedOrder)
+        }
+
+        // Append to target _index.md order
+        let (targetOrder, _) = readDirectoryOrder(at: targetDirAbs)
+        var newOrder = targetOrder
+        newOrder.append(targetFilename)
+        try writeDirectoryOrder(at: targetDirAbs, notes: newOrder)
+
+        // Update the note's frontmatter updated timestamp
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        let now = isoFormatter.string(from: Date())
+        updateFrontmatterField(filePath: targetAbs, field: "updated", value: now)
+
+        return (toCollection as NSString).appendingPathComponent(targetFilename)
+    }
+
+    /// Move a collection directory into another parent directory.
+    /// - Returns: The new relative path.
+    public func moveCollection(collectionId: String, intoParent: String) throws -> String {
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+        let dirName = (collectionId as NSString).lastPathComponent
+        let sourceParent = (collectionId as NSString).deletingLastPathComponent
+
+        // Prevent circular moves
+        let targetWithSlash = collectionId + "/"
+        if intoParent == collectionId || intoParent.hasPrefix(targetWithSlash) {
+            throw MoveError.circularMove
+        }
+
+        let sourceAbs = vaultURL.appendingPathComponent(collectionId).path
+        let targetParentAbs = vaultURL.appendingPathComponent(intoParent).path
+        let targetAbs = (targetParentAbs as NSString).appendingPathComponent(dirName)
+
+        guard !fm.fileExists(atPath: targetAbs) else {
+            throw MoveError.destinationExists
+        }
+
+        try fm.moveItem(atPath: sourceAbs, toPath: targetAbs)
+
+        // If source was a top-level collection, remove from maho.yaml
+        if !sourceParent.contains("/") && sourceParent.isEmpty {
+            try? removeCollectionFromConfig(vaultPath: path, id: dirName)
+        }
+
+        // Remove from source parent's _index.md children
+        if !sourceParent.isEmpty {
+            let sourceParentAbs = vaultURL.appendingPathComponent(sourceParent).path
+            let (_, sourceChildren) = readDirectoryOrder(at: sourceParentAbs)
+            if sourceChildren.contains(dirName) {
+                let updated = sourceChildren.filter { $0 != dirName }
+                try writeDirectoryOrder(at: sourceParentAbs, children: updated)
             }
         }
 
-        // Second pass: rename from temp to final
-        for item in tempPaths {
-            let tempAbs = vaultURL.appendingPathComponent(item.temp).path
-            let finalRelPath = (collectionId as NSString).appendingPathComponent(item.newName)
-            let finalAbs = vaultURL.appendingPathComponent(finalRelPath).path
-            try fm.moveItem(atPath: tempAbs, toPath: finalAbs)
+        // Add to target's _index.md children
+        let (_, targetChildren) = readDirectoryOrder(at: targetParentAbs)
+        var newChildren = targetChildren
+        newChildren.append(dirName)
+        try writeDirectoryOrder(at: targetParentAbs, children: newChildren)
+
+        return (intoParent as NSString).appendingPathComponent(dirName)
+    }
+
+    /// Migrate files with numeric prefixes (e.g., `001-slug.md`) to clean filenames,
+    /// populating `_index.md` order to preserve the original ordering.
+    public func migrateNumericPrefixes() throws {
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+
+        guard let enumerator = fm.enumerator(
+            at: vaultURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        // Collect all directories
+        var directories: Set<String> = []
+        for case let dirURL as URL in enumerator {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            let dirName = dirURL.lastPathComponent
+            guard !dirName.hasPrefix("_"), !dirName.hasPrefix(".") else {
+                enumerator.skipDescendants()
+                continue
+            }
+            directories.insert(dirURL.path)
         }
 
-        return renames
+        // Also include top-level collection directories
+        let topContents = try fm.contentsOfDirectory(at: vaultURL, includingPropertiesForKeys: [.isDirectoryKey])
+        for item in topContents {
+            var isDir: ObjCBool = false
+            let name = item.lastPathComponent
+            guard fm.fileExists(atPath: item.path, isDirectory: &isDir),
+                  isDir.boolValue,
+                  !name.hasPrefix("."),
+                  !name.hasPrefix("_") else { continue }
+            directories.insert(item.path)
+        }
+
+        for dirPath in directories {
+            let contents = try fm.contentsOfDirectory(atPath: dirPath)
+            let mdFiles = contents.filter { $0.hasSuffix(".md") && $0 != "_index.md" && $0.lowercased() != "readme.md" }
+
+            // Check if any files have numeric prefixes
+            let numericPattern = #"^\d+-"#
+            let prefixed = mdFiles.filter { $0.range(of: numericPattern, options: .regularExpression) != nil }
+            guard !prefixed.isEmpty else { continue }
+
+            // Sort by numeric prefix to preserve order
+            let sorted = mdFiles.sorted { a, b in
+                a.localizedStandardCompare(b) == .orderedAscending
+            }
+
+            // Rename files: strip numeric prefix, build order list
+            var orderList: [String] = []
+            for oldName in sorted {
+                let newName: String
+                if let range = oldName.range(of: numericPattern, options: .regularExpression) {
+                    newName = String(oldName[range.upperBound...])
+                } else {
+                    newName = oldName
+                }
+                orderList.append(newName)
+
+                if newName != oldName {
+                    let oldPath = (dirPath as NSString).appendingPathComponent(oldName)
+                    let newPath = (dirPath as NSString).appendingPathComponent(newName)
+                    // Avoid collision: if target exists (unlikely), skip
+                    guard !fm.fileExists(atPath: newPath) else { continue }
+                    try fm.moveItem(atPath: oldPath, toPath: newPath)
+                }
+            }
+
+            // Write order to _index.md
+            try writeDirectoryOrder(at: dirPath, notes: orderList)
+        }
+    }
+}
+
+public enum MoveError: Error, LocalizedError {
+    case circularMove
+    case destinationExists
+
+    public var errorDescription: String? {
+        switch self {
+        case .circularMove: return "Cannot move a directory into itself or its descendant."
+        case .destinationExists: return "A directory with that name already exists at the destination."
+        }
     }
 }
 
@@ -242,6 +412,32 @@ private func hasMarkdownFiles(in directoryPath: String, fileManager fm: FileMana
         }
     }
     return false
+}
+
+/// Update a single frontmatter field in-place. Best-effort — silently fails if file can't be parsed.
+func updateFrontmatterField(filePath: String, field: String, value: String) {
+    guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
+    let lines = content.components(separatedBy: "\n")
+    guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return }
+
+    var closingIndex: Int?
+    for i in 1..<lines.count {
+        if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
+            closingIndex = i
+            break
+        }
+    }
+    guard let endIdx = closingIndex else { return }
+
+    var updatedLines = lines
+    let fieldLine = "\(field): \(value)"
+    if let idx = updatedLines[0...endIdx].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(field):") }) {
+        updatedLines[idx] = fieldLine
+    } else {
+        updatedLines.insert(fieldLine, at: endIdx)
+    }
+
+    try? updatedLines.joined(separator: "\n").write(toFile: filePath, atomically: true, encoding: .utf8)
 }
 
 public func makeSlug(from title: String) -> String {

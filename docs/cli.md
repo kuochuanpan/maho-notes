@@ -23,6 +23,10 @@ mn new "Title" --collection japanese --tags "N5,漢字"  # creates in japanese/ 
 mn new "Title" --collection japanese/grammar --tags "N5"  # nested: creates in japanese/grammar/
 mn delete <path>                      # move to trash / confirm
 
+# ── Move ──────────────────────────────────────────
+mn move <path> --to <collection>         # move note to another collection
+mn move <path> --to japanese/grammar     # move to nested collection
+
 # ── Read ──────────────────────────────────────────
 mn show <path>                        # display note with metadata
 mn show <path> --body-only            # body content only (no frontmatter, for piping)
