@@ -268,100 +268,97 @@ struct NavigatorView: View {
         .padding(.vertical, 10)
     }
 
-    // MARK: - Scroll Content
+    // MARK: - List Content
 
+    /// Uses `List` (no `selection:` binding) for native sidebar styling,
+    /// with manual selection via `onTapGesture` to avoid `.tag()` propagation issues.
     private var scrollContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                collectionsSection
-                recentSection
-            }
-            .padding(.vertical, 4)
+        List {
+            collectionsSection
+            recentSection
         }
+        .listStyle(.sidebar)
     }
 
     // MARK: - Collections Section
 
     @ViewBuilder
     private var collectionsSection: some View {
-        // Section header
-        HStack {
-            Text("COLLECTIONS")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button {
-                newCollectionName = ""
-                newCollectionIcon = "folder"
-                collectionError = nil
-                showingNewCollection = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
+        Section {
+            let topLevelIds = appState.fileTree.map(\.id)
+            ForEach(appState.fileTree, id: \.id) { node in
+                CollectionNodeView(
+                    node: node,
+                    appState: appState,
+                    dragState: dragState,
+                    isTopLevel: true,
+                    parentId: nil,
+                    siblingDirIds: topLevelIds,
+                    indentLevel: 0,
+                    onNewNote: { collectionId in
+                        newNoteCollectionId = collectionId
+                        newNoteTitle = ""
+                        noteError = nil
+                        showingNewNote = true
+                    },
+                    onNewSubCollection: { parentId in
+                        newSubCollectionParent = parentId
+                        newSubCollectionName = ""
+                        subCollectionError = nil
+                        showingNewSubCollection = true
+                    },
+                    onReorderNotes: { collectionId, orderedPaths in
+                        appState.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
+                    },
+                    onMoveNote: { relativePath, targetCollection in
+                        appState.moveNote(relativePath: relativePath, toCollection: targetCollection)
+                    },
+                    onMoveCollection: { collectionId, intoParent in
+                        appState.moveCollection(collectionId: collectionId, intoParent: intoParent)
+                    },
+                    onPromoteToTopLevel: { collectionId in
+                        appState.promoteToTopLevel(collectionId: collectionId)
+                    },
+                    onReorderTopLevel: { orderedIds in
+                        appState.reorderCollections(orderedIds: orderedIds)
+                    },
+                    onReorderSubCollections: { parentId, orderedIds in
+                        appState.reorderSubCollections(parentId: parentId, orderedIds: orderedIds)
+                    },
+                    onDeleteNote: { path, title in
+                        deleteNotePath = path
+                        deleteNoteTitle = title
+                        showingDeleteNote = true
+                    },
+                    onDeleteCollection: { id, name, isTopLevel, hasContents in
+                        deleteCollectionId = id
+                        deleteCollectionName = name
+                        deleteCollectionIsTopLevel = isTopLevel
+                        deleteCollectionHasContents = hasContents
+                        showingDeleteCollection = true
+                    }
+                )
             }
-            .buttonStyle(.plain)
-            .help("New Collection")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-
-        // Collection tree
-        let topLevelIds = appState.fileTree.map(\.id)
-        ForEach(appState.fileTree, id: \.id) { node in
-            CollectionNodeView(
-                node: node,
-                appState: appState,
-                dragState: dragState,
-                isTopLevel: true,
-                parentId: nil,
-                siblingDirIds: topLevelIds,
-                indentLevel: 0,
-                onNewNote: { collectionId in
-                    newNoteCollectionId = collectionId
-                    newNoteTitle = ""
-                    noteError = nil
-                    showingNewNote = true
-                },
-                onNewSubCollection: { parentId in
-                    newSubCollectionParent = parentId
-                    newSubCollectionName = ""
-                    subCollectionError = nil
-                    showingNewSubCollection = true
-                },
-                onReorderNotes: { collectionId, orderedPaths in
-                    appState.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
-                },
-                onMoveNote: { relativePath, targetCollection in
-                    appState.moveNote(relativePath: relativePath, toCollection: targetCollection)
-                },
-                onMoveCollection: { collectionId, intoParent in
-                    appState.moveCollection(collectionId: collectionId, intoParent: intoParent)
-                },
-                onPromoteToTopLevel: { collectionId in
-                    appState.promoteToTopLevel(collectionId: collectionId)
-                },
-                onReorderTopLevel: { orderedIds in
-                    appState.reorderCollections(orderedIds: orderedIds)
-                },
-                onReorderSubCollections: { parentId, orderedIds in
-                    appState.reorderSubCollections(parentId: parentId, orderedIds: orderedIds)
-                },
-                onDeleteNote: { path, title in
-                    deleteNotePath = path
-                    deleteNoteTitle = title
-                    showingDeleteNote = true
-                },
-                onDeleteCollection: { id, name, isTopLevel, hasContents in
-                    deleteCollectionId = id
-                    deleteCollectionName = name
-                    deleteCollectionIsTopLevel = isTopLevel
-                    deleteCollectionHasContents = hasContents
-                    showingDeleteCollection = true
+        } header: {
+            HStack {
+                Text("COLLECTIONS")
+                Spacer()
+                Button {
+                    newCollectionName = ""
+                    newCollectionIcon = "folder"
+                    collectionError = nil
+                    showingNewCollection = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
-            )
+                .buttonStyle(.plain)
+                .help("New Collection")
+                .padding(.trailing, 4)
+            }
         }
     }
 
@@ -370,24 +367,19 @@ struct NavigatorView: View {
     @ViewBuilder
     private var recentSection: some View {
         if !appState.recentNotes.isEmpty {
-            Text("RECENT")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.top, 16)
-                .padding(.bottom, 6)
-
-            ForEach(appState.recentNotes, id: \.relativePath) { note in
-                recentNoteRow(note)
+            Section {
+                ForEach(appState.recentNotes, id: \.relativePath) { note in
+                    recentNoteRow(note)
+                }
+            } header: {
+                Text("RECENT")
             }
         }
     }
 
     private func recentNoteRow(_ note: Note) -> some View {
         let isSelected = appState.selectedNotePath == note.relativePath
-        return HStack(spacing: 6) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
+        return Label {
             HStack(spacing: 4) {
                 Text(note.title)
                     .lineLimit(1)
@@ -397,14 +389,12 @@ struct NavigatorView: View {
                         .foregroundStyle(.yellow)
                 }
             }
-            Spacer()
+        } icon: {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 5)
-                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
-                .padding(.horizontal, 4)
+        .listRowBackground(
+            isSelected ? Color.accentColor.opacity(0.15) : Color.clear
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -664,13 +654,11 @@ private struct CollectionNodeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 12)
         .padding(.leading, CGFloat(indentLevel) * 14)
-        .padding(.vertical, 3)
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(Color.accentColor, lineWidth: dragState.dropTargetId == node.id ? 2 : 0)
-                .padding(.horizontal, 4)
+        .listRowBackground(
+            dragState.dropTargetId == node.id
+                ? Color.accentColor.opacity(0.15)
+                : Color.clear
         )
         .contextMenu {
             Button {
@@ -761,9 +749,7 @@ private struct CollectionNodeView: View {
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 12)
         .padding(.leading, CGFloat(indentLevel + 1) * 14 + 16)
-        .padding(.vertical, 2)
         .onDrop(of: [UTType.text], delegate: RejectDropDelegate())
 
         // Notes
@@ -778,9 +764,7 @@ private struct CollectionNodeView: View {
         let path = child.note?.relativePath ?? child.id
         let isSelected = appState.selectedNotePath == path
 
-        return HStack(spacing: 6) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
+        return Label {
             HStack(spacing: 4) {
                 Text(child.name)
                     .lineLimit(1)
@@ -791,15 +775,13 @@ private struct CollectionNodeView: View {
                         .foregroundStyle(.yellow)
                 }
             }
-            Spacer()
+        } icon: {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.leading, CGFloat(indentLevel + 1) * 14 + 4)
-        .padding(.vertical, 3)
-        .background(
-            RoundedRectangle(cornerRadius: 5)
-                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
-                .padding(.horizontal, 4)
+        .padding(.leading, CGFloat(indentLevel + 1) * 14)
+        .listRowBackground(
+            isSelected ? Color.accentColor.opacity(0.15) : Color.clear
         )
         .contentShape(Rectangle())
         .onTapGesture {
