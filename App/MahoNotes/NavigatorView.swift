@@ -151,9 +151,16 @@ struct NavigatorView: View {
                     onMoveCollection: { collectionId, intoParent in
                         appState.moveCollection(collectionId: collectionId, intoParent: intoParent)
                     },
+                    onPromoteToTopLevel: { collectionId in
+                        appState.promoteToTopLevel(collectionId: collectionId)
+                    },
+                    onReorderCollections: { orderedIds in
+                        appState.reorderCollections(orderedIds: orderedIds)
+                    },
                     onReorderSubCollections: { parentId, orderedIds in
                         appState.reorderSubCollections(parentId: parentId, orderedIds: orderedIds)
                     },
+                    topLevelIds: appState.fileTree.map { $0.id },
                     onDeleteNote: { path, title in
                         deleteNotePath = path
                         deleteNoteTitle = title
@@ -167,28 +174,6 @@ struct NavigatorView: View {
                         showingDeleteCollection = true
                     }
                 )
-                .draggable("collection:" + node.id) // collection id as drag payload
-                .dropDestination(for: String.self) { droppedIds, _ in
-                    guard let droppedId = droppedIds.first else { return false }
-
-                    if droppedId.hasPrefix("note:") {
-                        // Note dropped on top-level collection — move note
-                        let notePath = String(droppedId.dropFirst(5))
-                        appState.moveNote(relativePath: notePath, toCollection: node.id)
-                        return true
-                    } else {
-                        // Collection reorder (strip prefix if present)
-                        let collId = droppedId.hasPrefix("collection:") ? String(droppedId.dropFirst(11)) : droppedId
-                        guard collId != node.id else { return false }
-                        var ids = appState.fileTree.map { $0.id }
-                        guard let fromIdx = ids.firstIndex(of: collId),
-                              let toIdx = ids.firstIndex(of: node.id) else { return false }
-                        ids.remove(at: fromIdx)
-                        ids.insert(collId, at: toIdx)
-                        appState.reorderCollections(orderedIds: ids)
-                        return true
-                    }
-                }
             }
         } header: {
             HStack {
@@ -454,10 +439,13 @@ private struct TreeNodeView: View {
     var onNewNote: ((String) -> Void)?
     var onNewSubCollection: ((String) -> Void)?
     var onReorderNotes: ((String, [String]) -> Void)?
-    var onMoveNote: ((String, String) -> Void)?          // (relativePath, targetCollectionId)
-    var onMoveCollection: ((String, String) -> Void)?    // (collectionId, targetParentId)
+    var onMoveNote: ((String, String) -> Void)?              // (relativePath, targetCollectionId)
+    var onMoveCollection: ((String, String) -> Void)?        // (collectionId, targetParentId)
+    var onPromoteToTopLevel: ((String) -> Void)?             // (collectionId)
+    var onReorderCollections: (([String]) -> Void)?          // top-level collection reorder
     var onReorderSubCollections: ((String, [String]) -> Void)?  // (parentId, orderedIds)
-    var onDeleteNote: ((String, String) -> Void)?       // (relativePath, title)
+    var topLevelIds: [String] = []                           // for top-level reorder
+    var onDeleteNote: ((String, String) -> Void)?            // (relativePath, title)
     var onDeleteCollection: ((String, String, Bool, Bool) -> Void)?  // (id, name, isTopLevel, hasContents)
     @State private var isExpanded: Bool = false
     @State private var isDropTargeted: Bool = false
@@ -480,6 +468,15 @@ private struct TreeNodeView: View {
                         onNewSubCollection?(node.id)
                     } label: {
                         Label("New Sub-Collection", systemImage: "folder.badge.plus")
+                    }
+
+                    if !isTopLevel {
+                        Divider()
+                        Button {
+                            onPromoteToTopLevel?(node.id)
+                        } label: {
+                            Label("Move to Top Level", systemImage: "arrow.up.to.line")
+                        }
                     }
 
                     Divider()
@@ -508,6 +505,20 @@ private struct TreeNodeView: View {
                         // Can't drop into self or descendant
                         guard collId != node.id,
                               !node.id.hasPrefix(collId + "/") else { return false }
+
+                        // If this is a top-level node and the dragged item is also top-level,
+                        // this is a reorder (not a nest)
+                        if isTopLevel && topLevelIds.contains(collId) {
+                            var ids = topLevelIds
+                            guard let fromIdx = ids.firstIndex(of: collId),
+                                  let toIdx = ids.firstIndex(of: node.id) else { return false }
+                            ids.remove(at: fromIdx)
+                            ids.insert(collId, at: toIdx)
+                            onReorderCollections?(ids)
+                            return true
+                        }
+
+                        // Otherwise, nest the collection into this one
                         onMoveCollection?(collId, node.id)
                         return true
                     }
@@ -516,60 +527,73 @@ private struct TreeNodeView: View {
                     isDropTargeted = targeted
                 }
             if isExpanded {
-                // Children (subdirectories and notes)
-                let noteChildren = node.children.filter { !$0.isDirectory }
-                let dirChildren = node.children.filter { $0.isDirectory }
-
-                // Sub-collections first — with drag & reorder
-                ForEach(dirChildren, id: \.id) { child in
-                    TreeNodeView(
-                        node: child,
-                        appState: appState,
-                        isTopLevel: false,
-                        onNewNote: onNewNote,
-                        onNewSubCollection: onNewSubCollection,
-                        onReorderNotes: onReorderNotes,
-                        onMoveNote: onMoveNote,
-                        onMoveCollection: onMoveCollection,
-                        onReorderSubCollections: onReorderSubCollections,
-                        onDeleteNote: onDeleteNote,
-                        onDeleteCollection: onDeleteCollection
-                    )
-                    .padding(.leading, 12)
-                    .moveDisabled(true)
-                }
-
-                // "+ Add Note" row (after sub-collections, before notes)
-                Button {
-                    onNewNote?(node.id)
-                } label: {
-                    Label {
-                        Text("Add Note")
-                            .foregroundStyle(.secondary)
-                    } icon: {
-                        Image(systemName: "plus.circle")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 28)
-                .moveDisabled(true)
-
-                // Notes — native reorder + draggable for cross-collection moves
-                ForEach(noteChildren, id: \.id) { child in
-                    noteLeafRowFor(child)
-                        .padding(.leading, 12)
-                        .draggable("note:" + (child.note?.relativePath ?? child.id))
-                }
-                .onMove { source, destination in
-                    var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
-                    paths.move(fromOffsets: source, toOffset: destination)
-                    onReorderNotes?(node.id, paths)
-                }
+                expandedChildren
             }
         } else {
             noteLeafRow
                 .draggable("note:" + (node.note?.relativePath ?? node.id))
+        }
+    }
+
+    // MARK: - Expanded Children
+
+    @ViewBuilder
+    private var expandedChildren: some View {
+        let noteChildren = node.children.filter { !$0.isDirectory }
+        let dirChildren = node.children.filter { $0.isDirectory }
+
+        // Sub-collections first
+        ForEach(dirChildren, id: \.id) { child in
+            TreeNodeView(
+                node: child,
+                appState: appState,
+                isTopLevel: false,
+                onNewNote: onNewNote,
+                onNewSubCollection: onNewSubCollection,
+                onReorderNotes: onReorderNotes,
+                onMoveNote: onMoveNote,
+                onMoveCollection: onMoveCollection,
+                onPromoteToTopLevel: onPromoteToTopLevel,
+                onReorderCollections: onReorderCollections,
+                onReorderSubCollections: onReorderSubCollections,
+                topLevelIds: topLevelIds,
+                onDeleteNote: onDeleteNote,
+                onDeleteCollection: onDeleteCollection
+            )
+            .padding(.leading, 12)
+            .moveDisabled(true)
+        }
+
+        // "+ Add Note" row — reject all drops
+        Button {
+            onNewNote?(node.id)
+        } label: {
+            Label {
+                Text("Add Note")
+                    .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "plus.circle")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 28)
+        .moveDisabled(true)
+        .dropDestination(for: String.self) { _, _ in false }
+
+        // Notes — use .onMove for within-collection reorder
+        // Each note is .draggable for cross-collection moves
+        ForEach(noteChildren, id: \.id) { child in
+            noteLeafRowFor(child)
+                .padding(.leading, 12)
+                .draggable("note:" + (child.note?.relativePath ?? child.id))
+                // Reject drops on individual notes (no note-on-note)
+                .dropDestination(for: String.self) { _, _ in false }
+        }
+        .onMove { source, destination in
+            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+            paths.move(fromOffsets: source, toOffset: destination)
+            onReorderNotes?(node.id, paths)
         }
     }
 

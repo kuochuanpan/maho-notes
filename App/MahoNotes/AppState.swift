@@ -1081,6 +1081,16 @@ final class AppState {
         reloadCurrentVault()
     }
 
+    /// Promote a sub-collection to a top-level collection.
+    @MainActor
+    func promoteToTopLevel(collectionId: String) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        _ = try? vault.promoteToTopLevel(collectionId: collectionId)
+        reloadCurrentVault()
+    }
+
     /// Reorder sub-collections within a parent directory.
     @MainActor
     func reorderSubCollections(parentId: String, orderedIds: [String]) {

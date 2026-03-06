@@ -305,6 +305,55 @@ public struct Vault: Sendable {
         return (intoParent as NSString).appendingPathComponent(dirName)
     }
 
+    /// Promote a sub-collection to a top-level collection.
+    /// Moves the directory from its current parent to the vault root and registers it in maho.yaml.
+    /// - Returns: The new relative path (just the directory name).
+    public func promoteToTopLevel(collectionId: String) throws -> String {
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+        let dirName = (collectionId as NSString).lastPathComponent
+        let sourceParent = (collectionId as NSString).deletingLastPathComponent
+
+        // Already top-level?
+        guard !sourceParent.isEmpty else {
+            throw MoveError.circularMove
+        }
+
+        let sourceAbs = vaultURL.appendingPathComponent(collectionId).path
+        let targetAbs = vaultURL.appendingPathComponent(dirName).path
+
+        guard !fm.fileExists(atPath: targetAbs) else {
+            throw MoveError.destinationExists
+        }
+
+        try fm.moveItem(atPath: sourceAbs, toPath: targetAbs)
+
+        // Remove from source parent's _index.md children
+        let sourceParentAbs = vaultURL.appendingPathComponent(sourceParent).path
+        let (_, sourceChildren) = readDirectoryOrder(at: sourceParentAbs)
+        if sourceChildren.contains(dirName) {
+            let updated = sourceChildren.filter { $0 != dirName }
+            try writeDirectoryOrder(at: sourceParentAbs, children: updated)
+        }
+
+        // Read title from _index.md for the collection name
+        let indexPath = (targetAbs as NSString).appendingPathComponent("_index.md")
+        var displayName = dirName
+        if let content = try? String(contentsOfFile: indexPath, encoding: .utf8) {
+            let (yamlStr, _) = splitFrontmatter(content)
+            if let yamlStr,
+               let yaml = try? Yams.load(yaml: yamlStr) as? [String: Any],
+               let title = yaml["title"] as? String {
+                displayName = title
+            }
+        }
+
+        // Register in maho.yaml
+        try addCollection(vaultPath: path, id: dirName, name: displayName, icon: "folder")
+
+        return dirName
+    }
+
     /// Migrate files with numeric prefixes (e.g., `001-slug.md`) to clean filenames,
     /// populating `_index.md` order to preserve the original ordering.
     public func migrateNumericPrefixes() throws {
