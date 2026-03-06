@@ -1,9 +1,192 @@
 import SwiftUI
 import MahoNotesKit
+import UniformTypeIdentifiers
+
+// MARK: - Drag State
+
+/// Tracks the currently dragged item for visual feedback across the tree.
+class DragState: ObservableObject {
+    @Published var draggedItemId: String?
+    @Published var dropTargetId: String?
+    @Published var dropPosition: DropPosition = .on
+
+    enum DropPosition {
+        case above   // Insert before target (top 25% of row)
+        case on      // Move into / nest (middle 50%)
+        case below   // Insert after target (bottom 25% of row)
+    }
+}
+
+// MARK: - Directory Drop Delegate
+
+struct DirectoryDropDelegate: DropDelegate {
+    let node: FileTreeNode
+    let isTopLevel: Bool
+    let topLevelIds: [String]
+    let dragState: DragState
+    let onMoveNote: ((String, String) -> Void)?
+    let onMoveCollection: ((String, String) -> Void)?
+    let onReorderCollections: (([String]) -> Void)?
+    let onReorderSubCollections: ((String, [String]) -> Void)?
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        dragState.dropTargetId = node.id
+    }
+
+    func dropExited(info: DropInfo) {
+        if dragState.dropTargetId == node.id {
+            dragState.dropTargetId = nil
+        }
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        return true
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragState.dropTargetId = nil
+        dragState.draggedItemId = nil
+
+        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
+        item.loadItem(forTypeIdentifier: UTType.text.identifier) { data, _ in
+            guard let data = data as? Data,
+                  let str = String(data: data, encoding: .utf8) else { return }
+            DispatchQueue.main.async {
+                handleDrop(payload: str)
+            }
+        }
+        return true
+    }
+
+    private func handleDrop(payload: String) {
+        if payload.hasPrefix("note:") {
+            let notePath = String(payload.dropFirst(5))
+            let noteDir = (notePath as NSString).deletingLastPathComponent
+            guard noteDir != node.id else { return }
+            onMoveNote?(notePath, node.id)
+
+        } else if payload.hasPrefix("collection:") {
+            let collId = String(payload.dropFirst(11))
+            // Can't drop into self or descendant
+            guard collId != node.id,
+                  !node.id.hasPrefix(collId + "/") else { return }
+
+            // Top-level → top-level = reorder
+            if isTopLevel && topLevelIds.contains(collId) {
+                var ids = topLevelIds
+                guard let fromIdx = ids.firstIndex(of: collId),
+                      let toIdx = ids.firstIndex(of: node.id) else { return }
+                ids.remove(at: fromIdx)
+                ids.insert(collId, at: toIdx)
+                onReorderCollections?(ids)
+                return
+            }
+
+            // Same-parent sub-collections = reorder
+            let draggedParent = (collId as NSString).deletingLastPathComponent
+            let targetParent = (node.id as NSString).deletingLastPathComponent
+            if !isTopLevel && draggedParent == targetParent {
+                // Reorder among siblings — caller needs parent + ordered IDs
+                // We don't have sibling list here, so treat as nest for now
+                // The parent-level delegate handles sub-collection reorder
+            }
+
+            // Otherwise, nest the collection into this one
+            onMoveCollection?(collId, node.id)
+        }
+    }
+}
+
+// MARK: - Note Drop Delegate
+
+struct NoteDropDelegate: DropDelegate {
+    let noteNode: FileTreeNode
+    let parentId: String
+    let allNoteChildren: [FileTreeNode]
+    let dragState: DragState
+    let onReorderNotes: ((String, [String]) -> Void)?
+    let onMoveNote: ((String, String) -> Void)?
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        dragState.dropTargetId = noteNode.id
+    }
+
+    func dropExited(info: DropInfo) {
+        if dragState.dropTargetId == noteNode.id {
+            dragState.dropTargetId = nil
+        }
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        return true
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragState.dropTargetId = nil
+        dragState.draggedItemId = nil
+
+        guard let item = info.itemProviders(for: [UTType.text]).first else { return false }
+        item.loadItem(forTypeIdentifier: UTType.text.identifier) { data, _ in
+            guard let data = data as? Data,
+                  let str = String(data: data, encoding: .utf8) else { return }
+            DispatchQueue.main.async {
+                handleDrop(payload: str)
+            }
+        }
+        return true
+    }
+
+    private func handleDrop(payload: String) {
+        if payload.hasPrefix("note:") {
+            let notePath = String(payload.dropFirst(5))
+            let noteDir = (notePath as NSString).deletingLastPathComponent
+
+            if noteDir == parentId {
+                // Same collection → reorder: insert after this note
+                var paths = allNoteChildren.compactMap { $0.note?.relativePath ?? $0.id }
+                guard let fromIdx = paths.firstIndex(of: notePath),
+                      let toIdx = paths.firstIndex(of: noteNode.note?.relativePath ?? noteNode.id)
+                else { return }
+                paths.remove(at: fromIdx)
+                let insertIdx = fromIdx < toIdx ? toIdx : toIdx
+                paths.insert(notePath, at: insertIdx)
+                onReorderNotes?(parentId, paths)
+            } else {
+                // Different collection → move to this note's collection
+                onMoveNote?(notePath, parentId)
+            }
+
+        } else if payload.hasPrefix("collection:") {
+            // Can't drop collection on note — reject silently
+            return
+        }
+    }
+}
+
+// MARK: - Add Note Drop Delegate (rejects all drops)
+
+struct AddNoteDropDelegate: DropDelegate {
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .cancel)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        return false
+    }
+}
 
 /// B — Tree navigator panel (~240pt) showing collections and recent notes.
 struct NavigatorView: View {
     @Environment(AppState.self) private var appState
+    @StateObject private var dragState = DragState()
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
     @State private var newCollectionIcon = "folder"
@@ -129,6 +312,7 @@ struct NavigatorView: View {
                 TreeNodeView(
                     node: node,
                     appState: appState,
+                    dragState: dragState,
                     isTopLevel: true,
                     onNewNote: { collectionId in
                         newNoteCollectionId = collectionId
@@ -207,7 +391,6 @@ struct NavigatorView: View {
                 ForEach(appState.recentNotes, id: \.relativePath) { note in
                     noteRow(note)
                         .tag(note.relativePath)
-                        .moveDisabled(true)
                 }
             } header: {
                 Text("RECENT")
@@ -435,6 +618,7 @@ struct NavigatorView: View {
 private struct TreeNodeView: View {
     let node: FileTreeNode
     let appState: AppState
+    @ObservedObject var dragState: DragState
     var isTopLevel: Bool = false
     var onNewNote: ((String) -> Void)?
     var onNewSubCollection: ((String) -> Void)?
@@ -448,15 +632,13 @@ private struct TreeNodeView: View {
     var onDeleteNote: ((String, String) -> Void)?            // (relativePath, title)
     var onDeleteCollection: ((String, String, Bool, Bool) -> Void)?  // (id, name, isTopLevel, hasContents)
     @State private var isExpanded: Bool = false
-    @State private var isDropTargeted: Bool = false
 
     var body: some View {
         if node.isDirectory {
             directoryRow
-                .moveDisabled(true)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.accentColor, lineWidth: isDropTargeted ? 2 : 0)
+                        .stroke(Color.accentColor, lineWidth: dragState.dropTargetId == node.id ? 2 : 0)
                 )
                 .contextMenu {
                     Button {
@@ -488,50 +670,30 @@ private struct TreeNodeView: View {
                         Label("Delete Collection", systemImage: "trash")
                     }
                 }
-                .draggable("collection:" + node.id)
-                .dropDestination(for: String.self) { droppedIds, _ in
-                    isDropTargeted = false
-                    guard let droppedId = droppedIds.first else { return false }
-
-                    if droppedId.hasPrefix("note:") {
-                        let notePath = String(droppedId.dropFirst(5))
-                        // Don't drop into the same directory
-                        let noteDir = (notePath as NSString).deletingLastPathComponent
-                        guard noteDir != node.id else { return false }
-                        onMoveNote?(notePath, node.id)
-                        return true
-                    } else if droppedId.hasPrefix("collection:") {
-                        let collId = String(droppedId.dropFirst(11))
-                        // Can't drop into self or descendant
-                        guard collId != node.id,
-                              !node.id.hasPrefix(collId + "/") else { return false }
-
-                        // If this is a top-level node and the dragged item is also top-level,
-                        // this is a reorder (not a nest)
-                        if isTopLevel && topLevelIds.contains(collId) {
-                            var ids = topLevelIds
-                            guard let fromIdx = ids.firstIndex(of: collId),
-                                  let toIdx = ids.firstIndex(of: node.id) else { return false }
-                            ids.remove(at: fromIdx)
-                            ids.insert(collId, at: toIdx)
-                            onReorderCollections?(ids)
-                            return true
-                        }
-
-                        // Otherwise, nest the collection into this one
-                        onMoveCollection?(collId, node.id)
-                        return true
-                    }
-                    return false
-                } isTargeted: { targeted in
-                    isDropTargeted = targeted
+                .onDrag {
+                    dragState.draggedItemId = "collection:" + node.id
+                    return NSItemProvider(object: ("collection:" + node.id) as NSString)
                 }
+                .onDrop(of: [UTType.text], delegate: DirectoryDropDelegate(
+                    node: node,
+                    isTopLevel: isTopLevel,
+                    topLevelIds: topLevelIds,
+                    dragState: dragState,
+                    onMoveNote: onMoveNote,
+                    onMoveCollection: onMoveCollection,
+                    onReorderCollections: onReorderCollections,
+                    onReorderSubCollections: onReorderSubCollections
+                ))
             if isExpanded {
                 expandedChildren
             }
         } else {
             noteLeafRow
-                .draggable("note:" + (node.note?.relativePath ?? node.id))
+                .onDrag {
+                    let payload = "note:" + (node.note?.relativePath ?? node.id)
+                    dragState.draggedItemId = payload
+                    return NSItemProvider(object: payload as NSString)
+                }
         }
     }
 
@@ -547,6 +709,7 @@ private struct TreeNodeView: View {
             TreeNodeView(
                 node: child,
                 appState: appState,
+                dragState: dragState,
                 isTopLevel: false,
                 onNewNote: onNewNote,
                 onNewSubCollection: onNewSubCollection,
@@ -561,7 +724,6 @@ private struct TreeNodeView: View {
                 onDeleteCollection: onDeleteCollection
             )
             .padding(.leading, 12)
-            .moveDisabled(true)
         }
 
         // "+ Add Note" row — reject all drops
@@ -578,22 +740,32 @@ private struct TreeNodeView: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, 28)
-        .moveDisabled(true)
-        .dropDestination(for: String.self) { _, _ in false }
+        .onDrop(of: [UTType.text], delegate: AddNoteDropDelegate())
 
-        // Notes — use .onMove for within-collection reorder
-        // Each note is .draggable for cross-collection moves
+        // Notes
         ForEach(noteChildren, id: \.id) { child in
             noteLeafRowFor(child)
                 .padding(.leading, 12)
-                .draggable("note:" + (child.note?.relativePath ?? child.id))
-                // Reject drops on individual notes (no note-on-note)
-                .dropDestination(for: String.self) { _, _ in false }
-        }
-        .onMove { source, destination in
-            var paths = noteChildren.compactMap { $0.note?.relativePath ?? $0.id }
-            paths.move(fromOffsets: source, toOffset: destination)
-            onReorderNotes?(node.id, paths)
+                .onDrag {
+                    let payload = "note:" + (child.note?.relativePath ?? child.id)
+                    dragState.draggedItemId = payload
+                    return NSItemProvider(object: payload as NSString)
+                }
+                .onDrop(of: [UTType.text], delegate: NoteDropDelegate(
+                    noteNode: child,
+                    parentId: node.id,
+                    allNoteChildren: noteChildren,
+                    dragState: dragState,
+                    onReorderNotes: onReorderNotes,
+                    onMoveNote: onMoveNote
+                ))
+                .overlay(alignment: .top) {
+                    if dragState.dropTargetId == child.id {
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(height: 2)
+                    }
+                }
         }
     }
 
@@ -658,5 +830,3 @@ private struct TreeNodeView: View {
         }
     }
 }
-
-
