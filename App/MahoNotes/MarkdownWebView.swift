@@ -219,10 +219,44 @@ extension MarkdownWebView {
             font-family: "SF Mono", SFMono-Regular, Menlo, Monaco, monospace;
             font-size: 0.9em;
         }
+        /* highlight.js overrides */
+        pre code.hljs {
+            background: none;
+            padding: 0;
+        }
         </style>
+        <!-- KaTeX for LaTeX rendering -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
+        <!-- highlight.js for syntax highlighting -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github.min.css" media="(prefers-color-scheme: light)">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+        <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
         </head>
         <body>
         \(body)
+        <script>
+        // Initialize highlight.js and KaTeX after page load
+        document.addEventListener("DOMContentLoaded", function() {
+            // Syntax highlighting
+            if (typeof hljs !== "undefined") {
+                document.querySelectorAll("pre code").forEach(function(block) {
+                    hljs.highlightElement(block);
+                });
+            }
+            // KaTeX auto-render
+            if (typeof renderMathInElement !== "undefined") {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false}
+                    ],
+                    throwOnError: false
+                });
+            }
+        });
+        </script>
         </body>
         </html>
         """
