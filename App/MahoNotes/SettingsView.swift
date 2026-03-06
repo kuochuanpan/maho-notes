@@ -37,7 +37,40 @@ struct VaultsSettingsTab: View {
     @State private var vaultToRemove: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
+            // MARK: - Cloud Sync
+            GroupBox {
+                HStack(spacing: 12) {
+                    Image(systemName: "icloud")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cloud Sync")
+                            .fontWeight(.medium)
+                        Text("Sync vaults and settings via iCloud")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Picker("", selection: Binding(
+                        get: { appState.cloudSyncMode },
+                        set: { appState.setCloudSyncMode($0) }
+                    )) {
+                        Text("iCloud").tag(CloudSyncMode.icloud)
+                        Text("Off").tag(CloudSyncMode.off)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 140)
+                }
+                .padding(4)
+            }
+            .padding(.horizontal, 4)
+
+            // MARK: - Vault List
             List {
                 ForEach(appState.vaults, id: \.name) { entry in
                     vaultRow(entry)

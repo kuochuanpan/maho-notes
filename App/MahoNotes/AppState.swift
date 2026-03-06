@@ -45,6 +45,27 @@ final class AppState {
     /// All notes flat list.
     private(set) var allNotes: [Note] = []
 
+    // MARK: - Cloud Sync
+
+    /// Current cloud sync mode (read from global config).
+    var cloudSyncMode: CloudSyncMode = .icloud
+
+    /// Load cloud sync mode from global config.
+    func loadCloudSyncMode() {
+        cloudSyncMode = MahoNotesKit.loadCloudSyncMode()
+    }
+
+    /// Update cloud sync mode and persist to global config.
+    func setCloudSyncMode(_ mode: CloudSyncMode) {
+        do {
+            try MahoNotesKit.setGlobalSyncMode(mode)
+            cloudSyncMode = mode
+        } catch {
+            // Silently fail — the UI will stay in sync with the actual state
+            loadCloudSyncMode()
+        }
+    }
+
     // MARK: - Panel Visibility
 
     /// Whether the vault rail (A) is visible.
@@ -672,6 +693,7 @@ final class AppState {
 
             self.errorMessage = nil
             self.isLoaded = true
+            loadCloudSyncMode()
             loadSelectedVault()
         } catch {
             self.errorMessage = "Failed to load vault registry: \(error.localizedDescription)"
