@@ -389,7 +389,17 @@ private struct TreeNodeView: View {
                     }
                 }
             if isExpanded {
-                // "+ Add Note" row at the top
+                // Children (subdirectories and notes)
+                let noteChildren = node.children.filter { !$0.isDirectory }
+                let dirChildren = node.children.filter { $0.isDirectory }
+
+                // Sub-collections first
+                ForEach(dirChildren, id: \.id) { child in
+                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onNewSubCollection: onNewSubCollection, onReorderNotes: onReorderNotes)
+                        .padding(.leading, 12)
+                }
+
+                // "+ Add Note" row (after sub-collections, before notes)
                 Button {
                     onNewNote?(node.id)
                 } label: {
@@ -403,16 +413,6 @@ private struct TreeNodeView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 28)
-
-                // Children (subdirectories and notes)
-                let noteChildren = node.children.filter { !$0.isDirectory }
-                let dirChildren = node.children.filter { $0.isDirectory }
-
-                // Subdirectories first (not draggable)
-                ForEach(dirChildren, id: \.id) { child in
-                    TreeNodeView(node: child, appState: appState, onNewNote: onNewNote, onNewSubCollection: onNewSubCollection, onReorderNotes: onReorderNotes)
-                        .padding(.leading, 12)
-                }
 
                 // Notes — draggable for reorder
                 ForEach(noteChildren, id: \.id) { child in
