@@ -6,6 +6,10 @@ import MahoNotesKit
 @Observable
 final class AppState {
 
+    // MARK: - VaultStore
+
+    let store = VaultStore()
+
     // MARK: - Vault Registry
 
     /// All registered vaults from the vault registry.
@@ -64,114 +68,123 @@ final class AppState {
 
     /// Load cloud sync mode from global config.
     func loadCloudSyncMode() {
-        cloudSyncMode = MahoNotesKit.loadCloudSyncMode()
+        Task {
+            let mode = await store.cloudSyncMode()
+            self.cloudSyncMode = mode
+        }
     }
 
     /// Called when user toggles cloud sync. Checks for merge needs before applying.
     @MainActor
     func requestCloudSyncChange(to mode: CloudSyncMode) {
-        if mode == .off {
-            // Turning off — migrate vaults back to local, then disable
-            if let localRegistry = try? MahoNotesKit.loadRegistry() {
-                if let migrated = try? migrateVaultsFromCloud(registry: localRegistry) {
-                    applyCloudSyncMode(.off)
-                    try? saveRegistry(migrated)
-                    loadRegistry()
-                    return
+        Task {
+            if mode == .off {
+                // Turning off — migrate vaults back to local, then disable
+                if let localRegistry = try? await store.loadRegistry() {
+                    if let migrated = try? await store.migrateFromCloud(localRegistry) {
+                        await applyCloudSyncMode(.off)
+                        try? await store.saveRegistry(migrated)
+                        await loadRegistryAsync()
+                        return
+                    }
                 }
+                await applyCloudSyncMode(.off)
+                return
             }
-            applyCloudSyncMode(.off)
-            return
-        }
 
-        // Turning on — check if iCloud already has a registry
-        let check = checkCloudRegistryExists()
-        switch check {
-        case .noCloudRegistry:
-            // No conflict — activate, migrate vaults to iCloud, and save
-            applyCloudSyncMode(.icloud)
-            if var localRegistry = try? MahoNotesKit.loadRegistry() {
-                if let migrated = try? migrateVaultsToCloud(registry: localRegistry) {
-                    localRegistry = migrated
+            // Turning on — check if iCloud already has a registry
+            let check = await store.checkCloudRegistryExists()
+            switch check {
+            case .noCloudRegistry:
+                // No conflict — activate, migrate vaults to iCloud, and save
+                await applyCloudSyncMode(.icloud)
+                if var localRegistry = try? await store.loadRegistry() {
+                    if let migrated = try? await store.migrateToCloud(localRegistry) {
+                        localRegistry = migrated
+                    }
+                    try? await store.saveRegistry(localRegistry)
+                    await loadRegistryAsync()
                 }
-                try? saveRegistry(localRegistry)
-                loadRegistry()
+            case .cloudRegistryExists(let cloudRegistry):
+                // Need merge — show confirmation
+                pendingCloudRegistry = cloudRegistry
+                showMergeSheet = true
             }
-        case .cloudRegistryExists(let cloudRegistry):
-            // Need merge — show confirmation
-            pendingCloudRegistry = cloudRegistry
-            showMergeSheet = true
         }
     }
 
     /// Merge local vaults with cloud registry.
     @MainActor
     func performMerge() {
-        // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
-        let localRegistrySnapshot: VaultRegistry?
-        do {
-            localRegistrySnapshot = try MahoNotesKit.loadRegistry()
-        } catch {
-            localRegistrySnapshot = nil
-        }
+        Task {
+            // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
+            let localRegistrySnapshot: VaultRegistry?
+            do {
+                localRegistrySnapshot = try await store.loadRegistry()
+            } catch {
+                localRegistrySnapshot = nil
+            }
 
-        guard let cloudRegistry = pendingCloudRegistry,
-              let localRegistry = localRegistrySnapshot ?? VaultRegistry(primary: "default", vaults: [])
-              as VaultRegistry?
-        else {
-            pendingCloudRegistry = nil
-            showMergeSheet = false
-            return
-        }
+            guard let cloudRegistry = pendingCloudRegistry,
+                  let localRegistry = localRegistrySnapshot ?? VaultRegistry(primary: "default", vaults: [])
+                  as VaultRegistry?
+            else {
+                pendingCloudRegistry = nil
+                showMergeSheet = false
+                return
+            }
 
-        var (merged, conflicts) = mergeRegistries(local: localRegistry, cloud: cloudRegistry)
+            var (merged, conflicts) = await store.mergeRegistries(local: localRegistry, cloud: cloudRegistry)
 
-        // Activate cloud sync, then migrate device vaults to iCloud and save
-        applyCloudSyncMode(.icloud)
-        if let migrated = try? migrateVaultsToCloud(registry: merged) {
-            merged = migrated
-        }
-        try? saveRegistry(merged)
+            // Activate cloud sync, then migrate device vaults to iCloud and save
+            await applyCloudSyncMode(.icloud)
+            if let migrated = try? await store.migrateToCloud(merged) {
+                merged = migrated
+            }
+            try? await store.saveRegistry(merged)
 
-        // Update local state directly (avoid loadRegistry re-reading before iCloud propagates)
-        self.vaults = merged.vaults
-        self.primaryVaultName = merged.primary
-        self.lastMergeConflicts = conflicts
-        self.pendingCloudRegistry = nil
-        self.showMergeSheet = false
+            // Update local state directly (avoid loadRegistry re-reading before iCloud propagates)
+            self.vaults = merged.vaults
+            self.primaryVaultName = merged.primary
+            self.lastMergeConflicts = conflicts
+            self.pendingCloudRegistry = nil
+            self.showMergeSheet = false
 
-        // Now reload to pick up resolved paths
-        loadRegistry()
+            // Now reload to pick up resolved paths
+            await loadRegistryAsync()
 
-        if !conflicts.isEmpty {
-            self.showMergeResult = true
+            if !conflicts.isEmpty {
+                self.showMergeResult = true
+            }
         }
     }
 
     /// Replace cloud registry with local registry (discard cloud).
     @MainActor
     func replaceCloudWithLocal() {
-        // Load local registry BEFORE switching to iCloud mode
-        // (otherwise loadRegistry reads from iCloud and gets the cloud registry)
-        let localRegistrySnapshot: VaultRegistry?
-        do {
-            localRegistrySnapshot = try MahoNotesKit.loadRegistry()
-        } catch {
-            localRegistrySnapshot = nil
-        }
-
-        applyCloudSyncMode(.icloud)
-
-        if var registry = localRegistrySnapshot {
-            if let migrated = try? migrateVaultsToCloud(registry: registry) {
-                registry = migrated
+        Task {
+            // Load local registry BEFORE switching to iCloud mode
+            // (otherwise loadRegistry reads from iCloud and gets the cloud registry)
+            let localRegistrySnapshot: VaultRegistry?
+            do {
+                localRegistrySnapshot = try await store.loadRegistry()
+            } catch {
+                localRegistrySnapshot = nil
             }
-            try? saveRegistry(registry)
-        }
 
-        pendingCloudRegistry = nil
-        showMergeSheet = false
-        loadRegistry()
+            await applyCloudSyncMode(.icloud)
+
+            if var registry = localRegistrySnapshot {
+                if let migrated = try? await store.migrateToCloud(registry) {
+                    registry = migrated
+                }
+                try? await store.saveRegistry(registry)
+            }
+
+            pendingCloudRegistry = nil
+            showMergeSheet = false
+            await loadRegistryAsync()
+        }
     }
 
     /// Cancel merge — don't turn on cloud sync.
@@ -181,12 +194,13 @@ final class AppState {
     }
 
     /// Internal: persist cloud sync mode.
-    private func applyCloudSyncMode(_ mode: CloudSyncMode) {
+    private func applyCloudSyncMode(_ mode: CloudSyncMode) async {
         do {
-            try MahoNotesKit.setGlobalSyncMode(mode)
-            cloudSyncMode = mode
+            try await store.setCloudSyncMode(mode)
+            self.cloudSyncMode = mode
         } catch {
-            loadCloudSyncMode()
+            let current = await store.cloudSyncMode()
+            self.cloudSyncMode = current
         }
     }
 
@@ -349,7 +363,7 @@ final class AppState {
         let entries = searchScope == "allVaults" ? vaults : (selectedVault.map { [$0] } ?? [])
 
         // Check vector index exists for at least one vault
-        let hasVectorIndex = entries.contains { VectorIndex.vectorIndexExists(vaultPath: resolvedPath(for: $0)) }
+        let hasVectorIndex = entries.contains { VectorIndex.vectorIndexExists(vaultPath: store.resolvedPath(for: $0)) }
         guard hasVectorIndex else {
             searchError = "Build search index first (Settings → Search or `mn index`)"
             searchResults = []
@@ -383,7 +397,7 @@ final class AppState {
         var notesByPrefixedPath: [String: Note] = [:]
 
         for entry in entries {
-            let vaultPath = resolvedPath(for: entry)
+            let vaultPath = store.resolvedPath(for: entry)
             let vault = Vault(path: vaultPath)
             let notes: [Note]
             do {
@@ -450,7 +464,7 @@ final class AppState {
 
     /// FTS search returning Note objects for a single vault.
     private func ftsSearch(entry: VaultEntry, query: String) -> [Note] {
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         do {
             let index = try SearchIndex(vaultPath: vaultPath)
@@ -467,7 +481,7 @@ final class AppState {
 
     /// FTS search returning raw SearchResult (for hybrid merge).
     private func ftsSearchResults(entry: VaultEntry, query: String) -> [SearchResult] {
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         do {
             let index = try SearchIndex(vaultPath: vaultPath)
@@ -570,7 +584,7 @@ final class AppState {
         guard hasUnsavedChanges else { return }
         guard !editingBody.isEmpty else { return }
 
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
 
         do {
@@ -786,7 +800,7 @@ final class AppState {
     @MainActor
     func moveSelectedNotes(toCollection: String) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let paths = selectedNotePaths.isEmpty
             ? (selectedNotePath.map { [$0] } ?? [])
@@ -828,7 +842,7 @@ final class AppState {
     /// Author name from the current vault's maho.yaml (author.name key).
     var authorName: String? {
         guard let entry = selectedVault else { return nil }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let config = Config(vaultPath: vaultPath)
         guard let vaultConfig = try? config.loadVaultConfig(),
               let author = vaultConfig["author"] as? [String: Any],
@@ -882,7 +896,7 @@ final class AppState {
 
         guard entry.type == .icloud else { return }
 
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vaultURL = URL(fileURLWithPath: vaultPath)
 
         iCloudManager.startMonitoring(containerURL: vaultURL) { [weak self] in
@@ -899,7 +913,7 @@ final class AppState {
     func reloadCurrentVault() {
         guard let entry = selectedVault else { return }
 
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let previousSelection = selectedNotePath
 
@@ -941,8 +955,14 @@ final class AppState {
     /// Load the vault registry. Call on app launch.
     @MainActor
     func loadRegistry() {
+        Task { await loadRegistryAsync() }
+    }
+
+    /// Async implementation of loadRegistry.
+    @MainActor
+    func loadRegistryAsync() async {
         do {
-            let result: VaultRegistry? = try MahoNotesKit.loadRegistry()
+            let result: VaultRegistry? = try await store.loadRegistry()
 
             if let registry = result {
                 self.vaults = registry.vaults
@@ -959,7 +979,8 @@ final class AppState {
 
             self.errorMessage = nil
             self.isLoaded = true
-            loadCloudSyncMode()
+            let mode = await store.cloudSyncMode()
+            self.cloudSyncMode = mode
             loadSelectedVault()
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
@@ -989,7 +1010,7 @@ final class AppState {
             return
         }
 
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
 
         do {
@@ -1028,26 +1049,30 @@ final class AppState {
     /// Remove a vault from the registry (does not delete files).
     @MainActor
     func removeVault(name: String) {
-        guard var registry = try? MahoNotesKit.loadRegistry() else { return }
-        try? registry.removeVault(named: name)
-        // If removing the primary, reassign to first remaining vault
-        if registry.primary == name, let first = registry.vaults.first {
-            registry.primary = first.name
+        Task {
+            guard var registry = try? await store.loadRegistry() else { return }
+            try? registry.removeVault(named: name)
+            // If removing the primary, reassign to first remaining vault
+            if registry.primary == name, let first = registry.vaults.first {
+                registry.primary = first.name
+            }
+            try? await store.saveRegistry(registry)
+            if selectedVaultName == name {
+                selectedVaultName = registry.primary
+            }
+            await loadRegistryAsync()
         }
-        try? MahoNotesKit.saveRegistry(registry)
-        if selectedVaultName == name {
-            selectedVaultName = registry.primary
-        }
-        loadRegistry()
     }
 
     /// Set a vault as the primary vault.
     @MainActor
     func setPrimaryVault(name: String) {
-        guard var registry = try? MahoNotesKit.loadRegistry() else { return }
-        try? registry.setPrimary(name)
-        try? MahoNotesKit.saveRegistry(registry)
-        loadRegistry()
+        Task {
+            guard var registry = try? await store.loadRegistry() else { return }
+            try? registry.setPrimary(name)
+            try? await store.saveRegistry(registry)
+            await loadRegistryAsync()
+        }
     }
 
     // MARK: - Vault Creation
@@ -1100,7 +1125,7 @@ final class AppState {
     @MainActor
     func createCollection(name: String, icon: String = "folder") throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         try addCollection(vaultPath: vaultPath, name: name, icon: icon)
         reloadCurrentVault()
     }
@@ -1114,7 +1139,7 @@ final class AppState {
     @MainActor
     func createNote(title: String, collectionId: String) throws -> String {
         guard let entry = selectedVault else { throw CollectionError.invalidName }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let author = authorName ?? ""
         let relativePath = try vault.createNote(
@@ -1144,7 +1169,7 @@ final class AppState {
     @MainActor
     func createSubCollection(name: String, parentId: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let slug = makeSlug(from: name)
         guard !slug.isEmpty else { throw CollectionError.invalidName }
 
@@ -1175,7 +1200,7 @@ final class AppState {
     @MainActor
     func reorderCollections(orderedIds: [String]) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         try? MahoNotesKit.reorderCollections(vaultPath: vaultPath, orderedIds: orderedIds)
         reloadCurrentVault()
     }
@@ -1186,7 +1211,7 @@ final class AppState {
     @MainActor
     func renameCollection(collectionId: String, newName: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let parentDir = (collectionId as NSString).deletingLastPathComponent
 
         if parentDir.isEmpty {
@@ -1204,7 +1229,7 @@ final class AppState {
     @MainActor
     func changeCollectionIcon(collectionId: String, newIcon: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         try updateCollectionInConfig(vaultPath: vaultPath, id: collectionId, icon: newIcon)
         reloadCurrentVault()
     }
@@ -1213,7 +1238,7 @@ final class AppState {
     @MainActor
     func renameNote(relativePath: String, newTitle: String) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         vault.renameNote(relativePath: relativePath, newTitle: newTitle)
         reloadCurrentVault()
@@ -1225,7 +1250,7 @@ final class AppState {
     @MainActor
     func deleteNote(relativePath: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let absPath = (vaultPath as NSString).appendingPathComponent(relativePath)
         let fileURL = URL(fileURLWithPath: absPath)
 
@@ -1254,7 +1279,7 @@ final class AppState {
     @MainActor
     func deleteSubCollection(collectionId: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let fm = FileManager.default
 
         let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
@@ -1292,7 +1317,7 @@ final class AppState {
     @MainActor
     func deleteTopLevelCollection(collectionId: String) throws {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
 
         // Move to Trash (recoverable)
@@ -1314,7 +1339,7 @@ final class AppState {
     @MainActor
     func reorderNotes(collectionId: String, orderedPaths: [String]) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         _ = try? vault.reorderNotes(collectionId: collectionId, orderedPaths: orderedPaths)
         reloadCurrentVault()
@@ -1324,7 +1349,7 @@ final class AppState {
     @MainActor
     func moveNote(relativePath: String, toCollection: String) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let newPath = try? vault.moveNote(relativePath: relativePath, toCollection: toCollection)
         if selectedNotePath == relativePath, let newPath {
@@ -1338,7 +1363,7 @@ final class AppState {
     @MainActor
     func moveCollection(collectionId: String, intoParent: String) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         _ = try? vault.moveCollection(collectionId: collectionId, intoParent: intoParent)
         reloadCurrentVault()
@@ -1348,7 +1373,7 @@ final class AppState {
     @MainActor
     func promoteToTopLevel(collectionId: String) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         _ = try? vault.promoteToTopLevel(collectionId: collectionId)
         reloadCurrentVault()
@@ -1358,7 +1383,7 @@ final class AppState {
     @MainActor
     func reorderSubCollections(parentId: String, orderedIds: [String]) {
         guard let entry = selectedVault else { return }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         try? vault.reorderSubCollections(parentId: parentId, orderedIds: orderedIds)
         reloadCurrentVault()

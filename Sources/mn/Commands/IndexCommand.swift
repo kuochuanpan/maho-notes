@@ -123,9 +123,10 @@ struct IndexCommand: AsyncParsableCommand {
             let deleted: Int
         }
         var allStats: [VaultStats] = []
+        let store = VaultStore()
 
         for entry in entries {
-            let path = MahoNotesKit.resolvedPath(for: entry)
+            let path = store.resolvedPath(for: entry)
             let vault = Vault(path: path)
 
             if !outputOption.json {

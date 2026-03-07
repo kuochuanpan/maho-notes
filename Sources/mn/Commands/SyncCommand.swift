@@ -89,8 +89,9 @@ struct SyncCommand: ParsableCommand {
 
         var results: [[String: Any]] = []
 
+        let store = VaultStore()
         for entry in syncable {
-            let path = MahoNotesKit.resolvedPath(for: entry)
+            let path = store.resolvedPath(for: entry)
             if !outputOption.json {
                 print("Syncing vault '\(entry.name)'...")
             }

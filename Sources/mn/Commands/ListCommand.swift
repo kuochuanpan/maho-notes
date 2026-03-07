@@ -148,11 +148,13 @@ struct ListCommand: ParsableCommand {
             return
         }
 
+        let store = VaultStore()
+
         if outputOption.json {
             // Emit {"vault1": [...notes], "vault2": [...notes]}
             var result: [String: [Note]] = [:]
             for entry in entries {
-                let vault = Vault(path: MahoNotesKit.resolvedPath(for: entry))
+                let vault = Vault(path: store.resolvedPath(for: entry))
                 result[entry.name] = (try? vault.allNotes()) ?? []
             }
             try printJSON(result)
@@ -160,7 +162,7 @@ struct ListCommand: ParsableCommand {
         }
 
         for entry in entries {
-            let path = MahoNotesKit.resolvedPath(for: entry)
+            let path = store.resolvedPath(for: entry)
             let vault = Vault(path: path)
             let notes = (try? vault.allNotes()) ?? []
             if notes.isEmpty { continue }

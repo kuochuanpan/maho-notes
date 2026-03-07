@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import MahoNotesKit
 
-struct InitCommand: ParsableCommand {
+struct InitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "init",
         abstract: "Set up Maho Notes or add a new vault"
@@ -26,21 +26,22 @@ struct InitCommand: ParsableCommand {
     @Flag(name: .long, help: "Suppress all interactive prompts (useful for scripting)")
     var nonInteractive: Bool = false
 
-    func run() throws {
+    func run() async throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let globalConfigPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
         let isFirstTime = !FileManager.default.fileExists(atPath: globalConfigPath)
+        let store = VaultStore()
 
         if isFirstTime {
-            try runFirstTimeSetup(globalConfigDir: globalConfigDir)
+            try await runFirstTimeSetup(globalConfigDir: globalConfigDir, store: store)
         } else {
-            try runExistingSetup(globalConfigDir: globalConfigDir)
+            try await runExistingSetup(globalConfigDir: globalConfigDir, store: store)
         }
     }
 
     // MARK: - Mode 1: First-time setup
 
-    private func runFirstTimeSetup(globalConfigDir: String) throws {
+    private func runFirstTimeSetup(globalConfigDir: String, store: VaultStore) async throws {
         let storageOpt: StorageOption? = storage.flatMap { StorageOption(rawValue: $0) }
         let resolvedGithub = github ?? ""
         let resolvedAuthor = author ?? ""
@@ -90,7 +91,7 @@ struct InitCommand: ParsableCommand {
             let ans = readLine() ?? ""
             if ans.lowercased() == "n" {
                 useDeviceVault = true
-                try setGlobalSyncMode(.off, globalConfigDir: globalConfigDir)
+                try await store.setCloudSyncMode(.off)
                 print("Cloud Sync disabled. Vaults will be stored locally on this device.")
             }
         }
@@ -188,13 +189,13 @@ struct InitCommand: ParsableCommand {
                     vaultPath: vaultPath, authorName: authorInput,
                     githubRepo: "", skipTutorial: true, globalConfigDir: globalConfigDir
                 )
-                var registry = (try? loadRegistry(globalConfigDir: globalConfigDir))
+                var registry = (try? await store.loadRegistry())
                     ?? VaultRegistry(primary: resolvedName, vaults: [])
                 if registry.findVault(named: resolvedName) == nil {
                     let entry = VaultEntry(name: resolvedName, type: .device, access: .readWrite)
                     try registry.addVault(entry)
                     if registry.primary.isEmpty { registry.primary = resolvedName }
-                    try saveRegistry(registry, globalConfigDir: globalConfigDir)
+                    try await store.saveRegistry(registry)
                 }
             } else {
                 try createEmptyVault(
@@ -209,7 +210,7 @@ struct InitCommand: ParsableCommand {
 
     // MARK: - Mode 2: Existing setup
 
-    private func runExistingSetup(globalConfigDir: String) throws {
+    private func runExistingSetup(globalConfigDir: String, store: VaultStore) async throws {
         let storageOpt: StorageOption? = storage.flatMap { StorageOption(rawValue: $0) }
         let resolvedGithub = github ?? ""
         let resolvedAuthor = author ?? ""
@@ -241,11 +242,11 @@ struct InitCommand: ParsableCommand {
         print("Maho Notes is already set up on this machine.")
         print("")
         print("Current vaults:")
-        if let registry = try? loadRegistry(globalConfigDir: globalConfigDir) {
+        if let registry = try? await store.loadRegistry() {
             for entry in registry.vaults {
                 let marker = entry.name == registry.primary ? "*" : " "
                 let primaryTag = entry.name == registry.primary ? " (primary)" : ""
-                let path = MahoNotesKit.resolvedPath(for: entry)
+                let path = store.resolvedPath(for: entry)
                 print("  \(marker) \(entry.name)\(primaryTag) — \(path)")
             }
         } else {

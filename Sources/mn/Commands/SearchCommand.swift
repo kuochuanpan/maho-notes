@@ -27,13 +27,14 @@ struct SearchCommand: AsyncParsableCommand {
     var limit: Int = 10
 
     func run() async throws {
+        let store = VaultStore()
         if semantic || hybrid {
             if #available(macOS 15.0, *) {
                 // Cross-vault semantic/hybrid: iterate all vaults
                 let searchAll = all || vaultOption.vault == nil
                 if searchAll, let entries = vaultOption.allVaultEntries(), !entries.isEmpty {
                     for entry in entries {
-                        let vault = Vault(path: MahoNotesKit.resolvedPath(for: entry))
+                        let vault = Vault(path: store.resolvedPath(for: entry))
                         try await runSemanticOrHybrid(vault: vault)
                     }
                 } else {
@@ -194,10 +195,11 @@ struct SearchCommand: AsyncParsableCommand {
     // MARK: - Cross-vault
 
     private func runAllVaults(entries: [VaultEntry]) throws {
+        let store = VaultStore()
         if outputOption.json {
             var jsonArray: [[String: Any]] = []
             for entry in entries {
-                let vault = Vault(path: MahoNotesKit.resolvedPath(for: entry))
+                let vault = Vault(path: store.resolvedPath(for: entry))
                 if let results = try? ftsSearch(vault: vault) {
                     for r in results {
                         jsonArray.append([
@@ -234,7 +236,7 @@ struct SearchCommand: AsyncParsableCommand {
         var usedFts = true
 
         for entry in entries {
-            let path = MahoNotesKit.resolvedPath(for: entry)
+            let path = store.resolvedPath(for: entry)
             let vault = Vault(path: path)
             if let results = try? ftsSearch(vault: vault) {
                 if !results.isEmpty {

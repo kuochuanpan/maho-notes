@@ -18,7 +18,7 @@ struct VaultCommand: ParsableCommand {
 
 // MARK: - mn vault list
 
-struct VaultListSubcommand: ParsableCommand {
+struct VaultListSubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List all registered vaults"
@@ -26,9 +26,9 @@ struct VaultListSubcommand: ParsableCommand {
 
     @OptionGroup var outputOption: OutputOption
 
-    func run() throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        guard let registry = try loadRegistry(globalConfigDir: globalConfigDir) else {
+    func run() async throws {
+        let store = VaultStore()
+        guard let registry = try await store.loadRegistry() else {
             if outputOption.json {
                 print("[]")
             } else {
@@ -54,7 +54,7 @@ struct VaultListSubcommand: ParsableCommand {
                     access: v.access.rawValue,
                     github: v.github,
                     path: v.path,
-                    resolvedPath: resolvedPath(for: v),
+                    resolvedPath: store.resolvedPath(for: v),
                     isPrimary: v.name == registry.primary
                 )
             }
@@ -95,7 +95,7 @@ struct VaultListSubcommand: ParsableCommand {
 
 // MARK: - mn vault add
 
-struct VaultAddSubcommand: ParsableCommand {
+struct VaultAddSubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
         abstract: "Register a new vault (--icloud | --device | --github <repo> | --path <local>)"
@@ -142,23 +142,24 @@ struct VaultAddSubcommand: ParsableCommand {
         }
     }
 
-    func run() throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+    func run() async throws {
+        let store = VaultStore()
         if icloud {
-            try addICloud(globalConfigDir: globalConfigDir)
+            try await addICloud(store: store)
         } else if device {
-            try addDevice(globalConfigDir: globalConfigDir)
+            try await addDevice(store: store)
         } else if let repo = github {
-            try addGitHub(repo: repo, globalConfigDir: globalConfigDir)
+            try await addGitHub(repo: repo, store: store)
         } else if let localPath = path {
-            try addLocal(path: localPath, globalConfigDir: globalConfigDir)
+            try await addLocal(path: localPath, store: store)
         }
     }
 
     // MARK: iCloud
 
-    private func addICloud(globalConfigDir: String) throws {
-        let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
+    private func addICloud(store: VaultStore) async throws {
+        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let cloudSync = await store.cloudSyncMode()
         guard cloudSync == .icloud else {
             throw ValidationError("Cannot create an iCloud vault: Cloud Sync is OFF. Use --device instead, or enable Cloud Sync with: mn config set --global sync.cloud icloud")
         }
@@ -174,19 +175,20 @@ struct VaultAddSubcommand: ParsableCommand {
             globalConfigDir: globalConfigDir
         )
 
-        var registry = try loadRegistry(globalConfigDir: globalConfigDir)
+        var registry = (try? await store.loadRegistry())
             ?? VaultRegistry(primary: name, vaults: [])
         let entry = VaultEntry(name: name, type: .icloud, access: .readWrite)
         try registry.addVault(entry)
         if registry.vaults.count == 1 { registry.primary = name }
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
 
         print("Vault '\(name)' created at \(vaultPath) and registered.")
     }
 
     // MARK: Device
 
-    private func addDevice(globalConfigDir: String) throws {
+    private func addDevice(store: VaultStore) async throws {
+        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let base = (globalConfigDir as NSString).appendingPathComponent("vaults")
         let vaultPath = (base as NSString).appendingPathComponent(name)
 
@@ -198,19 +200,20 @@ struct VaultAddSubcommand: ParsableCommand {
             globalConfigDir: globalConfigDir
         )
 
-        var registry = try loadRegistry(globalConfigDir: globalConfigDir)
+        var registry = (try? await store.loadRegistry())
             ?? VaultRegistry(primary: name, vaults: [])
         let entry = VaultEntry(name: name, type: .device, access: .readWrite)
         try registry.addVault(entry)
         if registry.vaults.count == 1 { registry.primary = name }
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
 
         print("Vault '\(name)' created at \(vaultPath) and registered (type: device).")
     }
 
     // MARK: GitHub
 
-    private func addGitHub(repo: String, globalConfigDir: String) throws {
+    private func addGitHub(repo: String, store: VaultStore) async throws {
+        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let vaultsDir = (globalConfigDir as NSString).appendingPathComponent("vaults")
         let vaultPath = (vaultsDir as NSString).appendingPathComponent(name)
         let fm = FileManager.default
@@ -244,12 +247,12 @@ struct VaultAddSubcommand: ParsableCommand {
             try generateMahoYaml(at: vaultPath, repo: repo)
         }
 
-        var registry = try loadRegistry(globalConfigDir: globalConfigDir)
+        var registry = (try? await store.loadRegistry())
             ?? VaultRegistry(primary: name, vaults: [])
         let entry = VaultEntry(name: name, type: .github, github: repo, access: access)
         try registry.addVault(entry)
         if registry.vaults.count == 1 { registry.primary = name }
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
 
         print("Vault '\(name)' registered (type: github, access: \(access.rawValue))")
     }
@@ -354,19 +357,19 @@ struct VaultAddSubcommand: ParsableCommand {
 
     // MARK: Local
 
-    private func addLocal(path localPath: String, globalConfigDir: String) throws {
+    private func addLocal(path localPath: String, store: VaultStore) async throws {
         let expanded = (localPath as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expanded) else {
             throw ValidationError("Path does not exist: \(expanded)")
         }
 
         let access: VaultAccess = readonly ? .readOnly : .readWrite
-        var registry = try loadRegistry(globalConfigDir: globalConfigDir)
+        var registry = (try? await store.loadRegistry())
             ?? VaultRegistry(primary: name, vaults: [])
         let entry = VaultEntry(name: name, type: .local, path: localPath, access: access)
         try registry.addVault(entry)
         if registry.vaults.count == 1 { registry.primary = name }
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
 
         print("Vault '\(name)' registered (type: local, path: \(localPath), access: \(access.rawValue))")
     }
@@ -374,7 +377,7 @@ struct VaultAddSubcommand: ParsableCommand {
 
 // MARK: - mn vault remove
 
-struct VaultRemoveSubcommand: ParsableCommand {
+struct VaultRemoveSubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "remove",
         abstract: "Unregister a vault (use --delete to also remove files)"
@@ -386,9 +389,9 @@ struct VaultRemoveSubcommand: ParsableCommand {
     @Flag(name: .long, help: "Also delete the vault directory from disk")
     var delete: Bool = false
 
-    func run() throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        guard var registry = try loadRegistry(globalConfigDir: globalConfigDir) else {
+    func run() async throws {
+        let store = VaultStore()
+        guard var registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }
         guard let entry = registry.findVault(named: name) else {
@@ -396,7 +399,7 @@ struct VaultRemoveSubcommand: ParsableCommand {
         }
 
         if delete {
-            let dir = resolvedPath(for: entry)
+            let dir = store.resolvedPath(for: entry)
             let fm = FileManager.default
             if fm.fileExists(atPath: dir) {
                 try fm.removeItem(atPath: dir)
@@ -407,14 +410,14 @@ struct VaultRemoveSubcommand: ParsableCommand {
         }
 
         try registry.removeVault(named: name)
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
         print("Vault '\(name)' removed from registry.")
     }
 }
 
 // MARK: - mn vault set-primary
 
-struct VaultSetPrimarySubcommand: ParsableCommand {
+struct VaultSetPrimarySubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set-primary",
         abstract: "Set the default vault"
@@ -423,20 +426,20 @@ struct VaultSetPrimarySubcommand: ParsableCommand {
     @Argument(help: "Vault name to set as primary")
     var name: String
 
-    func run() throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        guard var registry = try loadRegistry(globalConfigDir: globalConfigDir) else {
+    func run() async throws {
+        let store = VaultStore()
+        guard var registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }
         try registry.setPrimary(name)
-        try saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try await store.saveRegistry(registry)
         print("Primary vault set to '\(name)'.")
     }
 }
 
 // MARK: - mn vault info
 
-struct VaultInfoSubcommand: ParsableCommand {
+struct VaultInfoSubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "info",
         abstract: "Show vault details"
@@ -447,16 +450,16 @@ struct VaultInfoSubcommand: ParsableCommand {
 
     @OptionGroup var outputOption: OutputOption
 
-    func run() throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        guard let registry = try loadRegistry(globalConfigDir: globalConfigDir) else {
+    func run() async throws {
+        let store = VaultStore()
+        guard let registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }
         guard let entry = registry.findVault(named: name) else {
             throw ValidationError("Vault '\(name)' not found.")
         }
 
-        let path = resolvedPath(for: entry)
+        let path = store.resolvedPath(for: entry)
         let fm = FileManager.default
         let exists = fm.fileExists(atPath: path)
         let noteCount = exists ? countNotes(at: path) : 0
