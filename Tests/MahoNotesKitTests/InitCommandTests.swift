@@ -25,7 +25,7 @@ struct InitCommandTests {
 
     @Test func resolveVaultRootICloud() {
         let path = resolveVaultRoot(storage: .icloud)
-        #expect(path.contains("iCloud~dev.pcca.mahonotes"))
+        #expect(path.contains("iCloud~dev~pcca~mahonotes"))
         #expect(path.hasSuffix("/vaults"))
     }
 

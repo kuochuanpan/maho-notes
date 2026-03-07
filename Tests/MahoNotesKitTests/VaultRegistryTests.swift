@@ -142,7 +142,7 @@ struct VaultRegistryTests {
     @Test func resolvedPathICloud() {
         let entry = VaultEntry(name: "personal", type: .icloud, access: .readWrite)
         let path = resolvedPath(for: entry)
-        #expect(path.contains("iCloud~dev.pcca.mahonotes"))
+        #expect(path.contains("iCloud~dev~pcca~mahonotes"))
         #expect(path.contains("/vaults/personal/"))
         #expect(!path.hasPrefix("~"))
     }

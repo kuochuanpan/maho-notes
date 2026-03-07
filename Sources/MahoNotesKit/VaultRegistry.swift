@@ -83,7 +83,7 @@ public enum VaultRegistryError: Error, CustomStringConvertible {
 public func resolvedPath(for entry: VaultEntry) -> String {
     switch entry.type {
     case .icloud:
-        let base = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        let base = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .github:
         let base = ("~/.maho/vaults" as NSString).expandingTildeInPath
@@ -265,7 +265,7 @@ public func mergeRegistries(
 
 // MARK: - Load / Save
 
-private let iCloudDocumentsPath = "~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/Documents"
+private let iCloudDocumentsPath = "~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents"
 private let registryFileName = "vaults.yaml"
 private let cacheFileName = "vaults-cache.yaml"
 

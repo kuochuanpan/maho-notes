@@ -10,7 +10,7 @@ public enum StorageOption: String, Sendable, CaseIterable {
 // MARK: - iCloud detection
 
 public func iCloudContainerExists() -> Bool {
-    let path = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes" as NSString).expandingTildeInPath
+    let path = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes" as NSString).expandingTildeInPath
     return FileManager.default.fileExists(atPath: path)
 }
 
@@ -20,12 +20,12 @@ public func iCloudContainerExists() -> Bool {
 public func resolveVaultRoot(storage: StorageOption?) -> String {
     switch storage {
     case .icloud:
-        return ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+        return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/vaults" as NSString).expandingTildeInPath
     case .local:
         return ("~/.maho/vaults" as NSString).expandingTildeInPath
     case nil:
         if iCloudContainerExists() {
-            return ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+            return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/vaults" as NSString).expandingTildeInPath
         }
         return ("~/.maho/vaults" as NSString).expandingTildeInPath
     }
@@ -178,7 +178,7 @@ func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, gl
         resolvedType = .github
     } else {
         let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
-        let iCloudRoot = ("~/Library/Mobile Documents/iCloud~dev.pcca.mahonotes/vaults" as NSString).expandingTildeInPath
+        let iCloudRoot = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/vaults" as NSString).expandingTildeInPath
         if cloudSync == .icloud && vaultPath.hasPrefix(iCloudRoot) {
             resolvedType = .icloud
         } else {
