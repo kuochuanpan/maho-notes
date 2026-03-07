@@ -818,6 +818,27 @@ private struct CollectionNodeView: View {
         .tag(path)
         .padding(.leading, CGFloat(indentLevel + 1) * 14)
         .contentShape(Rectangle())
+        #if os(macOS)
+        .onTapGesture {
+            // Explicit tap handler needed because .onDrag intercepts mouse-down,
+            // preventing List(selection:) from receiving the click.
+            if NSEvent.modifierFlags.contains(.command) {
+                // Cmd+Click: toggle in multi-selection
+                if appState.navigatorSelection.contains(path) {
+                    appState.navigatorSelection.remove(path)
+                } else {
+                    appState.navigatorSelection.insert(path)
+                }
+            } else {
+                // Normal click: single select
+                appState.navigatorSelection = [path]
+            }
+        }
+        #else
+        .onTapGesture {
+            appState.navigatorSelection = [path]
+        }
+        #endif
         .contextMenu {
             Button(role: .destructive) {
                 onDeleteNote(path, child.name)
