@@ -63,6 +63,8 @@
     - **System theme**: `appTheme` setting correctly switches all zones; "system" follows macOS appearance.
     - **Implementation**: `MahoTheme.swift` provides all colors as static computed properties reading `@Environment(\.colorScheme)` via a `MahoThemeColors` helper. Views reference `MahoTheme.vaultRailBackground`, `MahoTheme.navigatorBackground(for:)`, etc.
 
+29. **VaultStore — unified data access layer**: All vault-related YAML/JSON persistence (registry, global config, vault config, device config) goes through a single `VaultStore` actor. Motivation: config read/write was scattered across 6+ files (`VaultRegistry.swift`, `Config.swift`, `Auth.swift`, `VaultInit.swift`, `Collection.swift`, `GitSync.swift`) with overlapping responsibilities, inconsistent path resolution, and no concurrency safety. `VaultStore` is the single entry point for: (a) registry load/save with proper iCloud → local → cache fallback, (b) path resolution (one function, not a free function), (c) typed config structs (`VaultConfig`, `DeviceConfig`, `GlobalConfig`) replacing `[String: Any]`, (d) cloud migration with cleanup. `VaultEntry.path` is only meaningful for `.local` type — ignored for `.icloud`/`.github`/`.device` (paths derived from name). See [vault-store.md](vault-store.md).
+
 ---
 
-*Design by 真帆 🔭 — 2026-03-04, updated 2026-03-06*
+*Design by 真帆 🔭 — 2026-03-04, updated 2026-03-07*

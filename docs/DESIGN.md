@@ -1,17 +1,6 @@
 # Maho Notes — Design Overview
 
-> A multilingual personal knowledge base with beautiful markdown rendering, cross-platform native apps, on-device vector search, and selective publishing.
-
-## Overview
-
-Maho Notes is a markdown-first knowledge management system with first-class support for **Chinese (中文)**, **English**, **Japanese (日本語)**, and **Korean (한국어)**. It supports multiple vaults (personal, work, community reference), multiple collections within each vault, on-device multilingual semantic search across all vaults, and the ability to selectively publish notes as public web pages via GitHub Pages. Works offline, syncs via iCloud, and optionally integrates with GitHub for version control, sharing, and publishing.
-
-### Multilingual Support 🌐
-- **UI**: Chinese, English, Japanese, Korean (user-selectable)
-- **Content**: Full Unicode support, mixed-language notes
-- **Search**: FTS5 + vector search work across all four languages (powered by [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite))
-- **Ruby annotation**: `{base|annotation}` syntax — works for Japanese furigana (`{漢字|かんじ}`), Taiwanese Tâi-lô (`{台灣|Tâi-oân}`), Chinese Zhuyin/Pinyin (`{漢字|ㄏㄢˋ ㄗˋ}`), Korean Hanja (`{韓國|한국}`), etc.
-- **Embedding models**: Multilingual semantic search across 中英日韓 via `swift-embeddings` (MLTensor). Three tiers: MiniLM (80MB, default), E5-Small (120MB), E5-Large (2.2GB, best quality)
+> A multilingual personal knowledge base with markdown rendering, cross-platform native apps, on-device vector search, and selective publishing.
 
 ## Architecture
 
@@ -23,112 +12,110 @@ Maho Notes is a markdown-first knowledge management system with first-class supp
            │                        │
      ┌─────▼────────────────────────▼──────┐
      │           MahoNotesKit              │
-     │  (Markdown, Search, CRUD, Sync)     │
+     │                                     │
+     │  ┌─────────────────────────────┐    │
+     │  │  VaultStore (actor)         │    │ ← single entry point
+     │  │  Registry, Config, Paths    │    │   for all persistence
+     │  └─────────────────────────────┘    │
+     │                                     │
+     │  Vault · Note · Collection          │
+     │  SearchIndex · VectorIndex          │
+     │  GitSync · GitHubSyncManager        │
+     │  SiteGenerator · Auth               │
      └──┬────────┬──────────┬──────┬───────┘
         │        │          │      │
-        │   ┌────▼────────┐ │  ┌───▼──────┐
-        │   │swift-cjk-   │ │  │swift-    │
-        │   │sqlite       │ │  │embeddings│
-        │   │FTS5 + CJK + │ │  │(MLTensor)│
-        │   │sqlite-vec   │ │  └──────────┘
-        │   └──┬──────────┘ │
-        │  ┌───▼─────┐  ┌──▼──────┐
-        │  │Per-vault │  │Per-vault│
-        │  │FTS index │  │vec index│
-        │  └─────────┘  └─────────┘
-        │
-  ┌─────▼──────────────────────────────────────────────┐
-  │                  Vault Registry                     │
-  │         (iCloud container: vaults.yaml)             │
-  │                                                     │
-  │  ┌──────────────┐ ┌──────────────┐ ┌────────────┐  │
-  │  │ Primary Vault│ │ Work Vault   │ │ Community  │  │
-  │  │ (iCloud+Git) │ │ (iCloud)     │ │ (read-only)│  │
-  │  │ read-write   │ │ read-write   │ │ pull-only  │  │
-  │  └──────┬───────┘ └──────┬───────┘ └──────┬─────┘  │
-  └─────────┼────────────────┼────────────────┼────────┘
-            │                │                │
-    ┌───────▼───┐    ┌──────▼──────┐   ┌─────▼──────┐
-    │  iCloud    │    │   GitHub    │   │   GitHub   │
-    │  (auto)    │    │  (owned)    │   │  (public)  │
-    └───────┬───┘    └──────┬──────┘   └────────────┘
-            │               │
-            │        ┌──────▼──────┐
-            │        │ GitHub Pages│
-            │        │ (published) │
-            │        └─────────────┘
-            │
-  Cross-vault search spans all vaults (FTS5 + vector)
-
-Sync: iCloud (automatic per vault, Cloud Sync ON) + GitHub (explicit, mn sync)
-Vaults: iCloud (Cloud Sync ON) / Device (app-managed local) / GitHub (clone) / Local (macOS CLI)
-Publishing: Vault → static HTML → user's GitHub repo → GitHub Pages
+   ┌────▼────┐ ┌─▼──────┐ ┌▼─────┐│
+   │swift-cjk│ │swift-  │ │swift-││
+   │-sqlite  │ │embedd- │ │github││
+   │FTS5+CJK │ │ings    │ │-api  ││
+   │+vec     │ │MLTensor│ │      ││
+   └─────────┘ └────────┘ └──────┘│
 ```
 
-## Repositories (Our Instance)
+### Key Principles
 
-| Repo | Visibility | Content |
-|------|-----------|---------|
-| `kuochuanpan/maho-notes` | Public | App + CLI source code, design docs (open source) |
-| `kuochuanpan/maho-vault` | Private | Our personal vault (other users create their own) |
-| `mahopan/swift-cjk-sqlite` | Public | SQLite 3.48 + FTS5 + CJK tokenizer (SPM dependency) |
-| `kuochuanpan/maho-getting-started` | Public | Tutorial vault — auto-added on `mn init` as read-only vault |
+- **Markdown-first**: Notes are `.md` files with YAML frontmatter. No proprietary format.
+- **Multilingual**: FTS5 + vector search across 中英日韓 via `swift-cjk-sqlite`.
+- **Offline-first**: Everything works without network. Sync is additive.
+- **Single source of truth**: `VaultStore` actor owns all config/registry persistence. See [vault-store.md](vault-store.md).
 
-### Importing External Repos
+## Storage Layout
 
-Any GitHub repo can be added as a vault via `mn vault add`. The CLI **auto-detects** both access level and vault format via GitHub API:
+```
+~/.maho/                          # Global config dir
+├── config.yaml                   # Global: auth, embed model, sync.cloud
+├── vaults.yaml                   # Vault registry (cloud sync OFF)
+├── vaults-cache.yaml             # Offline cache of iCloud registry
+└── vaults/                       # Device + GitHub vault storage
+    ├── my-vault/
+    └── some-repo/
 
-```bash
-mn vault add cheatsheets --github detailyang/awesome-cheatsheet
-# Auto-detects: no push access → read-only, no maho.yaml → auto-import
+~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/
+├── config/
+│   └── vaults.yaml               # Vault registry (cloud sync ON)
+└── vaults/                       # iCloud vault storage
+    └── my-vault/
 
-mn vault add my-notes --github user/my-notes
-# Auto-detects: push access → read-write, has maho.yaml → native Maho vault
+<vault>/                          # Any vault directory
+├── maho.yaml                     # Vault config: author, collections, github, site
+├── .maho/
+│   ├── config.yaml               # Device-local: embed model override, auth token
+│   └── sync-manifest.json        # REST API sync state (GitHubSyncManager)
+├── .gitignore                    # Always includes .maho/
+├── <collection>/
+│   ├── _index.md                 # Collection metadata + ordering
+│   └── *.md                      # Notes
+└── getting-started/              # Optional tutorial collection
 ```
 
-**Auto-detection logic:**
-1. **Access**: GitHub API `permissions.push` — no push → read-only (pull only, never push), push → read-write
-2. **Format**: Checks for `maho.yaml` in repo root — present → native Maho vault, absent → auto-generate `maho.yaml` from directory structure (stored locally, not pushed to source repo)
+## Vault Types
 
-Override flags (`--readonly`, `--readwrite`, `--import`) skip auto-detection when explicit control is needed. See [Design Decision #17](decisions.md).
+| Type | Storage | Sync | Created by |
+|------|---------|------|------------|
+| `.icloud` | iCloud container | iCloud automatic | App (cloud sync ON) |
+| `.device` | `~/.maho/vaults/` | None (local only) | App (cloud sync OFF), CLI |
+| `.github` | `~/.maho/vaults/` | GitHub (git CLI or REST API) | `mn vault add --github`, App import |
+| `.local` | User-specified path | None | `mn vault add --path` |
 
-## Tech Stack Summary
+## Sync Strategy
+
+- **iCloud**: Automatic via `NSMetadataQuery` monitoring. Conflict resolution via `NSFileVersion`.
+- **GitHub (CLI)**: `mn sync` — uses `git` CLI (clone/pull/push). macOS only.
+- **GitHub (App)**: `GitHubSyncManager` — REST API via `swift-github-api`. Works on all Apple platforms.
+- **SyncCoordinator**: Auto-sync for GitHub vaults in the app — debounce 30s push + 5min periodic pull.
+- **Conflict**: Device-name based conflict files (`note.conflict-{DeviceName}.md`).
+
+## Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| CLI | Swift (shares MahoNotesKit) |
-| Native App | SwiftUI universal app (macOS + iPadOS + iOS, one project) |
-| Shared Logic | MahoNotesKit (Swift Package) — markdown, search, sync, CRUD |
-| Published Sites | Static HTML generated by app, hosted on user's GitHub Pages |
-| Markdown | swift-markdown (native), Swift HTML templates (static site generator) |
-| Syntax Highlighting | TreeSitter (native app, code block highlighting), Splash (Swift-native, static site fallback), highlight.js (static site) |
-| Math | WKWebView + KaTeX (native), KaTeX (static site) |
-| Ruby Annotation | `{base|annotation}` → `<ruby>` (web) / AttributedString (native) — furigana, Tâi-lô, Zhuyin, Pinyin, etc. |
-| Database | [`swift-cjk-sqlite`](https://github.com/mahopan/swift-cjk-sqlite) v0.2.0 (SQLite 3.48 + FTS5 + CJK tokenizer + vendored sqlite-vec v0.1.6) |
-| Embeddings | Tiered: all-MiniLM-L6-v2 (~90MB, 384d, default) / multilingual-e5-small (~470MB, 384d) / multilingual-e5-large (~2.2GB, 1024d) |
-| Embedding Runtime | [`swift-embeddings`](https://github.com/jkrukowski/swift-embeddings) v0.0.26 (MLTensor, macOS 15+ / iOS 18+). Supports Bert + XLMRoberta model families. |
-| Sync | iCloud (app default, Cloud Sync ON) + Device (local, Cloud Sync OFF) + GitHub (CLI/power user/publishing) |
-| Git | Shell out to `git` (CLI) / GitHub REST API (iOS + macOS app, for sync + publishing) |
-| Auth | GitHub OAuth via `ASWebAuthenticationSession` (iOS/macOS) / `gh auth` (CLI) |
-| Hosting | GitHub Pages (user-owned, for published notes) |
-| Domain | notes.pcca.dev |
+| Shared logic | MahoNotesKit (Swift Package) |
+| Native app | SwiftUI (macOS + iPadOS + iOS) |
+| CLI | Swift (`mn`) via ArgumentParser |
+| Database | `swift-cjk-sqlite` v0.2.0 (SQLite 3.48 + FTS5 + CJK + sqlite-vec) |
+| Embeddings | `swift-embeddings` (MiniLM / E5-Small / E5-Large) |
+| GitHub API | `swift-github-api` v0.2.0 (Device Flow OAuth + Git Data API) |
+| Auth | Device Flow OAuth (App) / `gh auth` + env (CLI) |
+| Publishing | Static HTML → GitHub Pages (`notes.pcca.dev`) |
+
+## Repositories
+
+| Repo | Purpose |
+|------|---------|
+| `kuochuanpan/maho-notes` | App + CLI + MahoNotesKit (public) |
+| `kuochuanpan/maho-vault` | Personal vault (private) |
+| `kuochuanpan/maho-getting-started` | Tutorial vault (public) |
+| `mahopan/swift-cjk-sqlite` | FTS5 CJK tokenizer (public) |
+| `mahopan/swift-github-api` | GitHub API client (public) |
 
 ## Documentation
 
 | Doc | Contents |
 |-----|----------|
-| [Data Model](data-model.md) | Note structure, frontmatter, config (`maho.yaml`), directory layout |
-| [CLI Reference](cli.md) | All `mn` commands, AI agent workflow, global flags, vault resolution |
-| [Sync Strategy](sync-strategy.md) | iCloud + GitHub sync, multi-vault architecture, vault registry, conflict handling |
-| [Search](search.md) | FTS5, vector search, embedding models, search modes |
-| [Native App](app.md) | SwiftUI universal app, markdown rendering, editor, platform adaptation |
-| [Publishing](publishing.md) | Static site generation, GitHub Pages, incremental publishing |
-| [Design Decisions](decisions.md) | Decision log (#1–#24) |
-
-## Implementation
-
-These docs describe the **target state** — what Maho Notes will look like when complete. Implementation order will be planned separately.
+| [VaultStore Design](vault-store.md) | Unified data access layer (RFC) |
+| [Design Decisions](decisions.md) | Decision log (#1–#28) |
+| `archive/` | Historical design docs (outdated but preserved) |
 
 ---
 
-*Design by 真帆 🔭 — 2026-03-04, updated 2026-03-05*
+*Design by 真帆 🔭 — 2026-03-04, updated 2026-03-07*
