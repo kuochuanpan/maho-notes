@@ -349,7 +349,7 @@ struct VaultRailView: View {
                 }
 
                 let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
-                try appState.importGitHubVault(
+                try await appState.importGitHubVault(
                     repo: repo,
                     name: vaultName.isEmpty ? nil : vaultName
                 )

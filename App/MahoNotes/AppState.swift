@@ -1071,38 +1071,22 @@ final class AppState {
         selectedVaultName = name
     }
 
-    /// Import a vault from GitHub.
+    /// Import a vault from GitHub using the REST API (no git binary required).
     @MainActor
-    func importGitHubVault(repo: String, name: String?) throws {
+    func importGitHubVault(repo: String, name: String?) async throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
         let vaultRoot = resolveVaultRoot(storage: storage)
 
-        let registeredName: String
-        do {
-            registeredName = try cloneGitHubVault(
-                repo: repo,
-                vaultRoot: vaultRoot,
-                name: name,
-                globalConfigDir: globalConfigDir
-            )
-        } catch is VaultInitError {
-            // git clone failed (e.g., private repo without SSH keys).
-            // Create the vault directory so cloneGitHubVault's "already exists"
-            // path will register it. SyncCoordinator will then clone content
-            // via GitHub REST API using the OAuth token.
-            let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
-            let vaultPath = (vaultRoot as NSString).appendingPathComponent(vaultName)
-            try FileManager.default.createDirectory(
-                atPath: vaultPath, withIntermediateDirectories: true
-            )
-            registeredName = try cloneGitHubVault(
-                repo: repo,
-                vaultRoot: vaultRoot,
-                name: name,
-                globalConfigDir: globalConfigDir
-            )
-        }
+        let token = try Auth().resolveToken()
+
+        let registeredName = try await importGitHubVaultViaAPI(
+            repo: repo,
+            vaultRoot: vaultRoot,
+            name: name,
+            token: token.token,
+            globalConfigDir: globalConfigDir
+        )
 
         loadRegistry()
         selectedVaultName = registeredName
