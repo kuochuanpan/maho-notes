@@ -49,6 +49,7 @@ struct VaultRailView: View {
             }
 
             Divider()
+                .overlay(Color.white.opacity(0.2))
                 .padding(.horizontal, 6)
 
             // Scrollable vault icons
@@ -72,13 +73,14 @@ struct VaultRailView: View {
 
             // Settings pinned at bottom
             Divider()
+                .overlay(Color.white.opacity(0.2))
                 .padding(.horizontal, 6)
 
             #if os(macOS)
             SettingsLink {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.7))
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
@@ -87,13 +89,13 @@ struct VaultRailView: View {
             #else
             Image(systemName: "gearshape")
                 .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.7))
                 .frame(width: 28, height: 28)
                 .padding(.vertical, 8)
             #endif
         }
         .frame(width: 48)
-        .background(.bar)
+        .background(MahoTheme.vaultRailBackground)
     }
 
     // MARK: - Add Vault Popover
@@ -344,6 +346,7 @@ struct VaultRailView: View {
 
     private var divider: some View {
         Divider()
+            .overlay(Color.white.opacity(0.2))
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
     }

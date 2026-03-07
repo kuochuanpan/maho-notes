@@ -188,6 +188,7 @@ private struct RejectDropDelegate: DropDelegate {
 /// B — Tree navigator panel (~240pt) showing collections and recent notes.
 struct NavigatorView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var dragState = DragState()
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
@@ -217,7 +218,7 @@ struct NavigatorView: View {
             scrollContent
         }
         .frame(width: appState.navigatorWidth)
-        .background(.background)
+        .background(MahoTheme.navigatorBackground(for: colorScheme))
         .sheet(isPresented: $showingNewCollection) {
             newCollectionSheet
         }

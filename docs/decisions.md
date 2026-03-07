@@ -54,6 +54,15 @@
 
 27. **`_index.md`-based ordering**: Replaced numeric file prefix ordering (`001-slug.md`, `002-slug.md`) with `_index.md` frontmatter-based ordering. Each directory's `_index.md` stores `order:` (note filenames) and `children:` (sub-directory names) fields that control display order. Rationale: (a) **iCloud-friendly** — reordering changes one file (`_index.md`) instead of renaming every file in the directory; (b) **clean filenames** — no `001-` noise in URLs, Git diffs, or external tools; (c) **graceful degradation** — files not listed in `order:` are appended alphabetically, so externally-created files appear automatically. Top-level collection ordering still uses `maho.yaml` `collections:` array. This also enables full drag & drop: notes can be dragged between collections, collections can be dragged into other collections, and sub-collections can be reordered — all backed by `_index.md` writes. Migration from numeric prefixes strips the `NNN-` prefix and populates `_index.md` with the correct order.
 
+28. **NTHU Purple theme system (清華紫)**: Replaced the plain system-default color scheme (all-black dark / all-white light) with a custom purple theme inspired by NTHU's official school color. Centralized in a `MahoTheme` struct with static color properties for each zone. Color scheme:
+    - **A column (VaultRailView)**: `#7F1084` (NTHU Seance purple) — same in both dark and light modes. All text/icons on A column use white for contrast.
+    - **B column (NavigatorView)**: Dark mode `#2A0A2E` (deep purple-black), Light mode `#F3E6F5` (pale lavender). Text adapts: white/light in dark mode, dark in light mode.
+    - **C column (NoteContentView)**: Unchanged — system dark gray / white.
+    - **Settings window**: Follows C column colors (system default). Bug fix: `preferredColorScheme` now applied to Settings scene (independent window wasn't inheriting from ContentView).
+    - **Title bar**: Uses `.toolbarBackground` with A column color to match VaultRailView.
+    - **System theme**: `appTheme` setting correctly switches all zones; "system" follows macOS appearance.
+    - **Implementation**: `MahoTheme.swift` provides all colors as static computed properties reading `@Environment(\.colorScheme)` via a `MahoThemeColors` helper. Views reference `MahoTheme.vaultRailBackground`, `MahoTheme.navigatorBackground(for:)`, etc.
+
 ---
 
 *Design by 真帆 🔭 — 2026-03-04, updated 2026-03-06*

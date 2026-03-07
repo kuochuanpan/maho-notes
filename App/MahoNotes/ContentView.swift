@@ -197,11 +197,13 @@ struct MacContentView: View {
                 .padding(.horizontal, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.primary.opacity(0.06))
+                        .fill(Color.white.opacity(0.15))
                 )
             }
         }
         } // NavigationStack
+        .toolbarBackground(MahoTheme.vaultRailBackground, for: .windowToolbar)
+        .toolbarColorScheme(.dark, for: .windowToolbar)
         .onChange(of: appState.searchQuery) {
             if !appState.searchQuery.isEmpty && !appState.showSearchPanel {
                 appState.showSearchPanel = true

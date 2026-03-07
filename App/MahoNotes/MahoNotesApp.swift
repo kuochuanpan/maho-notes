@@ -4,6 +4,15 @@ import MahoNotesKit
 @main
 struct MahoNotesApp: App {
     @State private var appState = AppState()
+    @AppStorage("appTheme") private var appTheme: String = "system"
+
+    private var settingsColorScheme: ColorScheme? {
+        switch appTheme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -57,6 +66,7 @@ struct MahoNotesApp: App {
         Settings {
             SettingsView()
                 .environment(appState)
+                .preferredColorScheme(settingsColorScheme)
         }
         #endif
     }
