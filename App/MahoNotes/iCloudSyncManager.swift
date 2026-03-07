@@ -56,7 +56,9 @@ final class iCloudSyncManager: @unchecked Sendable {
             object: query,
             queue: .main
         ) { [weak self] _ in
-            self?.handleQueryUpdate()
+            Task { @MainActor in
+                self?.handleQueryUpdate()
+            }
         }
 
         NotificationCenter.default.addObserver(
@@ -64,7 +66,9 @@ final class iCloudSyncManager: @unchecked Sendable {
             object: query,
             queue: .main
         ) { [weak self] _ in
-            self?.handleQueryUpdate()
+            Task { @MainActor in
+                self?.handleQueryUpdate()
+            }
         }
 
         query.start()
@@ -166,11 +170,14 @@ final class iCloudSyncManager: @unchecked Sendable {
 
         // Refresh conflict list
         conflicts.removeAll { $0.noteURL == conflict.noteURL }
-        onFilesChanged?()
+        Task { @MainActor [weak self] in
+            self?.onFilesChanged?()
+        }
     }
 
     // MARK: - Private
 
+    @MainActor
     private func handleQueryUpdate() {
         guard let query = metadataQuery else { return }
 
@@ -188,9 +195,10 @@ final class iCloudSyncManager: @unchecked Sendable {
         }
         pendingDownloads = downloading
 
-        // Debounce the reload callback
+        // Debounce the reload callback — must run on MainActor
+        // to safely access @Observable properties and trigger UI updates
         debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
+        debounceTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             self?.onFilesChanged?()
