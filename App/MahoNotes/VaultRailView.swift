@@ -12,6 +12,7 @@ struct VaultRailView: View {
     @State private var githubVaultName = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
+    @State private var showingDeviceFlow = false
 
     private enum AddVaultMode: Identifiable {
         case create, github
@@ -96,6 +97,20 @@ struct VaultRailView: View {
         }
         .frame(width: 48)
         .background(MahoTheme.vaultRailBackground)
+        .onChange(of: appState.authManager.userCode) { _, newValue in
+            showingDeviceFlow = newValue != nil
+        }
+        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
+            if authenticated { showingDeviceFlow = false }
+        }
+        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            if !appState.authManager.isAuthenticated {
+                appState.authManager.cancelAuth()
+                isCreating = false
+            }
+        }) {
+            DeviceFlowSheet(authManager: appState.authManager)
+        }
     }
 
     // MARK: - Add Vault Popover
