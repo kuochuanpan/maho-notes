@@ -73,6 +73,8 @@ public final class VectorIndex: @unchecked Sendable {
             self.db = try Database(path: dbPath)
         }
 
+        try db.execute("PRAGMA journal_mode=WAL")
+
         try ensureSchema()
     }
 
