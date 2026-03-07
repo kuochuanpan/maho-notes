@@ -35,19 +35,19 @@ struct VaultOption: ParsableArguments {
     var resolvedPath: String {
         if let vault {
             if let entry = findEntry(vault) {
-                return VaultStore().resolvedPath(for: entry)
+                return VaultStore.shared.resolvedPath(for: entry)
             }
             return vault
         }
         if let env = ProcessInfo.processInfo.environment["MN_VAULT"] {
             if let entry = findEntry(env) {
-                return VaultStore().resolvedPath(for: entry)
+                return VaultStore.shared.resolvedPath(for: entry)
             }
             return env
         }
         if let registry = try? VaultStore(globalConfigDir: Self.globalConfigDir).loadRegistrySync(),
            let primary = registry.primaryVault() {
-            return VaultStore().resolvedPath(for: primary)
+            return VaultStore.shared.resolvedPath(for: primary)
         }
         // Legacy fallback
         let icloudPath = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents" as NSString).expandingTildeInPath

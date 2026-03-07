@@ -30,7 +30,7 @@ struct InitCommand: AsyncParsableCommand {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let globalConfigPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
         let isFirstTime = !FileManager.default.fileExists(atPath: globalConfigPath)
-        let store = VaultStore()
+        let store = VaultStore.shared
 
         if isFirstTime {
             try await runFirstTimeSetup(globalConfigDir: globalConfigDir, store: store)

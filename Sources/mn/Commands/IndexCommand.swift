@@ -123,7 +123,7 @@ struct IndexCommand: AsyncParsableCommand {
             let deleted: Int
         }
         var allStats: [VaultStats] = []
-        let store = VaultStore()
+        let store = VaultStore.shared
 
         for entry in entries {
             let path = store.resolvedPath(for: entry)

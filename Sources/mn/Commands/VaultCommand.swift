@@ -27,7 +27,7 @@ struct VaultListSubcommand: AsyncParsableCommand {
     @OptionGroup var outputOption: OutputOption
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         guard let registry = try await store.loadRegistry() else {
             if outputOption.json {
                 print("[]")
@@ -143,7 +143,7 @@ struct VaultAddSubcommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         if icloud {
             try await addICloud(store: store)
         } else if device {
@@ -390,7 +390,7 @@ struct VaultRemoveSubcommand: AsyncParsableCommand {
     var delete: Bool = false
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         guard var registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }
@@ -427,7 +427,7 @@ struct VaultSetPrimarySubcommand: AsyncParsableCommand {
     var name: String
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         guard var registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }
@@ -451,7 +451,7 @@ struct VaultInfoSubcommand: AsyncParsableCommand {
     @OptionGroup var outputOption: OutputOption
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         guard let registry = try await store.loadRegistry() else {
             throw ValidationError("No vault registry found.")
         }

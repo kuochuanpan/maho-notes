@@ -27,7 +27,7 @@ struct SearchCommand: AsyncParsableCommand {
     var limit: Int = 10
 
     func run() async throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         if semantic || hybrid {
             if #available(macOS 15.0, *) {
                 // Cross-vault semantic/hybrid: iterate all vaults
@@ -195,7 +195,7 @@ struct SearchCommand: AsyncParsableCommand {
     // MARK: - Cross-vault
 
     private func runAllVaults(entries: [VaultEntry]) throws {
-        let store = VaultStore()
+        let store = VaultStore.shared
         if outputOption.json {
             var jsonArray: [[String: Any]] = []
             for entry in entries {

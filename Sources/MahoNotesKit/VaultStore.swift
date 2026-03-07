@@ -11,6 +11,9 @@ import Yams
 /// The actor delegates to them, adding typed config support and cache/cleanup features.
 public actor VaultStore {
 
+    /// Shared instance for the default global config directory (~/.maho).
+    public static let shared = VaultStore()
+
     /// Root directory for global config (default: `~/.maho`).
     private let globalConfigDir: String
 

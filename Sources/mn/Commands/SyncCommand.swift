@@ -89,7 +89,7 @@ struct SyncCommand: ParsableCommand {
 
         var results: [[String: Any]] = []
 
-        let store = VaultStore()
+        let store = VaultStore.shared
         for entry in syncable {
             let path = store.resolvedPath(for: entry)
             if !outputOption.json {

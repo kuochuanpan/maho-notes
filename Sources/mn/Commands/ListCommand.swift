@@ -148,7 +148,7 @@ struct ListCommand: ParsableCommand {
             return
         }
 
-        let store = VaultStore()
+        let store = VaultStore.shared
 
         if outputOption.json {
             // Emit {"vault1": [...notes], "vault2": [...notes]}
