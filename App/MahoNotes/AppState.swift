@@ -107,8 +107,17 @@ final class AppState {
     /// Merge local vaults with cloud registry.
     @MainActor
     func performMerge() {
+        // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
+        let localRegistrySnapshot: VaultRegistry?
+        do {
+            localRegistrySnapshot = try MahoNotesKit.loadRegistry()
+        } catch {
+            localRegistrySnapshot = nil
+        }
+
         guard let cloudRegistry = pendingCloudRegistry,
-              let localRegistry = try? MahoNotesKit.loadRegistry() ?? VaultRegistry(primary: "default", vaults: [])
+              let localRegistry = localRegistrySnapshot ?? VaultRegistry(primary: "default", vaults: [])
+              as VaultRegistry?
         else {
             pendingCloudRegistry = nil
             showMergeSheet = false
@@ -117,19 +126,21 @@ final class AppState {
 
         var (merged, conflicts) = mergeRegistries(local: localRegistry, cloud: cloudRegistry)
 
-        // Activate cloud sync first, then migrate and save
+        // Activate cloud sync, then migrate device vaults to iCloud and save
         applyCloudSyncMode(.icloud)
         if let migrated = try? migrateVaultsToCloud(registry: merged) {
             merged = migrated
         }
         try? saveRegistry(merged)
 
-        // Update local state
+        // Update local state directly (avoid loadRegistry re-reading before iCloud propagates)
         self.vaults = merged.vaults
         self.primaryVaultName = merged.primary
         self.lastMergeConflicts = conflicts
         self.pendingCloudRegistry = nil
         self.showMergeSheet = false
+
+        // Now reload to pick up resolved paths
         loadRegistry()
 
         if !conflicts.isEmpty {
@@ -140,13 +151,24 @@ final class AppState {
     /// Replace cloud registry with local registry (discard cloud).
     @MainActor
     func replaceCloudWithLocal() {
-        applyCloudSyncMode(.icloud)
-        if var localRegistry = try? MahoNotesKit.loadRegistry() {
-            if let migrated = try? migrateVaultsToCloud(registry: localRegistry) {
-                localRegistry = migrated
-            }
-            try? saveRegistry(localRegistry)
+        // Load local registry BEFORE switching to iCloud mode
+        // (otherwise loadRegistry reads from iCloud and gets the cloud registry)
+        let localRegistrySnapshot: VaultRegistry?
+        do {
+            localRegistrySnapshot = try MahoNotesKit.loadRegistry()
+        } catch {
+            localRegistrySnapshot = nil
         }
+
+        applyCloudSyncMode(.icloud)
+
+        if var registry = localRegistrySnapshot {
+            if let migrated = try? migrateVaultsToCloud(registry: registry) {
+                registry = migrated
+            }
+            try? saveRegistry(registry)
+        }
+
         pendingCloudRegistry = nil
         showMergeSheet = false
         loadRegistry()
