@@ -17,29 +17,29 @@ private let oauthClientId = "Ov23libHvZdcws5ZS8rG"
 /// Call `authenticate()` to start the Device Flow.
 /// Call `disconnect()` to clear the stored token.
 @Observable
-@MainActor
-final class GitHubAuthManager {
+final class GitHubAuthManager: @unchecked Sendable {
 
     // MARK: - Observable State
 
-    var isAuthenticated: Bool = false
-    var username: String?
-    var isAuthenticating: Bool = false
-    var authError: String?
+    @MainActor var isAuthenticated: Bool = false
+    @MainActor var username: String?
+    @MainActor var isAuthenticating: Bool = false
+    @MainActor var authError: String?
 
     /// The user code to display during Device Flow authorization.
     /// Non-nil only while `isAuthenticating` is true and waiting for user to authorize.
-    var userCode: String?
+    @MainActor var userCode: String?
 
     /// The verification URL where the user enters the code.
-    var verificationURL: String?
+    @MainActor var verificationURL: String?
 
     /// Active polling task (so we can cancel on disconnect or re-auth).
-    private var pollingTask: Task<Void, Never>?
+    @MainActor private var pollingTask: Task<Void, Never>?
 
     // MARK: - Public API
 
     /// Check whether a valid stored token exists, and if so fetch the GitHub username.
+    @MainActor
     func checkAuth() async {
         // Resolve token off-actor — may run `gh auth token` subprocess on macOS.
         let token: String? = await withCheckedContinuation { continuation in
@@ -73,6 +73,7 @@ final class GitHubAuthManager {
     /// 4. Stores the token and fetches the username on success.
     ///
     /// - Throws: `OAuthError` or network errors on failure.
+    @MainActor
     func authenticate() async throws {
         // Cancel any existing polling
         pollingTask?.cancel()
@@ -123,6 +124,7 @@ final class GitHubAuthManager {
     }
 
     /// Cancel any in-progress authentication.
+    @MainActor
     func cancelAuth() {
         pollingTask?.cancel()
         pollingTask = nil
@@ -132,6 +134,7 @@ final class GitHubAuthManager {
     }
 
     /// Remove the stored token and reset auth state.
+    @MainActor
     func disconnect() {
         cancelAuth()
         removeStoredToken()
