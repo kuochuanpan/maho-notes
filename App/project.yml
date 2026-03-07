@@ -31,6 +31,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
         CODE_SIGN_ENTITLEMENTS: MahoNotes/MahoNotes.entitlements
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: MahoNotes/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: YES
         CODE_SIGN_STYLE: Automatic
