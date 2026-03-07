@@ -1088,9 +1088,15 @@ final class AppState {
             )
         } catch is VaultInitError {
             // git clone failed (e.g., private repo without SSH keys).
-            // Register the vault anyway — SyncCoordinator will clone
-            // content via GitHub REST API using the OAuth token.
-            registeredName = try registerGitHubVaultWithoutClone(
+            // Create the vault directory so cloneGitHubVault's "already exists"
+            // path will register it. SyncCoordinator will then clone content
+            // via GitHub REST API using the OAuth token.
+            let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
+            let vaultPath = (vaultRoot as NSString).appendingPathComponent(vaultName)
+            try FileManager.default.createDirectory(
+                atPath: vaultPath, withIntermediateDirectories: true
+            )
+            registeredName = try cloneGitHubVault(
                 repo: repo,
                 vaultRoot: vaultRoot,
                 name: name,
@@ -1100,53 +1106,6 @@ final class AppState {
 
         loadRegistry()
         selectedVaultName = registeredName
-    }
-
-    /// Register a GitHub vault without git-cloning — create the directory structure
-    /// so SyncCoordinator can populate it via REST API sync.
-    private func registerGitHubVaultWithoutClone(
-        repo: String, vaultRoot: String, name: String?, globalConfigDir: String
-    ) throws -> String {
-        let fm = FileManager.default
-        let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
-        let vaultPath = (vaultRoot as NSString).appendingPathComponent(vaultName)
-
-        if !fm.fileExists(atPath: vaultRoot) {
-            try fm.createDirectory(atPath: vaultRoot, withIntermediateDirectories: true)
-        }
-        if !fm.fileExists(atPath: vaultPath) {
-            try fm.createDirectory(atPath: vaultPath, withIntermediateDirectories: true)
-        }
-
-        // Generate maho.yaml
-        let mahoYaml = (vaultPath as NSString).appendingPathComponent("maho.yaml")
-        if !fm.fileExists(atPath: mahoYaml) {
-            let content = """
-            author:
-              name: ""
-              url: ""
-            collections: []
-            github:
-              repo: "\(repo)"
-            site:
-              domain: ""
-              title: My Notes
-              theme: default
-            """
-            try content.write(toFile: mahoYaml, atomically: true, encoding: .utf8)
-        }
-
-        // Ensure .maho/ dir
-        let mahoDir = (vaultPath as NSString).appendingPathComponent(".maho")
-        if !fm.fileExists(atPath: mahoDir) {
-            try fm.createDirectory(atPath: mahoDir, withIntermediateDirectories: true)
-        }
-
-        try registerVaultEntry(
-            name: vaultName, vaultPath: vaultPath, githubRepo: repo,
-            globalConfigDir: globalConfigDir, readOnly: false, vaultType: .github
-        )
-        return vaultName
     }
 
     // MARK: - Collection & Note Creation
