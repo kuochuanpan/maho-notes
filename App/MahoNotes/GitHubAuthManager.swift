@@ -36,6 +36,8 @@ final class GitHubAuthManager: @unchecked Sendable {
     /// Active polling task (so we can cancel on disconnect or re-auth).
     @MainActor private var pollingTask: Task<Void, Never>?
 
+    nonisolated init() {}
+
     // MARK: - Public API
 
     /// Check whether a valid stored token exists, and if so fetch the GitHub username.
