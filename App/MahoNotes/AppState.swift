@@ -24,6 +24,9 @@ final class AppState {
     /// Whether the initial load has completed.
     private(set) var isLoaded: Bool = false
 
+    /// Monitors the vault registry file for external changes.
+    private var registryPresenter: VaultRegistryPresenter?
+
     /// The primary vault name from the registry.
     private(set) var primaryVaultName: String?
 
@@ -984,6 +987,18 @@ final class AppState {
             loadSelectedVault()
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
+
+            // Start monitoring registry for external changes
+            if registryPresenter == nil {
+                let path = store.localRegistryPath
+                let url = URL(fileURLWithPath: path)
+                registryPresenter = VaultRegistryPresenter(registryURL: url, onChange: { [weak self] in
+                    Task { @MainActor in
+                        await self?.loadRegistryAsync()
+                    }
+                })
+                registryPresenter?.startMonitoring()
+            }
         } catch {
             self.errorMessage = "Failed to load vault registry: \(error.localizedDescription)"
             self.vaults = []
