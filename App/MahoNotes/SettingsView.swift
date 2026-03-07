@@ -532,51 +532,104 @@ struct GitHubAccountGroupBox: View {
 
     var body: some View {
         GroupBox {
-            HStack(spacing: 12) {
-                Image(systemName: "person.badge.key")
-                    .font(.title2)
-                    .foregroundStyle(.purple)
-                    .frame(width: 28)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.badge.key")
+                        .font(.title2)
+                        .foregroundStyle(.purple)
+                        .frame(width: 28)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("GitHub Account")
-                        .fontWeight(.medium)
-                    if authManager.isAuthenticated, let username = authManager.username {
-                        Text("@\(username)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Not connected")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("GitHub Account")
+                            .fontWeight(.medium)
+                        if authManager.isAuthenticated, let username = authManager.username {
+                            Text("@\(username)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if authManager.isAuthenticating {
+                            Text("Waiting for authorization…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Not connected")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let error = authManager.authError {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
                     }
-                    if let error = authManager.authError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .lineLimit(2)
+
+                    Spacer()
+
+                    if authManager.isAuthenticating && authManager.userCode == nil {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if authManager.isAuthenticated {
+                        Button("Disconnect") {
+                            authManager.disconnect()
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                    } else if !authManager.isAuthenticating {
+                        Button("Connect to GitHub") {
+                            Task {
+                                try? await authManager.authenticate()
+                            }
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.borderedProminent)
                     }
                 }
 
-                Spacer()
+                // Device Flow: show user code for authorization
+                if let userCode = authManager.userCode, let url = authManager.verificationURL {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Enter this code at GitHub:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
-                if authManager.isAuthenticating {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if authManager.isAuthenticated {
-                    Button("Disconnect") {
-                        authManager.disconnect()
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
-                } else {
-                    Button("Connect to GitHub") {
-                        Task {
-                            try? await authManager.authenticate()
+                        HStack(spacing: 12) {
+                            Text(userCode)
+                                .font(.system(.title2, design: .monospaced, weight: .bold))
+                                .textSelection(.enabled)
+
+                            Button {
+                                #if os(macOS)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(userCode, forType: .string)
+                                #else
+                                UIPasteboard.general.string = userCode
+                                #endif
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .help("Copy code")
+                        }
+
+                        HStack(spacing: 8) {
+                            Link(url, destination: URL(string: url) ?? URL(string: "https://github.com/login/device")!)
+                                .font(.caption)
+
+                            ProgressView()
+                                .controlSize(.small)
+
+                            Spacer()
+
+                            Button("Cancel") {
+                                authManager.cancelAuth()
+                            }
+                            .controlSize(.small)
+                            .buttonStyle(.bordered)
                         }
                     }
-                    .controlSize(.small)
-                    .buttonStyle(.borderedProminent)
                 }
             }
             .padding(4)

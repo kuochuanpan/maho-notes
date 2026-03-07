@@ -26,10 +26,8 @@ struct MahoNotesApp: App {
                         }
                     }
                 }
-                // TODO: The mahonotes://github-callback URL scheme is handled automatically
-                // by ASWebAuthenticationSession during the OAuth flow. If manual deep-link
-                // processing is needed in the future, handle it here.
-                .onOpenURL { _ in }
+                // Note: GitHub Device Flow is used for auth — no URL scheme callback needed.
+                // If deep-link processing is needed in the future, add .onOpenURL here.
         }
         #if os(macOS)
         .windowToolbarStyle(.unified(showsTitle: false))
