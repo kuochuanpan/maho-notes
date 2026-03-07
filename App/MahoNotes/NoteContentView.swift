@@ -159,7 +159,7 @@ struct NoteContentView: View {
     /// Check if the note's file is a cloud-only placeholder (not downloaded yet).
     private func isCloudOnly(_ note: Note) -> Bool {
         guard let entry = appState.selectedVault, entry.type == .icloud else { return false }
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = appState.store.resolvedPath(for: entry)
         let dir = URL(fileURLWithPath: vaultPath)
             .appendingPathComponent((note.relativePath as NSString).deletingLastPathComponent)
         let placeholder = dir.appendingPathComponent(".\(note.relativePath.components(separatedBy: "/").last ?? "").icloud")
@@ -176,7 +176,7 @@ struct NoteContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             guard let entry = appState.selectedVault else { return }
-            let vaultPath = resolvedPath(for: entry)
+            let vaultPath = appState.store.resolvedPath(for: entry)
             let fileURL = URL(fileURLWithPath: vaultPath).appendingPathComponent(note.relativePath)
             appState.iCloudManager.downloadFileIfNeeded(at: fileURL)
         }

@@ -12,7 +12,7 @@ struct VaultOption: ParsableArguments {
 
     /// Returns the registry entry for the resolved vault, if found in registry.
     func resolveVaultEntry() -> VaultEntry? {
-        guard let registry = try? loadRegistry(globalConfigDir: Self.globalConfigDir) else {
+        guard let registry = try? VaultStore(globalConfigDir: Self.globalConfigDir).loadRegistrySync() else {
             return nil
         }
         let identifier = vault ?? ProcessInfo.processInfo.environment["MN_VAULT"]
@@ -24,7 +24,7 @@ struct VaultOption: ParsableArguments {
 
     /// All vault entries from registry, or nil if no registry exists.
     func allVaultEntries() -> [VaultEntry]? {
-        try? loadRegistry(globalConfigDir: Self.globalConfigDir)?.vaults
+        try? VaultStore(globalConfigDir: Self.globalConfigDir).loadRegistrySync()?.vaults
     }
 
     /// Resolve the vault path:
@@ -45,7 +45,7 @@ struct VaultOption: ParsableArguments {
             }
             return env
         }
-        if let registry = try? loadRegistry(globalConfigDir: Self.globalConfigDir),
+        if let registry = try? VaultStore(globalConfigDir: Self.globalConfigDir).loadRegistrySync(),
            let primary = registry.primaryVault() {
             return VaultStore().resolvedPath(for: primary)
         }
@@ -59,7 +59,7 @@ struct VaultOption: ParsableArguments {
     }
 
     private func findEntry(_ identifier: String) -> VaultEntry? {
-        (try? loadRegistry(globalConfigDir: Self.globalConfigDir))?.findVault(named: identifier)
+        (try? VaultStore(globalConfigDir: Self.globalConfigDir).loadRegistrySync())?.findVault(named: identifier)
     }
 
     func makeVault() -> Vault {

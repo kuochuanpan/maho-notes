@@ -261,7 +261,7 @@ struct VaultsSettingsTab: View {
     }
 
     private func noteCountLabel(for entry: VaultEntry) -> String {
-        let vaultPath = resolvedPath(for: entry)
+        let vaultPath = appState.store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let count = (try? vault.allNotes().count) ?? 0
         return "\(count) note\(count == 1 ? "" : "s")"
@@ -360,7 +360,7 @@ struct SearchSettingsTab: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(appState.vaults, id: \.name) { entry in
-                        let vaultPath = resolvedPath(for: entry)
+                        let vaultPath = appState.store.resolvedPath(for: entry)
                         let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
                         let indexPath = (vaultPath as NSString).appendingPathComponent(".maho/index.db")
                         let hasFTS = FileManager.default.fileExists(atPath: indexPath)
@@ -484,7 +484,7 @@ struct SearchSettingsTab: View {
 
             do {
                 for (i, entry) in appState.vaults.enumerated() {
-                    let vaultPath = resolvedPath(for: entry)
+                    let vaultPath = appState.store.resolvedPath(for: entry)
                     let vault = Vault(path: vaultPath)
                     let notes = try vault.allNotes()
 

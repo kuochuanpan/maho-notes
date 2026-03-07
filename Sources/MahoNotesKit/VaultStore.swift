@@ -108,6 +108,12 @@ public actor VaultStore {
         try self.saveRegistry(registry)
     }
 
+    /// Synchronous registry load for CLI contexts where async is not available.
+    /// Uses the same logic as the async version but called from nonisolated context.
+    nonisolated public func loadRegistrySync() throws -> VaultRegistry? {
+        try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir)
+    }
+
     // ══════════════════════════════════════════
     // MARK: - Path Resolution
     // ══════════════════════════════════════════

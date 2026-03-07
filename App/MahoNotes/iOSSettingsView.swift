@@ -48,7 +48,7 @@ struct iOSSettingsView: View {
                     }
 
                     if let entry = appState.selectedVault {
-                        let vaultPath = resolvedPath(for: entry)
+                        let vaultPath = appState.store.resolvedPath(for: entry)
                         let hasVectorIndex = VectorIndex.vectorIndexExists(vaultPath: vaultPath)
                         HStack {
                             Text("Vector Index")
@@ -235,7 +235,7 @@ struct iOSSettingsView: View {
         buildStatus = nil
 
         Task {
-            let vaultPath = resolvedPath(for: entry)
+            let vaultPath = appState.store.resolvedPath(for: entry)
             let vault = Vault(path: vaultPath)
 
             do {

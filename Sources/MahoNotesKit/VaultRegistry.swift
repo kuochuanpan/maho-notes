@@ -80,7 +80,7 @@ public enum VaultRegistryError: Error, CustomStringConvertible {
 
 // MARK: - Path resolution
 
-public func resolvedPath(for entry: VaultEntry) -> String {
+func resolvedPath(for entry: VaultEntry) -> String {
     switch entry.type {
     case .icloud:
         let base = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
@@ -102,7 +102,7 @@ public func resolvedPath(for entry: VaultEntry) -> String {
 /// - Copies vault directory contents from source to destination
 /// - Updates vault type in registry
 /// - Returns the updated registry
-public func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
+func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
     let iCloudVaultsBase = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
     let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
@@ -144,7 +144,7 @@ public func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistr
 }
 
 /// Migrates vault data from iCloud back to local storage.
-public func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
+func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
     let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
 
@@ -184,7 +184,7 @@ public enum CloudSyncMode: String, Codable, Sendable {
 }
 
 /// Reads `sync.cloud` from `globalConfigDir/config.yaml`. Defaults to `.icloud` if absent or unreadable.
-public func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncMode {
+func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncMode {
     let expanded = (globalConfigDir as NSString).expandingTildeInPath
     let configPath = (expanded as NSString).appendingPathComponent("config.yaml")
     guard FileManager.default.fileExists(atPath: configPath),
@@ -198,7 +198,7 @@ public func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncM
 }
 
 /// Writes `sync.cloud` to `globalConfigDir/config.yaml`, preserving other keys.
-public func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "~/.maho") throws {
+func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "~/.maho") throws {
     let expanded = (globalConfigDir as NSString).expandingTildeInPath
     let configPath = (expanded as NSString).appendingPathComponent("config.yaml")
 
@@ -245,7 +245,7 @@ public enum CloudSyncActivationCheck: Sendable {
 }
 
 /// Checks whether iCloud already has a vault registry.
-public func checkCloudRegistryExists(globalConfigDir: String = "~/.maho") -> CloudSyncActivationCheck {
+func checkCloudRegistryExists(globalConfigDir: String = "~/.maho") -> CloudSyncActivationCheck {
     let fm = FileManager.default
     let iCloudConfig = iCloudConfigPath()
     let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
@@ -270,7 +270,7 @@ public struct VaultNameConflict: Sendable {
 /// - Same name + different path → rename both with device suffix
 /// - Different names → include both
 /// - Returns the merged registry and any conflicts that were resolved.
-public func mergeRegistries(
+func mergeRegistries(
     local: VaultRegistry,
     cloud: VaultRegistry,
     localDeviceName: String? = nil
@@ -358,7 +358,7 @@ private func iCloudConfigPath() -> String {
 /// - Cloud Sync ON (default): tries iCloud config path first, falls back to `globalConfigDir/vaults.yaml`
 /// - Cloud Sync OFF: only reads from `globalConfigDir/vaults.yaml`
 /// - Parameter globalConfigDir: defaults to `~/.maho`
-public func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultRegistry? {
+func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultRegistry? {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let globalPath = (expandedGlobal as NSString).appendingPathComponent(registryFileName)
@@ -383,7 +383,7 @@ public func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultReg
 ///   always writes cache to `globalConfigDir/vaults-cache.yaml`
 /// - Cloud Sync OFF: writes only to `globalConfigDir/vaults.yaml`; no cache file written
 /// - Parameter globalConfigDir: defaults to `~/.maho`
-public func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = "~/.maho") throws {
+func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = "~/.maho") throws {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let encoder = YAMLEncoder()

@@ -92,7 +92,7 @@ struct CollectionListView: View {
 
     private var vault: Vault? {
         guard let entry = appState.vaults.first(where: { $0.name == vaultName }) else { return nil }
-        return Vault(path: resolvedPath(for: entry))
+        return Vault(path: appState.store.resolvedPath(for: entry))
     }
 
     private var collections: [Collection] {
@@ -215,7 +215,7 @@ struct iOSSearchView: View {
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let vault = Vault(path: resolvedPath(for: entry))
+            let vault = Vault(path: appState.store.resolvedPath(for: entry))
             results = (try? Array(vault.searchNotes(query: trimmed).prefix(20))) ?? []
         }
     }
