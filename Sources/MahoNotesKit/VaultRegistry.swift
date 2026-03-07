@@ -312,16 +312,11 @@ public func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = "~
     let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
 
     if cloudSync == .icloud {
-        // Determine primary save location
+        // Write to iCloud config directory (create if needed)
         let iCloudConfig = iCloudConfigPath()
-        if fm.fileExists(atPath: iCloudConfig) {
-            let primaryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
-            try yaml.write(toFile: primaryPath, atomically: true, encoding: .utf8)
-        } else {
-            try fm.createDirectory(atPath: expandedGlobal, withIntermediateDirectories: true)
-            let globalPath = (expandedGlobal as NSString).appendingPathComponent(registryFileName)
-            try yaml.write(toFile: globalPath, atomically: true, encoding: .utf8)
-        }
+        try fm.createDirectory(atPath: iCloudConfig, withIntermediateDirectories: true)
+        let primaryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
+        try yaml.write(toFile: primaryPath, atomically: true, encoding: .utf8)
 
         // Write cache when Cloud Sync is ON
         try fm.createDirectory(atPath: expandedGlobal, withIntermediateDirectories: true)
