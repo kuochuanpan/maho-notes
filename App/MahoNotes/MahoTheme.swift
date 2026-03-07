@@ -10,6 +10,16 @@ enum MahoTheme {
     /// White text/icons on the purple background.
     static let vaultRailForeground = Color.white
 
+    // MARK: - Accent
+
+    /// App-wide accent purple — used for selection highlight, tint, interactive elements.
+    /// Light: #721F6D (same as vault rail), Dark: #8B3787 (brighter for contrast).
+    static func accent(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 139 / 255, green: 55 / 255, blue: 135 / 255)
+            : vaultRailBackground
+    }
+
     // MARK: - B Column (Navigator)
 
     /// Dark: #4A1050 (deeper purple than A), Light: #E0CCE6 (muted lavender).

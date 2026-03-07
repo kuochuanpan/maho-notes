@@ -304,6 +304,7 @@ struct NavigatorView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .tint(MahoTheme.accent(for: colorScheme))
         .onChange(of: appState.navigatorSelection) { _, newValue in
             appState.handleNavigatorSelectionChange(newValue)
         }
