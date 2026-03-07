@@ -4,10 +4,27 @@ import UniformTypeIdentifiers
 
 // MARK: - Drag State
 
-/// Tracks the currently dragged item for visual feedback and synchronous payload reading.
+/// Tracks the currently dragged item(s) for visual feedback and synchronous payload reading.
 class DragState: ObservableObject {
-    @Published var draggedItemId: String?   // "note:<path>" or "collection:<id>"
+    @Published var draggedItemId: String?   // "note:<path>" or "collection:<id>" or "notes:<path1>\t<path2>..."
     @Published var dropTargetId: String?    // id of the node being hovered
+
+    /// Extract all note paths from the drag payload (supports single and multi).
+    var draggedNotePaths: [String] {
+        guard let payload = draggedItemId else { return [] }
+        if payload.hasPrefix("notes:") {
+            return String(payload.dropFirst(6)).components(separatedBy: "\t")
+        } else if payload.hasPrefix("note:") {
+            return [String(payload.dropFirst(5))]
+        }
+        return []
+    }
+
+    /// Whether the current drag is a note drag (single or multi).
+    var isDraggingNotes: Bool {
+        guard let payload = draggedItemId else { return false }
+        return payload.hasPrefix("note:") || payload.hasPrefix("notes:")
+    }
 }
 
 // MARK: - Directory Drop Delegate
@@ -20,6 +37,7 @@ private struct DirectoryDropDelegate: DropDelegate {
     let siblingDirIds: [String]        // sibling directory IDs under the same parent
     let dragState: DragState
     let onMoveNote: (String, String) -> Void
+    let onMoveNotes: ([String], String) -> Void   // batch move
     let onMoveCollection: (String, String) -> Void
     let onReorderTopLevel: ([String]) -> Void
     let onReorderSubCollections: (String, [String]) -> Void
@@ -54,11 +72,17 @@ private struct DirectoryDropDelegate: DropDelegate {
             dragState.draggedItemId = nil
         }
 
-        if payload.hasPrefix("note:") {
-            let notePath = String(payload.dropFirst(5))
-            let noteDir = (notePath as NSString).deletingLastPathComponent
-            guard noteDir != node.id else { return false }
-            onMoveNote(notePath, node.id)
+        // Handle note drops (single or multi)
+        if dragState.isDraggingNotes {
+            let paths = dragState.draggedNotePaths
+            // Filter out notes already in this collection
+            let toMove = paths.filter { (($0 as NSString).deletingLastPathComponent) != node.id }
+            guard !toMove.isEmpty else { return false }
+            if toMove.count == 1 {
+                onMoveNote(toMove[0], node.id)
+            } else {
+                onMoveNotes(toMove, node.id)
+            }
             return true
         }
 
@@ -312,6 +336,9 @@ struct NavigatorView: View {
                     },
                     onMoveNote: { relativePath, targetCollection in
                         appState.moveNote(relativePath: relativePath, toCollection: targetCollection)
+                    },
+                    onMoveNotes: { paths, targetCollection in
+                        appState.moveSelectedNotes(toCollection: targetCollection)
                     },
                     onMoveCollection: { collectionId, intoParent in
                         appState.moveCollection(collectionId: collectionId, intoParent: intoParent)
@@ -612,6 +639,7 @@ private struct CollectionNodeView: View {
     let onNewSubCollection: (String) -> Void
     let onReorderNotes: (String, [String]) -> Void
     let onMoveNote: (String, String) -> Void
+    let onMoveNotes: ([String], String) -> Void    // batch move
     let onMoveCollection: (String, String) -> Void
     let onPromoteToTopLevel: (String) -> Void
     let onReorderTopLevel: ([String]) -> Void
@@ -700,6 +728,7 @@ private struct CollectionNodeView: View {
             siblingDirIds: siblingDirIds,
             dragState: dragState,
             onMoveNote: onMoveNote,
+            onMoveNotes: onMoveNotes,
             onMoveCollection: onMoveCollection,
             onReorderTopLevel: onReorderTopLevel,
             onReorderSubCollections: onReorderSubCollections
@@ -727,6 +756,7 @@ private struct CollectionNodeView: View {
                 onNewSubCollection: onNewSubCollection,
                 onReorderNotes: onReorderNotes,
                 onMoveNote: onMoveNote,
+                onMoveNotes: onMoveNotes,
                 onMoveCollection: onMoveCollection,
                 onPromoteToTopLevel: onPromoteToTopLevel,
                 onReorderTopLevel: onReorderTopLevel,
@@ -762,7 +792,8 @@ private struct CollectionNodeView: View {
 
     private func noteRow(_ child: FileTreeNode, noteChildren: [FileTreeNode]) -> some View {
         let path = child.note?.relativePath ?? child.id
-        let isSelected = appState.selectedNotePath == path
+        let isSelected = appState.isNoteSelected(path)
+        let isActive = appState.selectedNotePath == path
 
         return Label {
             HStack(spacing: 4) {
@@ -774,6 +805,14 @@ private struct CollectionNodeView: View {
                         .font(.caption2)
                         .foregroundStyle(.yellow)
                 }
+                // Show count badge when this is the active note in a multi-selection
+                if isActive && appState.selectedNotePaths.count > 1 {
+                    Text("\(appState.selectedNotePaths.count)")
+                        .font(.caption2)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                }
             }
         } icon: {
             Image(systemName: "doc.text")
@@ -781,12 +820,22 @@ private struct CollectionNodeView: View {
         }
         .padding(.leading, CGFloat(indentLevel + 1) * 14)
         .listRowBackground(
-            isSelected ? Color.accentColor.opacity(0.15) : Color.clear
+            isSelected ? Color.accentColor.opacity(isActive ? 0.2 : 0.1) : Color.clear
         )
         .contentShape(Rectangle())
+        #if os(macOS)
+        .onTapGesture {
+            if NSEvent.modifierFlags.contains(.command) {
+                appState.toggleNoteSelection(path: path)
+            } else {
+                appState.selectNote(path: path)
+            }
+        }
+        #else
         .onTapGesture {
             appState.selectNote(path: path)
         }
+        #endif
         .contextMenu {
             Button(role: .destructive) {
                 onDeleteNote(path, child.name)
@@ -795,9 +844,17 @@ private struct CollectionNodeView: View {
             }
         }
         .onDrag {
-            let payload = "note:" + path
-            dragState.draggedItemId = payload
-            return NSItemProvider(object: payload as NSString)
+            // If this note is part of a multi-selection, drag all selected notes
+            if appState.selectedNotePaths.count > 1 && appState.selectedNotePaths.contains(path) {
+                let allPaths = Array(appState.selectedNotePaths)
+                let payload = "notes:" + allPaths.joined(separator: "\t")
+                dragState.draggedItemId = payload
+                return NSItemProvider(object: payload as NSString)
+            } else {
+                let payload = "note:" + path
+                dragState.draggedItemId = payload
+                return NSItemProvider(object: payload as NSString)
+            }
         }
         .onDrop(of: [UTType.text], delegate: NoteDropDelegate(
             noteNode: child,

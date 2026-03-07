@@ -632,10 +632,22 @@ final class AppState {
 
     // MARK: - Note Selection
 
-    /// Relative path of the currently selected note.
+    /// Relative path of the currently selected (active) note — shown in C panel.
     var selectedNotePath: String?
 
-    /// Call when changing selected note to handle auto-save and reset.
+    /// Multi-selection set for batch operations (Cmd+Click).
+    /// The `selectedNotePath` is always included when this is non-empty.
+    var selectedNotePaths: Set<String> = []
+
+    /// Whether a note path is part of the current selection (single or multi).
+    func isNoteSelected(_ path: String) -> Bool {
+        if !selectedNotePaths.isEmpty {
+            return selectedNotePaths.contains(path)
+        }
+        return selectedNotePath == path
+    }
+
+    /// Normal click — single-select, clears multi-selection.
     @MainActor
     func selectNote(path: String?) {
         // Auto-save when switching notes
@@ -643,9 +655,65 @@ final class AppState {
             saveNote()
         }
         selectedNotePath = path
+        selectedNotePaths = []
         // Reset view mode to preview when selecting a new note
         viewMode = .preview
         editingBody = ""
+    }
+
+    /// Cmd+Click — toggle note in multi-selection.
+    @MainActor
+    func toggleNoteSelection(path: String) {
+        if selectedNotePaths.isEmpty {
+            // Start multi-select from current single selection
+            if let current = selectedNotePath {
+                selectedNotePaths = [current]
+            }
+        }
+
+        if selectedNotePaths.contains(path) {
+            selectedNotePaths.remove(path)
+            // If we removed the active note, switch active to another selected note
+            if selectedNotePath == path {
+                selectedNotePath = selectedNotePaths.first
+            }
+            // If nothing left, clear multi-select
+            if selectedNotePaths.isEmpty {
+                selectedNotePath = nil
+            }
+        } else {
+            selectedNotePaths.insert(path)
+            // Auto-save before switching active note
+            if selectedNotePath != nil && selectedNotePath != path && hasUnsavedChanges {
+                saveNote()
+            }
+            selectedNotePath = path
+            viewMode = .preview
+            editingBody = ""
+        }
+    }
+
+    /// Batch move selected notes to a target collection.
+    @MainActor
+    func moveSelectedNotes(toCollection: String) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let paths = selectedNotePaths.isEmpty
+            ? (selectedNotePath.map { [$0] } ?? [])
+            : Array(selectedNotePaths)
+
+        var lastNewPath: String?
+        for path in paths {
+            lastNewPath = try? vault.moveNote(relativePath: path, toCollection: toCollection)
+        }
+
+        // Update selection to last moved note
+        selectedNotePaths = []
+        if let newPath = lastNewPath {
+            selectedNotePath = newPath
+        }
+        reloadCurrentVault()
     }
 
     /// The currently selected note (loaded on demand).
