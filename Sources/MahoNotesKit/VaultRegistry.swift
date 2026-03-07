@@ -96,6 +96,86 @@ public func resolvedPath(for entry: VaultEntry) -> String {
     }
 }
 
+// MARK: - Vault Migration (device ↔ iCloud)
+
+/// Migrates vault data between local storage and iCloud.
+/// - Copies vault directory contents from source to destination
+/// - Updates vault type in registry
+/// - Returns the updated registry
+public func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
+    let fm = FileManager.default
+    let iCloudVaultsBase = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+    let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
+
+    var updated = registry
+
+    for (index, entry) in registry.vaults.enumerated() {
+        // Only migrate .device vaults (local path-based vaults stay as-is)
+        guard entry.type == .device else { continue }
+
+        let sourcePath = resolvedPath(for: entry).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let destPath = (iCloudVaultsBase as NSString).appendingPathComponent(entry.name)
+
+        // Skip if source doesn't exist
+        guard fm.fileExists(atPath: sourcePath) else { continue }
+
+        // Create iCloud vaults directory if needed
+        try fm.createDirectory(atPath: iCloudVaultsBase, withIntermediateDirectories: true)
+
+        if fm.fileExists(atPath: destPath) {
+            // Destination already exists — skip (merge handled separately)
+            continue
+        }
+
+        // Copy vault contents to iCloud
+        try fm.copyItem(atPath: sourcePath, toPath: destPath)
+
+        // Update vault entry type to .icloud (path is derived from name for icloud type)
+        updated.vaults[index] = VaultEntry(
+            name: entry.name,
+            type: .icloud,
+            github: entry.github,
+            path: nil,
+            access: entry.access
+        )
+    }
+
+    return updated
+}
+
+/// Migrates vault data from iCloud back to local storage.
+public func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
+    let fm = FileManager.default
+    let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
+
+    var updated = registry
+
+    for (index, entry) in registry.vaults.enumerated() {
+        guard entry.type == .icloud else { continue }
+
+        let sourcePath = resolvedPath(for: entry).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let destPath = (localVaultsBase as NSString).appendingPathComponent(entry.name)
+
+        guard fm.fileExists(atPath: sourcePath) else { continue }
+
+        try fm.createDirectory(atPath: localVaultsBase, withIntermediateDirectories: true)
+
+        if !fm.fileExists(atPath: destPath) {
+            try fm.copyItem(atPath: sourcePath, toPath: destPath)
+        }
+
+        updated.vaults[index] = VaultEntry(
+            name: entry.name,
+            type: .device,
+            github: entry.github,
+            path: nil,
+            access: entry.access
+        )
+    }
+
+    return updated
+}
+
 // MARK: - Cloud Sync Mode
 
 public enum CloudSyncMode: String, Codable, Sendable {
