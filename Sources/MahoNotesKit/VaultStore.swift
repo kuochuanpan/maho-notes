@@ -52,7 +52,7 @@ public actor VaultStore {
     public func loadCachedRegistry() throws -> VaultRegistry? {
         let cachePath = (globalConfigDir as NSString).appendingPathComponent("vaults-cache.yaml")
         guard FileManager.default.fileExists(atPath: cachePath) else { return nil }
-        let content = try String(contentsOfFile: cachePath, encoding: .utf8)
+        let content = try coordinatedRead(at: cachePath)
         return try YAMLDecoder().decode(VaultRegistry.self, from: content)
     }
 
@@ -120,7 +120,7 @@ public actor VaultStore {
         // Cache fallback (same as async loadRegistry)
         let cachePath = (globalConfigDir as NSString).appendingPathComponent("vaults-cache.yaml")
         guard FileManager.default.fileExists(atPath: cachePath) else { return nil }
-        let content = try String(contentsOfFile: cachePath, encoding: .utf8)
+        let content = try Self.coordinatedRead(at: cachePath)
         return try YAMLDecoder().decode(VaultRegistry.self, from: content)
     }
 
@@ -227,7 +227,7 @@ public actor VaultStore {
         guard FileManager.default.fileExists(atPath: path) else {
             return VaultConfig()
         }
-        let content = try String(contentsOfFile: path, encoding: .utf8)
+        let content = try coordinatedRead(at: path)
         return try YAMLDecoder().decode(VaultConfig.self, from: content)
     }
 
@@ -236,7 +236,7 @@ public actor VaultStore {
         let path = (vaultPath as NSString).appendingPathComponent("maho.yaml")
         let encoder = YAMLEncoder()
         let yaml = try encoder.encode(config)
-        try yaml.write(toFile: path, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: path)
     }
 
     // ══════════════════════════════════════════
@@ -250,7 +250,7 @@ public actor VaultStore {
         guard FileManager.default.fileExists(atPath: path) else {
             return DeviceConfig()
         }
-        let content = try String(contentsOfFile: path, encoding: .utf8)
+        let content = try coordinatedRead(at: path)
         return try YAMLDecoder().decode(DeviceConfig.self, from: content)
     }
 
@@ -264,7 +264,7 @@ public actor VaultStore {
         let path = (mahoDir as NSString).appendingPathComponent("config.yaml")
         let encoder = YAMLEncoder()
         let yaml = try encoder.encode(config)
-        try yaml.write(toFile: path, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: path)
     }
 
     // ══════════════════════════════════════════
@@ -277,7 +277,7 @@ public actor VaultStore {
         guard FileManager.default.fileExists(atPath: path) else {
             return GlobalConfig()
         }
-        let content = try String(contentsOfFile: path, encoding: .utf8)
+        let content = try coordinatedRead(at: path)
         return try YAMLDecoder().decode(GlobalConfig.self, from: content)
     }
 
@@ -290,7 +290,55 @@ public actor VaultStore {
         let path = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
         let encoder = YAMLEncoder()
         let yaml = try encoder.encode(config)
-        try yaml.write(toFile: path, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: path)
+    }
+
+    /// The file path of the local vault registry.
+    nonisolated public var localRegistryPath: String {
+        (globalConfigDir as NSString).appendingPathComponent("vaults.yaml")
+    }
+
+    // MARK: - Coordinated I/O
+
+    /// Read file content using NSFileCoordinator for cross-process safety.
+    private func coordinatedRead(at path: String) throws -> String {
+        try Self.coordinatedRead(at: path)
+    }
+
+    /// Write content using NSFileCoordinator for cross-process safety.
+    private func coordinatedWrite(_ content: String, to path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        var coordError: NSError?
+        var writeError: Error?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(writingItemAt: url, options: [], error: &coordError) { actualURL in
+            do {
+                try content.write(to: actualURL, atomically: true, encoding: .utf8)
+            } catch {
+                writeError = error
+            }
+        }
+        if let e = coordError { throw e }
+        if let e = writeError { throw e }
+    }
+
+    /// Nonisolated coordinated read for use in both actor and nonisolated contexts.
+    nonisolated private static func coordinatedRead(at path: String) throws -> String {
+        let url = URL(fileURLWithPath: path)
+        var result: String = ""
+        var coordError: NSError?
+        var readError: Error?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(readingItemAt: url, options: [], error: &coordError) { actualURL in
+            do {
+                result = try String(contentsOf: actualURL, encoding: .utf8)
+            } catch {
+                readError = error
+            }
+        }
+        if let e = coordError { throw e }
+        if let e = readError { throw e }
+        return result
     }
 }
 

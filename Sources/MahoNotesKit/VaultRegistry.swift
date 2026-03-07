@@ -188,7 +188,7 @@ func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncMode {
     let expanded = (globalConfigDir as NSString).expandingTildeInPath
     let configPath = (expanded as NSString).appendingPathComponent("config.yaml")
     guard FileManager.default.fileExists(atPath: configPath),
-          let content = try? String(contentsOfFile: configPath, encoding: .utf8),
+          let content = try? coordinatedRead(at: configPath),
           let yaml = try? Yams.load(yaml: content) as? [String: Any],
           let sync = yaml["sync"] as? [String: Any],
           let cloud = sync["cloud"] as? String,
@@ -204,7 +204,7 @@ func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "~/.maho
 
     var yaml: [String: Any] = [:]
     if FileManager.default.fileExists(atPath: configPath),
-       let content = try? String(contentsOfFile: configPath, encoding: .utf8),
+       let content = try? coordinatedRead(at: configPath),
        let loaded = try? Yams.load(yaml: content) as? [String: Any] {
         yaml = loaded
     }
@@ -214,7 +214,7 @@ func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "~/.maho
     yaml["sync"] = sync
 
     try FileManager.default.createDirectory(atPath: expanded, withIntermediateDirectories: true)
-    try Yams.dump(object: yaml).write(toFile: configPath, atomically: true, encoding: .utf8)
+    try coordinatedWrite(Yams.dump(object: yaml), to: configPath)
 }
 
 // MARK: - Device Name
@@ -343,6 +343,42 @@ func mergeRegistries(
     return (VaultRegistry(primary: primary, vaults: merged), conflicts)
 }
 
+// MARK: - Coordinated I/O Helpers
+
+private func coordinatedRead(at path: String) throws -> String {
+    let url = URL(fileURLWithPath: path)
+    var result: String = ""
+    var coordError: NSError?
+    var readError: Error?
+    let coordinator = NSFileCoordinator()
+    coordinator.coordinate(readingItemAt: url, options: [], error: &coordError) { actualURL in
+        do {
+            result = try String(contentsOf: actualURL, encoding: .utf8)
+        } catch {
+            readError = error
+        }
+    }
+    if let e = coordError { throw e }
+    if let e = readError { throw e }
+    return result
+}
+
+private func coordinatedWrite(_ content: String, to path: String) throws {
+    let url = URL(fileURLWithPath: path)
+    var coordError: NSError?
+    var writeError: Error?
+    let coordinator = NSFileCoordinator()
+    coordinator.coordinate(writingItemAt: url, options: [], error: &coordError) { actualURL in
+        do {
+            try content.write(to: actualURL, atomically: true, encoding: .utf8)
+        } catch {
+            writeError = error
+        }
+    }
+    if let e = coordError { throw e }
+    if let e = writeError { throw e }
+}
+
 // MARK: - Load / Save
 
 private let iCloudDocumentsPath = "~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents"
@@ -368,13 +404,13 @@ func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultRegistry? 
     if cloudSync == .icloud {
         let iCloudPath = (iCloudConfigPath() as NSString).appendingPathComponent(registryFileName)
         if fm.fileExists(atPath: iCloudPath) {
-            let content = try String(contentsOfFile: iCloudPath, encoding: .utf8)
+            let content = try coordinatedRead(at: iCloudPath)
             return try YAMLDecoder().decode(VaultRegistry.self, from: content)
         }
     }
 
     guard fm.fileExists(atPath: globalPath) else { return nil }
-    let content = try String(contentsOfFile: globalPath, encoding: .utf8)
+    let content = try coordinatedRead(at: globalPath)
     return try YAMLDecoder().decode(VaultRegistry.self, from: content)
 }
 
@@ -396,16 +432,16 @@ func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = "~/.maho"
         let iCloudConfig = iCloudConfigPath()
         try fm.createDirectory(atPath: iCloudConfig, withIntermediateDirectories: true)
         let primaryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
-        try yaml.write(toFile: primaryPath, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: primaryPath)
 
         // Write cache when Cloud Sync is ON
         try fm.createDirectory(atPath: expandedGlobal, withIntermediateDirectories: true)
         let cachePath = (expandedGlobal as NSString).appendingPathComponent(cacheFileName)
-        try yaml.write(toFile: cachePath, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: cachePath)
     } else {
         // Cloud Sync OFF: only write to globalConfigDir, no cache
         try fm.createDirectory(atPath: expandedGlobal, withIntermediateDirectories: true)
         let globalPath = (expandedGlobal as NSString).appendingPathComponent(registryFileName)
-        try yaml.write(toFile: globalPath, atomically: true, encoding: .utf8)
+        try coordinatedWrite(yaml, to: globalPath)
     }
 }
