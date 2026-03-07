@@ -151,6 +151,22 @@ public actor VaultStore {
         try MahoNotesKit.setGlobalSyncMode(mode, globalConfigDir: globalConfigDir)
     }
 
+    /// Disable cloud sync: migrate vaults from iCloud, update mode, and clean up artifacts.
+    ///
+    /// This is the recommended way to turn cloud sync OFF. It handles:
+    /// 1. Migrating iCloud vaults back to device storage
+    /// 2. Saving the updated registry
+    /// 3. Setting cloud sync mode to `.off`
+    /// 4. Removing iCloud registry and cache files
+    public func disableCloudSync() throws {
+        if let registry = try self.loadRegistry() {
+            let migrated = try migrateFromCloud(registry)
+            try self.saveRegistry(migrated)
+        }
+        try setCloudSyncMode(.off)
+        try cleanupCloudArtifacts()
+    }
+
     // ══════════════════════════════════════════
     // MARK: - Cloud Migration
     // ══════════════════════════════════════════
