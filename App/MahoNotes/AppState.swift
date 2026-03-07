@@ -1075,8 +1075,10 @@ final class AppState {
     @MainActor
     func importGitHubVault(repo: String, name: String?) async throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
-        let vaultRoot = resolveVaultRoot(storage: storage)
+        // GitHub vaults always stored in ~/.maho/vaults/ (not iCloud) —
+        // they have their own sync via GitHub REST API.
+        // resolvedPath(for:) hardcodes this path for .github type.
+        let vaultRoot = resolveVaultRoot(storage: .local)
 
         let token = try Auth().resolveToken()
 
