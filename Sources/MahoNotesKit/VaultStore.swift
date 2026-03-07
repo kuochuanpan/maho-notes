@@ -112,9 +112,16 @@ public actor VaultStore {
     }
 
     /// Synchronous registry load for CLI contexts where async is not available.
-    /// Uses the same logic as the async version but called from nonisolated context.
+    /// Uses the same logic as the async version: primary sources → cache fallback.
     nonisolated public func loadRegistrySync() throws -> VaultRegistry? {
-        try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir)
+        if let registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir) {
+            return registry
+        }
+        // Cache fallback (same as async loadRegistry)
+        let cachePath = (globalConfigDir as NSString).appendingPathComponent("vaults-cache.yaml")
+        guard FileManager.default.fileExists(atPath: cachePath) else { return nil }
+        let content = try String(contentsOfFile: cachePath, encoding: .utf8)
+        return try YAMLDecoder().decode(VaultRegistry.self, from: content)
     }
 
     // ══════════════════════════════════════════
