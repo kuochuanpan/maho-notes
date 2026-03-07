@@ -529,111 +529,173 @@ struct SearchSettingsTab: View {
 
 struct GitHubAccountGroupBox: View {
     let authManager: GitHubAuthManager
+    @State private var showingDeviceFlow = false
 
     var body: some View {
         GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    Image(systemName: "person.badge.key")
-                        .font(.title2)
-                        .foregroundStyle(.purple)
-                        .frame(width: 28)
+            HStack(spacing: 12) {
+                Image(systemName: "person.badge.key")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+                    .frame(width: 28)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("GitHub Account")
-                            .fontWeight(.medium)
-                        if authManager.isAuthenticated, let username = authManager.username {
-                            Text("@\(username)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if authManager.isAuthenticating {
-                            Text("Waiting for authorization…")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Not connected")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let error = authManager.authError {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .lineLimit(2)
-                        }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("GitHub Account")
+                        .fontWeight(.medium)
+                    if authManager.isAuthenticated, let username = authManager.username {
+                        Text("@\(username)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if authManager.isAuthenticating {
+                        Text("Waiting for authorization…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Not connected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer()
-
-                    if authManager.isAuthenticating && authManager.userCode == nil {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else if authManager.isAuthenticated {
-                        Button("Disconnect") {
-                            authManager.disconnect()
-                        }
-                        .controlSize(.small)
-                        .buttonStyle(.bordered)
-                    } else if !authManager.isAuthenticating {
-                        Button("Connect to GitHub") {
-                            Task {
-                                try? await authManager.authenticate()
-                            }
-                        }
-                        .controlSize(.small)
-                        .buttonStyle(.borderedProminent)
+                    if let error = authManager.authError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
                     }
                 }
 
-                // Device Flow: show user code for authorization
-                if let userCode = authManager.userCode, let url = authManager.verificationURL {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Enter this code at GitHub:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                Spacer()
 
-                        HStack(spacing: 12) {
-                            Text(userCode)
-                                .font(.system(.title2, design: .monospaced, weight: .bold))
-                                .textSelection(.enabled)
-
-                            Button {
-                                #if os(macOS)
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(userCode, forType: .string)
-                                #else
-                                UIPasteboard.general.string = userCode
-                                #endif
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .help("Copy code")
-                        }
-
-                        HStack(spacing: 8) {
-                            Link(url, destination: URL(string: url) ?? URL(string: "https://github.com/login/device")!)
-                                .font(.caption)
-
-                            ProgressView()
-                                .controlSize(.small)
-
-                            Spacer()
-
-                            Button("Cancel") {
-                                authManager.cancelAuth()
-                            }
-                            .controlSize(.small)
-                            .buttonStyle(.bordered)
+                if authManager.isAuthenticating && authManager.userCode == nil {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if authManager.isAuthenticated {
+                    Button("Disconnect") {
+                        authManager.disconnect()
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                } else if !authManager.isAuthenticating {
+                    Button("Connect to GitHub") {
+                        Task {
+                            try? await authManager.authenticate()
                         }
                     }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
                 }
             }
             .padding(4)
         }
+        .onChange(of: authManager.userCode) { _, newValue in
+            showingDeviceFlow = newValue != nil
+        }
+        .onChange(of: authManager.isAuthenticated) { _, authenticated in
+            if authenticated { showingDeviceFlow = false }
+        }
+        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            if !authManager.isAuthenticated {
+                authManager.cancelAuth()
+            }
+        }) {
+            DeviceFlowSheet(authManager: authManager)
+        }
+    }
+}
+
+// MARK: - Device Flow Sheet
+
+/// A modal sheet that displays the GitHub Device Flow verification code
+/// and opens the browser when the user confirms.
+struct DeviceFlowSheet: View {
+    let authManager: GitHubAuthManager
+    @State private var copied = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.purple)
+
+            Text("Connect to GitHub")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text("Enter this code on GitHub to authorize Maho Notes:")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if let userCode = authManager.userCode {
+                Text(userCode)
+                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 24)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .textSelection(.enabled)
+
+                Button {
+                    #if os(macOS)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(userCode, forType: .string)
+                    #else
+                    UIPasteboard.general.string = userCode
+                    #endif
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        copied = false
+                    }
+                } label: {
+                    Label(copied ? "Copied!" : "Copy Code", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Divider()
+                .padding(.horizontal, 40)
+
+            if let url = authManager.verificationURL, let destination = URL(string: url) {
+                Button {
+                    // Copy code to clipboard automatically, then open browser
+                    if let userCode = authManager.userCode {
+                        #if os(macOS)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(userCode, forType: .string)
+                        #else
+                        UIPasteboard.general.string = userCode
+                        #endif
+                    }
+                    #if os(macOS)
+                    NSWorkspace.shared.open(destination)
+                    #else
+                    UIApplication.shared.open(destination)
+                    #endif
+                } label: {
+                    Label("Open GitHub & Paste Code", systemImage: "safari")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Waiting for authorization…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
+
+            Button("Cancel") {
+                dismiss()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .foregroundStyle(.secondary)
+        }
+        .padding(32)
+        .frame(minWidth: 380, minHeight: 360)
     }
 }
 
