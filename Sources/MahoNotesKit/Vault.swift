@@ -360,6 +360,27 @@ public struct Vault: Sendable {
         return dirName
     }
 
+    /// Rename a note by updating its frontmatter title field.
+    /// The file on disk is NOT renamed — only the display title changes.
+    public func renameNote(relativePath: String, newTitle: String) {
+        let filePath = (path as NSString).appendingPathComponent(relativePath)
+        updateFrontmatterField(filePath: filePath, field: "title", value: newTitle)
+    }
+
+    /// Rename a sub-collection by updating its _index.md frontmatter title.
+    public func renameSubCollection(collectionId: String, newName: String) throws {
+        let dirPath = (path as NSString).appendingPathComponent(collectionId)
+        let indexPath = (dirPath as NSString).appendingPathComponent("_index.md")
+
+        if FileManager.default.fileExists(atPath: indexPath) {
+            updateFrontmatterField(filePath: indexPath, field: "title", value: newName)
+        } else {
+            // Create _index.md with the title
+            let content = "---\ntitle: \(newName)\n---\n"
+            try content.write(toFile: indexPath, atomically: true, encoding: .utf8)
+        }
+    }
+
     /// Migrate files with numeric prefixes (e.g., `001-slug.md`) to clean filenames,
     /// populating `_index.md` order to preserve the original ordering.
     public func migrateNumericPrefixes() throws {

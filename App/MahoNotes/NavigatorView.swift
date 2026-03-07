@@ -211,6 +211,21 @@ struct NavigatorView: View {
     @State private var deleteCollectionIsTopLevel = false
     @State private var deleteCollectionHasContents = false
 
+    // Rename collection
+    @State private var showingRenameCollection = false
+    @State private var renameCollectionId = ""
+    @State private var renameCollectionText = ""
+
+    // Rename note
+    @State private var showingRenameNote = false
+    @State private var renameNotePath = ""
+    @State private var renameNoteText = ""
+
+    // Change collection icon
+    @State private var showingChangeIcon = false
+    @State private var changeIconCollectionId = ""
+    @State private var changeIconSelection = "folder"
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -269,6 +284,27 @@ struct NavigatorView: View {
             } else {
                 Text("This empty collection will be deleted.")
             }
+        }
+        .alert("Rename Collection", isPresented: $showingRenameCollection) {
+            TextField("Name", text: $renameCollectionText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") {
+                let name = renameCollectionText.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                try? appState.renameCollection(collectionId: renameCollectionId, newName: name)
+            }
+        }
+        .alert("Rename Note", isPresented: $showingRenameNote) {
+            TextField("Title", text: $renameNoteText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") {
+                let title = renameNoteText.trimmingCharacters(in: .whitespaces)
+                guard !title.isEmpty else { return }
+                appState.renameNote(relativePath: renameNotePath, newTitle: title)
+            }
+        }
+        .sheet(isPresented: $showingChangeIcon) {
+            changeIconSheet
         }
     }
 
@@ -369,6 +405,21 @@ struct NavigatorView: View {
                         deleteCollectionIsTopLevel = isTopLevel
                         deleteCollectionHasContents = hasContents
                         showingDeleteCollection = true
+                    },
+                    onRenameCollection: { id, currentName in
+                        renameCollectionId = id
+                        renameCollectionText = currentName
+                        showingRenameCollection = true
+                    },
+                    onChangeIcon: { id, currentIcon in
+                        changeIconCollectionId = id
+                        changeIconSelection = currentIcon
+                        showingChangeIcon = true
+                    },
+                    onRenameNote: { path, currentTitle in
+                        renameNotePath = path
+                        renameNoteText = currentTitle
+                        showingRenameNote = true
                     }
                 )
             }
@@ -610,6 +661,67 @@ struct NavigatorView: View {
         }
     }
 
+    // MARK: - Change Icon Sheet
+
+    private var changeIconSheet: some View {
+        VStack(spacing: 16) {
+            Text("Change Icon")
+                .font(.headline)
+
+            changeIconPicker
+
+            HStack {
+                Button("Cancel") {
+                    showingChangeIcon = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Save") {
+                    try? appState.changeCollectionIcon(collectionId: changeIconCollectionId, newIcon: changeIconSelection)
+                    showingChangeIcon = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    private var changeIconPicker: some View {
+        let icons = [
+            "folder", "book.closed", "doc.text", "star", "lightbulb",
+            "terminal", "globe", "flask", "graduationcap", "heart",
+            "music.note", "photo", "gamecontroller", "wrench.and.screwdriver",
+            "sparkles", "atom",
+        ]
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Icon")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(32)), count: 8), spacing: 6) {
+                ForEach(icons, id: \.self) { icon in
+                    Button {
+                        changeIconSelection = icon
+                    } label: {
+                        Image(systemName: icon)
+                            .font(.system(size: 14))
+                            .frame(width: 28, height: 28)
+                            .background(
+                                changeIconSelection == icon
+                                    ? Color.accentColor.opacity(0.2)
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                            .foregroundStyle(changeIconSelection == icon ? .primary : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func vaultIcon(for vault: VaultEntry) -> String {
@@ -646,6 +758,9 @@ private struct CollectionNodeView: View {
     let onReorderSubCollections: (String, [String]) -> Void
     let onDeleteNote: (String, String) -> Void
     let onDeleteCollection: (String, String, Bool, Bool) -> Void
+    let onRenameCollection: (String, String) -> Void   // (id, currentName)
+    let onChangeIcon: (String, String) -> Void          // (id, currentIcon)
+    let onRenameNote: (String, String) -> Void           // (path, currentTitle)
 
     @State private var isExpanded: Bool = false
 
@@ -698,6 +813,22 @@ private struct CollectionNodeView: View {
                 onNewSubCollection(node.id)
             } label: {
                 Label("New Sub-Collection", systemImage: "folder.badge.plus")
+            }
+
+            Divider()
+
+            Button {
+                onRenameCollection(node.id, node.name)
+            } label: {
+                Label("Rename Collection", systemImage: "pencil")
+            }
+
+            if isTopLevel {
+                Button {
+                    onChangeIcon(node.id, node.icon)
+                } label: {
+                    Label("Change Icon", systemImage: "photo")
+                }
             }
 
             if !isTopLevel {
@@ -762,7 +893,10 @@ private struct CollectionNodeView: View {
                 onReorderTopLevel: onReorderTopLevel,
                 onReorderSubCollections: onReorderSubCollections,
                 onDeleteNote: onDeleteNote,
-                onDeleteCollection: onDeleteCollection
+                onDeleteCollection: onDeleteCollection,
+                onRenameCollection: onRenameCollection,
+                onChangeIcon: onChangeIcon,
+                onRenameNote: onRenameNote
             )
         }
 
@@ -841,6 +975,14 @@ private struct CollectionNodeView: View {
         }
         #endif
         .contextMenu {
+            Button {
+                onRenameNote(path, child.name)
+            } label: {
+                Label("Rename Note", systemImage: "pencil")
+            }
+
+            Divider()
+
             Button(role: .destructive) {
                 onDeleteNote(path, child.name)
             } label: {

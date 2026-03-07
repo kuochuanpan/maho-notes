@@ -1103,6 +1103,45 @@ final class AppState {
         reloadCurrentVault()
     }
 
+    // MARK: - Rename & Icon
+
+    /// Rename a collection (top-level: update maho.yaml; sub-collection: update _index.md title).
+    @MainActor
+    func renameCollection(collectionId: String, newName: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let parentDir = (collectionId as NSString).deletingLastPathComponent
+
+        if parentDir.isEmpty {
+            // Top-level collection
+            try updateCollectionInConfig(vaultPath: vaultPath, id: collectionId, name: newName)
+        } else {
+            // Sub-collection
+            let vault = Vault(path: vaultPath)
+            try vault.renameSubCollection(collectionId: collectionId, newName: newName)
+        }
+        reloadCurrentVault()
+    }
+
+    /// Change a top-level collection's icon in maho.yaml.
+    @MainActor
+    func changeCollectionIcon(collectionId: String, newIcon: String) throws {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        try updateCollectionInConfig(vaultPath: vaultPath, id: collectionId, icon: newIcon)
+        reloadCurrentVault()
+    }
+
+    /// Rename a note by updating its frontmatter title.
+    @MainActor
+    func renameNote(relativePath: String, newTitle: String) {
+        guard let entry = selectedVault else { return }
+        let vaultPath = resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        vault.renameNote(relativePath: relativePath, newTitle: newTitle)
+        reloadCurrentVault()
+    }
+
     // MARK: - Delete
 
     /// Delete a note by moving it to Trash.

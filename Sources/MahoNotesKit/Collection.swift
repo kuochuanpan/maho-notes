@@ -191,6 +191,29 @@ public func reorderCollections(vaultPath: String, orderedIds: [String]) throws {
     try output.write(to: mahoURL, atomically: true, encoding: .utf8)
 }
 
+/// Update a collection entry in maho.yaml by id. Only updates fields that are non-nil.
+public func updateCollectionInConfig(vaultPath: String, id: String, name: String? = nil, icon: String? = nil) throws {
+    let mahoURL = URL(fileURLWithPath: vaultPath).appendingPathComponent("maho.yaml")
+
+    guard let content = try? String(contentsOf: mahoURL, encoding: .utf8),
+          var yaml = try? Yams.load(yaml: content) as? [String: Any],
+          var items = yaml["collections"] as? [[String: Any]]
+    else { return }
+
+    guard let idx = items.firstIndex(where: { ($0["id"] as? String) == id }) else { return }
+
+    if let name {
+        items[idx]["name"] = name
+    }
+    if let icon {
+        items[idx]["icon"] = icon
+    }
+    yaml["collections"] = items
+
+    let output = try Yams.dump(object: yaml)
+    try output.write(to: mahoURL, atomically: true, encoding: .utf8)
+}
+
 public enum CollectionError: Error, LocalizedError {
     case invalidName
     case alreadyExists(String)
