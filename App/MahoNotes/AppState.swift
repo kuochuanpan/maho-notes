@@ -883,10 +883,9 @@ final class AppState {
             for note in allNotes {
                 grouped[note.collection, default: []].append(note)
             }
-            for key in grouped.keys {
-                grouped[key]?.sort { $0.title < $1.title }
+            self.notesByCollection = grouped.mapValues { notes in
+                notes.sorted { $0.title < $1.title }
             }
-            self.notesByCollection = grouped
         } catch {
             // Keep existing state on error
         }
@@ -971,11 +970,9 @@ final class AppState {
             for note in allNotes {
                 grouped[note.collection, default: []].append(note)
             }
-            // Sort notes within each collection by title
-            for key in grouped.keys {
-                grouped[key]?.sort { $0.title < $1.title }
+            self.notesByCollection = grouped.mapValues { notes in
+                notes.sorted { $0.title < $1.title }
             }
-            self.notesByCollection = grouped
         } catch {
             self.collections = []
             self.allNotes = []
