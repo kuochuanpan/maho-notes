@@ -465,6 +465,7 @@ final class AppState {
     /// Select a note from search results and dismiss the panel.
     func selectSearchResult(_ note: Note) {
         selectedNotePath = note.relativePath
+        navigatorSelection = [note.relativePath]
         showSearchPanel = false
         searchQuery = ""
         searchResults = []
@@ -639,6 +640,45 @@ final class AppState {
     /// The `selectedNotePath` is always included when this is non-empty.
     var selectedNotePaths: Set<String> = []
 
+    /// Navigator List selection binding — drives native ↑↓ keyboard navigation.
+    /// Synced bidirectionally with selectedNotePath/selectedNotePaths.
+    var navigatorSelection: Set<String> = []
+
+    /// Called from view's onChange(of: navigatorSelection) to sync back to selectedNotePath.
+    @MainActor
+    func handleNavigatorSelectionChange(_ newSelection: Set<String>) {
+        // Avoid re-entrant loops: only act if actually different
+        if newSelection.count == 1, let path = newSelection.first {
+            if selectedNotePath != path {
+                // Auto-save when switching notes
+                if selectedNotePath != nil && hasUnsavedChanges {
+                    saveNote()
+                }
+                selectedNotePath = path
+                selectedNotePaths = []
+                viewMode = .preview
+                editingBody = ""
+            }
+        } else if newSelection.isEmpty {
+            if selectedNotePath != nil {
+                if hasUnsavedChanges { saveNote() }
+                selectedNotePath = nil
+                selectedNotePaths = []
+            }
+        } else {
+            // Multi-selection via Cmd+Click / Shift+Click
+            selectedNotePaths = newSelection
+            if let path = newSelection.first(where: { $0 != selectedNotePath }) ?? newSelection.first {
+                if selectedNotePath != nil && selectedNotePath != path && hasUnsavedChanges {
+                    saveNote()
+                }
+                selectedNotePath = path
+                viewMode = .preview
+                editingBody = ""
+            }
+        }
+    }
+
     /// Whether a note path is part of the current selection (single or multi).
     func isNoteSelected(_ path: String) -> Bool {
         if !selectedNotePaths.isEmpty {
@@ -656,6 +696,7 @@ final class AppState {
         }
         selectedNotePath = path
         selectedNotePaths = []
+        navigatorSelection = path == nil ? [] : [path!]
         // Reset view mode to preview when selecting a new note
         viewMode = .preview
         editingBody = ""
@@ -691,6 +732,9 @@ final class AppState {
             viewMode = .preview
             editingBody = ""
         }
+        navigatorSelection = selectedNotePaths.isEmpty
+            ? (selectedNotePath.map { [$0] } ?? [])
+            : selectedNotePaths
     }
 
     /// Batch move selected notes to a target collection.
@@ -712,6 +756,7 @@ final class AppState {
         selectedNotePaths = []
         if let newPath = lastNewPath {
             selectedNotePath = newPath
+            navigatorSelection = [newPath]
         }
         reloadCurrentVault()
     }
@@ -805,6 +850,7 @@ final class AppState {
         // Restore selection if the note still exists
         if let prev = previousSelection, allNotes.contains(where: { $0.relativePath == prev }) {
             selectedNotePath = prev
+            navigatorSelection = [prev]
         }
 
         // Refresh conflict list for iCloud vaults
@@ -865,6 +911,7 @@ final class AppState {
             notesByCollection = [:]
             allNotes = []
             selectedNotePath = nil
+            navigatorSelection = []
             return
         }
 
@@ -893,6 +940,7 @@ final class AppState {
         }
 
         selectedNotePath = nil
+        navigatorSelection = []
 
         // Start iCloud monitoring if this is an iCloud vault
         startICloudMonitoringIfNeeded(for: entry)
@@ -1009,6 +1057,7 @@ final class AppState {
         // Directly enter editor mode — skip selectNote() to avoid
         // preview→editor flash that breaks @FocusState
         selectedNotePath = relativePath
+        navigatorSelection = [relativePath]
         viewMode = .editor
         editingBody = selectedNote?.body ?? ""
         return relativePath
@@ -1079,6 +1128,7 @@ final class AppState {
         // Clear selection if the deleted note was selected
         if selectedNotePath == relativePath {
             selectedNotePath = nil
+            navigatorSelection = []
             viewMode = .preview
         }
         reloadCurrentVault()
@@ -1138,6 +1188,7 @@ final class AppState {
         // Clear selection if a note in this collection was selected
         if let selected = selectedNotePath, selected.hasPrefix(collectionId + "/") {
             selectedNotePath = nil
+            navigatorSelection = []
             viewMode = .preview
         }
         reloadCurrentVault()
@@ -1162,6 +1213,7 @@ final class AppState {
         let newPath = try? vault.moveNote(relativePath: relativePath, toCollection: toCollection)
         if selectedNotePath == relativePath, let newPath {
             selectedNotePath = newPath
+            navigatorSelection = [newPath]
         }
         reloadCurrentVault()
     }

@@ -295,15 +295,18 @@ struct NavigatorView: View {
 
     // MARK: - List Content
 
-    /// Uses `List` (no `selection:` binding) for native sidebar styling,
-    /// with manual selection via `onTapGesture` to avoid `.tag()` propagation issues.
+    /// Uses `List(selection:)` for native sidebar styling with ↑↓ keyboard navigation.
     private var scrollContent: some View {
-        List {
+        @Bindable var state = appState
+        return List(selection: $state.navigatorSelection) {
             collectionsSection
             recentSection
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .onChange(of: appState.navigatorSelection) { _, newValue in
+            appState.handleNavigatorSelectionChange(newValue)
+        }
     }
 
     // MARK: - Collections Section
@@ -407,7 +410,6 @@ struct NavigatorView: View {
     }
 
     private func recentNoteRow(_ note: Note) -> some View {
-        let isSelected = appState.selectedNotePath == note.relativePath
         return Label {
             HStack(spacing: 4) {
                 Text(note.title)
@@ -422,13 +424,8 @@ struct NavigatorView: View {
             Image(systemName: "doc.text")
                 .foregroundStyle(.secondary)
         }
-        .listRowBackground(
-            isSelected ? Color.accentColor.opacity(0.15) : Color.clear
-        )
+        .tag(note.relativePath)
         .contentShape(Rectangle())
-        .onTapGesture {
-            appState.selectNote(path: note.relativePath)
-        }
     }
 
     // MARK: - New Collection Sheet
@@ -794,8 +791,6 @@ private struct CollectionNodeView: View {
 
     private func noteRow(_ child: FileTreeNode, noteChildren: [FileTreeNode]) -> some View {
         let path = child.note?.relativePath ?? child.id
-        let isSelected = appState.isNoteSelected(path)
-        let isActive = appState.selectedNotePath == path
 
         return Label {
             HStack(spacing: 4) {
@@ -808,7 +803,7 @@ private struct CollectionNodeView: View {
                         .foregroundStyle(.yellow)
                 }
                 // Show count badge when this is the active note in a multi-selection
-                if isActive && appState.selectedNotePaths.count > 1 {
+                if appState.selectedNotePath == path && appState.selectedNotePaths.count > 1 {
                     Text("\(appState.selectedNotePaths.count)")
                         .font(.caption2)
                         .padding(.horizontal, 4)
@@ -820,24 +815,9 @@ private struct CollectionNodeView: View {
             Image(systemName: "doc.text")
                 .foregroundStyle(.secondary)
         }
+        .tag(path)
         .padding(.leading, CGFloat(indentLevel + 1) * 14)
-        .listRowBackground(
-            isSelected ? Color.accentColor.opacity(isActive ? 0.2 : 0.1) : Color.clear
-        )
         .contentShape(Rectangle())
-        #if os(macOS)
-        .onTapGesture {
-            if NSEvent.modifierFlags.contains(.command) {
-                appState.toggleNoteSelection(path: path)
-            } else {
-                appState.selectNote(path: path)
-            }
-        }
-        #else
-        .onTapGesture {
-            appState.selectNote(path: path)
-        }
-        #endif
         .contextMenu {
             Button(role: .destructive) {
                 onDeleteNote(path, child.name)
