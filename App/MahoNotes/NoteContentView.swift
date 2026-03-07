@@ -22,6 +22,8 @@ struct NoteContentView: View {
             // Conflict banner
             if let conflict = appState.conflict(for: note.relativePath) {
                 conflictBanner(conflict)
+            } else if let conflictFile = appState.githubConflictFile(for: note.relativePath) {
+                githubConflictBanner(conflictFile)
             }
 
             // Breadcrumb header
@@ -74,6 +76,25 @@ struct NoteContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.yellow.opacity(0.1))
+    }
+
+    private func githubConflictBanner(_ conflictPath: String) -> some View {
+        let filename = URL(fileURLWithPath: conflictPath).lastPathComponent
+        return HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Conflict detected — local version saved as \(filename)")
+                .font(.subheadline)
+            Spacer()
+            Button("Open Conflict File") {
+                appState.selectedNotePath = conflictPath
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.orange.opacity(0.1))
     }
 
     @ViewBuilder

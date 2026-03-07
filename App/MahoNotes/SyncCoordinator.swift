@@ -2,6 +2,28 @@ import Foundation
 import Observation
 import MahoNotesKit
 
+// MARK: - DeviceInfo
+
+enum DeviceInfo {
+    static var name: String {
+        #if os(macOS)
+        Host.current().localizedName ?? "mac"
+        #else
+        UIDevice.current.name
+        #endif
+    }
+
+    /// Sanitized for use in filenames (spaces/slashes → hyphens, colons/quotes stripped).
+    static var filenameSafe: String {
+        name
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+    }
+}
+
 // MARK: - VaultSyncStatus
 
 struct VaultSyncStatus {
@@ -26,10 +48,13 @@ final class SyncCoordinator: @unchecked Sendable {
     var lastSyncDate: Date?
     var lastSyncError: String?
     var vaultSyncStatus: [String: VaultSyncStatus] = [:]
+    /// Conflict files by vault name → list of relative conflict paths (device-name format).
+    var githubConflictFiles: [String: [String]] = [:]
 
     // MARK: - Private State
 
     private var managers: [String: GitHubSyncManager] = [:]
+    private var vaultPaths: [String: String] = [:]
     private var periodicTask: Task<Void, Never>?
     private var debounceTasks: [String: Task<Void, Never>] = [:]
 
@@ -74,6 +99,7 @@ final class SyncCoordinator: @unchecked Sendable {
                 token: token
             ) else { continue }
             managers[entry.name] = manager
+            vaultPaths[entry.name] = vaultPath
             vaultSyncStatus[entry.name] = VaultSyncStatus()
         }
 
@@ -97,7 +123,9 @@ final class SyncCoordinator: @unchecked Sendable {
         for task in debounceTasks.values { task.cancel() }
         debounceTasks = [:]
         managers = [:]
+        vaultPaths = [:]
         vaultSyncStatus = [:]
+        githubConflictFiles = [:]
         isSyncing = false
     }
 
@@ -158,19 +186,84 @@ final class SyncCoordinator: @unchecked Sendable {
     private func runSync(vaultName: String, manager: GitHubSyncManager, operation: SyncOp) async {
         vaultSyncStatus[vaultName, default: VaultSyncStatus()].isSyncing = true
         do {
+            let result: SyncResult
             switch operation {
-            case .sync: _ = try await manager.sync()
-            case .pull: _ = try await manager.pull()
-            case .push: _ = try await manager.push()
+            case .sync: result = try await manager.sync()
+            case .pull: result = try await manager.pull()
+            case .push: result = try await manager.push()
             }
             vaultSyncStatus[vaultName]?.isSyncing = false
             vaultSyncStatus[vaultName]?.lastSyncDate = Date()
             vaultSyncStatus[vaultName]?.lastError = nil
             lastSyncDate = Date()
+            processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
         } catch {
             vaultSyncStatus[vaultName]?.isSyncing = false
             vaultSyncStatus[vaultName]?.lastError = error.localizedDescription
             lastSyncError = error.localizedDescription
+        }
+    }
+
+    /// Rename new timestamp-based conflict files to device-name format, merge with existing,
+    /// and prune any that have since been removed from disk.
+    @MainActor
+    private func processConflicts(vaultName: String, newConflicts: [String]) {
+        guard let vaultPath = vaultPaths[vaultName] else { return }
+        let deviceName = DeviceInfo.filenameSafe
+        let fm = FileManager.default
+
+        // Rename each new conflict file from timestamp format to device-name format
+        var renamed: [String] = []
+        for conflictPath in newConflicts {
+            if let newPath = renameConflictFile(at: conflictPath, in: vaultPath, deviceName: deviceName) {
+                renamed.append(newPath)
+            } else {
+                renamed.append(conflictPath)
+            }
+        }
+
+        // Prune stale entries, then merge
+        let existing = githubConflictFiles[vaultName] ?? []
+        let stillExisting = existing.filter { path in
+            fm.fileExists(atPath: (vaultPath as NSString).appendingPathComponent(path))
+        }
+        var combined = stillExisting
+        for p in renamed where !combined.contains(p) {
+            combined.append(p)
+        }
+        githubConflictFiles[vaultName] = combined
+    }
+
+    /// Rename a `*.conflict-TIMESTAMP-local.*` file to `*.conflict-{deviceName}.*`.
+    /// Returns the new relative path on success, nil on failure.
+    @MainActor
+    private func renameConflictFile(at relativePath: String, in vaultPath: String, deviceName: String) -> String? {
+        let url = URL(fileURLWithPath: relativePath)
+        let dir = url.deletingLastPathComponent().relativePath
+        let ext = url.pathExtension
+        let nameNoExt = url.deletingPathExtension().lastPathComponent
+
+        // nameNoExt looks like: "hello.conflict-2026-03-07T15-30-00Z-local"
+        guard nameNoExt.hasSuffix("-local"),
+              let conflictRange = nameNoExt.range(of: ".conflict-") else { return nil }
+
+        let baseName = String(nameNoExt[nameNoExt.startIndex..<conflictRange.lowerBound])
+        let newName = ext.isEmpty
+            ? "\(baseName).conflict-\(deviceName)"
+            : "\(baseName).conflict-\(deviceName).\(ext)"
+        let newRelativePath = (dir == "." || dir.isEmpty) ? newName : "\(dir)/\(newName)"
+
+        let fullOld = (vaultPath as NSString).appendingPathComponent(relativePath)
+        let fullNew = (vaultPath as NSString).appendingPathComponent(newRelativePath)
+
+        // If the device-named file already exists (idempotent rename), just return new path
+        if FileManager.default.fileExists(atPath: fullNew) { return newRelativePath }
+
+        do {
+            try FileManager.default.moveItem(atPath: fullOld, toPath: fullNew)
+            return newRelativePath
+        } catch {
+            return nil
         }
     }
 }

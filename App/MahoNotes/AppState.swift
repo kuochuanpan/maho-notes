@@ -849,12 +849,30 @@ final class AppState {
 
     var iCloudManager = iCloudSyncManager()
 
-    /// Whether the currently selected vault has any conflicts.
-    var hasConflicts: Bool { !iCloudManager.conflicts.isEmpty }
+    /// Whether any vault has iCloud or GitHub conflicts.
+    var hasConflicts: Bool {
+        !iCloudManager.conflicts.isEmpty ||
+        !syncCoordinator.githubConflictFiles.values.flatMap { $0 }.isEmpty
+    }
 
-    /// Find conflict info for a specific note path.
+    /// Find iCloud conflict info for a specific note path.
     func conflict(for notePath: String) -> iCloudSyncManager.ConflictInfo? {
         iCloudManager.conflicts.first { $0.notePath == notePath }
+    }
+
+    /// Find a GitHub conflict file path for a specific note path.
+    /// e.g. `notes/hello.md` → `notes/hello.conflict-Mahos-Mac-mini.md`
+    func githubConflictFile(for notePath: String) -> String? {
+        let allConflicts = syncCoordinator.githubConflictFiles.values.flatMap { $0 }
+        let noteURL = URL(fileURLWithPath: notePath)
+        let noteDir = noteURL.deletingLastPathComponent().relativePath
+        let noteBase = noteURL.deletingPathExtension().lastPathComponent
+        return allConflicts.first { conflictPath in
+            let cURL = URL(fileURLWithPath: conflictPath)
+            let cDir = cURL.deletingLastPathComponent().relativePath
+            let cBase = cURL.deletingPathExtension().lastPathComponent
+            return cDir == noteDir && cBase.hasPrefix("\(noteBase).conflict-")
+        }
     }
 
     /// Start iCloud monitoring for the given vault entry if it's an iCloud vault.

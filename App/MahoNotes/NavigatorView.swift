@@ -466,7 +466,8 @@ struct NavigatorView: View {
             HStack(spacing: 4) {
                 Text(note.title)
                     .lineLimit(1)
-                if appState.conflict(for: note.relativePath) != nil {
+                if appState.conflict(for: note.relativePath) != nil
+                   || appState.githubConflictFile(for: note.relativePath) != nil {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
                         .foregroundStyle(.yellow)
@@ -932,7 +933,8 @@ private struct CollectionNodeView: View {
                 Text(child.name)
                     .lineLimit(1)
                 if let note = child.note,
-                   appState.conflict(for: note.relativePath) != nil {
+                   appState.conflict(for: note.relativePath) != nil
+                   || (child.note.map { appState.githubConflictFile(for: $0.relativePath) != nil } ?? false) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption2)
                         .foregroundStyle(.yellow)
