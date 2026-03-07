@@ -19,13 +19,17 @@ public enum GitHubVaultImportError: Error, CustomStringConvertible {
 
 /// Import a GitHub repository as a Maho Notes vault using the REST API.
 /// Works on all Apple platforms (no git binary required).
+///
+/// - Parameter skipRegistration: When `true`, the vault is imported but not registered.
+///   The caller is responsible for calling `VaultStore.registerVault()` separately.
 @discardableResult
 public func importGitHubVaultViaAPI(
     repo: String,
     vaultRoot: String,
     name: String? = nil,
     token: String,
-    globalConfigDir: String
+    globalConfigDir: String,
+    skipRegistration: Bool = false
 ) async throws -> String {
     let fm = FileManager.default
 
@@ -95,13 +99,15 @@ public func importGitHubVaultViaAPI(
     }
 
     // Register in vault registry
-    try registerVaultEntry(
-        name: vaultName,
-        vaultPath: vaultPath,
-        githubRepo: repo,
-        globalConfigDir: globalConfigDir,
-        vaultType: .github
-    )
+    if !skipRegistration {
+        try registerVaultEntry(
+            name: vaultName,
+            vaultPath: vaultPath,
+            githubRepo: repo,
+            globalConfigDir: globalConfigDir,
+            vaultType: .github
+        )
+    }
 
     return vaultName
 }

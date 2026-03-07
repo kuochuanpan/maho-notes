@@ -203,14 +203,19 @@ func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, gl
 
 // MARK: - Public API
 
-/// Creates an empty vault at `vaultRoot/name` and registers it.
+/// Creates an empty vault at `vaultRoot/name` and optionally registers it.
+///
+/// - Parameter skipRegistration: When `true`, the vault is created on disk but not
+///   registered in the vault registry. The caller is responsible for calling
+///   `VaultStore.registerVault()` separately. Default is `false` for backward compatibility.
 public func createEmptyVault(
     name: String,
     vaultRoot: String,
     authorName: String,
     skipTutorial: Bool,
     globalConfigDir: String,
-    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git"
+    tutorialRepoURL: String = "https://github.com/kuochuanpan/maho-getting-started.git",
+    skipRegistration: Bool = false
 ) throws {
     let fm = FileManager.default
     if !fm.fileExists(atPath: vaultRoot) {
@@ -226,12 +231,17 @@ public func createEmptyVault(
         skipTutorial: skipTutorial,
         tutorialRepoURL: tutorialRepoURL
     )
-    try registerVaultEntry(name: name, vaultPath: vaultPath, githubRepo: nil, globalConfigDir: globalConfigDir)
+    if !skipRegistration {
+        try registerVaultEntry(name: name, vaultPath: vaultPath, githubRepo: nil, globalConfigDir: globalConfigDir)
+    }
     print("Vault initialized at \(vaultPath)")
 }
 
-/// Clones a GitHub vault into `vaultRoot/<name>` and registers it.
+/// Clones a GitHub vault into `vaultRoot/<name>` and optionally registers it.
 /// If the directory already exists, skips cloning and registers as-is.
+///
+/// - Parameter skipRegistration: When `true`, the vault is cloned but not registered.
+///   The caller is responsible for calling `VaultStore.registerVault()` separately.
 /// - Returns: The vault name that was registered.
 @discardableResult
 public func cloneGitHubVault(
@@ -239,7 +249,8 @@ public func cloneGitHubVault(
     vaultRoot: String,
     name: String? = nil,
     globalConfigDir: String,
-    readOnly: Bool = false
+    readOnly: Bool = false,
+    skipRegistration: Bool = false
 ) throws -> String {
     let fm = FileManager.default
     let vaultName = name ?? String(repo.split(separator: "/").last ?? Substring(repo))
@@ -326,7 +337,9 @@ public func cloneGitHubVault(
         }
     }
 
-    try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir, readOnly: readOnly, vaultType: .github)
+    if !skipRegistration {
+        try registerVaultEntry(name: vaultName, vaultPath: vaultPath, githubRepo: repo, globalConfigDir: globalConfigDir, readOnly: readOnly, vaultType: .github)
+    }
     print("Vault '\(vaultName)' ready at \(vaultPath)")
     return vaultName
 }
