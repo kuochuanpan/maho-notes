@@ -859,7 +859,9 @@ final class AppState {
         let vaultURL = URL(fileURLWithPath: vaultPath)
 
         iCloudManager.startMonitoring(containerURL: vaultURL) { [weak self] in
-            self?.reloadCurrentVault()
+            Task { @MainActor in
+                self?.reloadCurrentVault()
+            }
         }
 
         iCloudManager.checkForConflicts(in: vaultURL)
