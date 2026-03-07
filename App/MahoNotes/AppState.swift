@@ -68,6 +68,7 @@ final class AppState {
     }
 
     /// Called when user toggles cloud sync. Checks for merge needs before applying.
+    @MainActor
     func requestCloudSyncChange(to mode: CloudSyncMode) {
         if mode == .off {
             // Turning off — migrate vaults back to local, then disable
@@ -104,6 +105,7 @@ final class AppState {
     }
 
     /// Merge local vaults with cloud registry.
+    @MainActor
     func performMerge() {
         guard let cloudRegistry = pendingCloudRegistry,
               let localRegistry = try? MahoNotesKit.loadRegistry() ?? VaultRegistry(primary: "default", vaults: [])
@@ -136,6 +138,7 @@ final class AppState {
     }
 
     /// Replace cloud registry with local registry (discard cloud).
+    @MainActor
     func replaceCloudWithLocal() {
         applyCloudSyncMode(.icloud)
         if var localRegistry = try? MahoNotesKit.loadRegistry() {
