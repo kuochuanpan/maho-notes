@@ -303,6 +303,7 @@ struct NavigatorView: View {
             recentSection
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: - Collections Section
