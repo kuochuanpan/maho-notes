@@ -55,6 +55,19 @@ public struct GitSync: Sendable {
         // Pre-flight: git installed?
         try PreflightCheck.checkGitInstalled()
 
+        // Pre-flight: check for stale git lock
+        let lockPath = (vaultPath as NSString).appendingPathComponent(".git/index.lock")
+        if FileManager.default.fileExists(atPath: lockPath) {
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: lockPath),
+               let modified = attrs[.modificationDate] as? Date,
+               Date().timeIntervalSince(modified) > 300 {
+                try? FileManager.default.removeItem(atPath: lockPath)
+                printWarning("Removed stale git lock file")
+            } else {
+                throw SyncError.gitLockExists
+            }
+        }
+
         // Pre-flight: iCloud warning
         if let warning = PreflightCheck.checkICloudStatus(vaultPath: vaultPath) {
             printWarning(warning)
@@ -452,6 +465,7 @@ public enum SyncError: Error, CustomStringConvertible {
     case authNotConfigured(message: String)
     case repoNotConfigured
     case invalidVault(message: String)
+    case gitLockExists
 
     public var description: String {
         switch self {
@@ -467,6 +481,8 @@ public enum SyncError: Error, CustomStringConvertible {
                 """
         case .invalidVault(let message):
             return message
+        case .gitLockExists:
+            return "Another git operation is in progress. Please wait and try again."
         }
     }
 }
