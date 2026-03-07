@@ -114,8 +114,10 @@ public actor VaultStore {
 
     /// Canonical vault path for a registry entry.
     ///
-    /// Delegates to the existing `resolvedPath(for:)` free function.
-    public func resolvedPath(for entry: VaultEntry) -> String {
+    /// This is `nonisolated` because path resolution is a pure function —
+    /// it derives the path from the entry's type and name without accessing
+    /// any mutable actor state. Callers don't need `await`.
+    nonisolated public func resolvedPath(for entry: VaultEntry) -> String {
         MahoNotesKit.resolvedPath(for: entry)
     }
 
