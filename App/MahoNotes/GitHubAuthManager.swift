@@ -6,7 +6,7 @@ import MahoNotesKit
 // TODO: Replace with your GitHub OAuth App client ID.
 // Create one at https://github.com/settings/developers → OAuth Apps → New
 // Enable "Device Flow" in the app settings. No client secret needed.
-private let oauthClientId = "PLACEHOLDER_CLIENT_ID"
+private let oauthClientId = "Ov23libHvZdcws5ZS8rG"
 
 /// Manages GitHub authentication state using the Device Flow.
 ///
