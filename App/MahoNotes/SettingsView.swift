@@ -70,6 +70,16 @@ struct VaultsSettingsTab: View {
             }
             .padding(.horizontal, 4)
 
+            // MARK: - GitHub Account
+            GitHubAccountGroupBox(authManager: appState.authManager)
+                .padding(.horizontal, 4)
+
+            // MARK: - GitHub Sync
+            if !appState.vaults.filter({ $0.github != nil }).isEmpty {
+                GitHubSyncGroupBox(coordinator: appState.syncCoordinator)
+                    .padding(.horizontal, 4)
+            }
+
             // MARK: - Vault List
             List {
                 ForEach(appState.vaults, id: \.name) { entry in
@@ -511,6 +521,116 @@ struct SearchSettingsTab: View {
                     isBuilding = false
                 }
             }
+        }
+    }
+}
+
+// MARK: - GitHub Account GroupBox
+
+struct GitHubAccountGroupBox: View {
+    let authManager: GitHubAuthManager
+
+    var body: some View {
+        GroupBox {
+            HStack(spacing: 12) {
+                Image(systemName: "person.badge.key")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("GitHub Account")
+                        .fontWeight(.medium)
+                    if authManager.isAuthenticated, let username = authManager.username {
+                        Text("@\(username)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Not connected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let error = authManager.authError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer()
+
+                if authManager.isAuthenticating {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if authManager.isAuthenticated {
+                    Button("Disconnect") {
+                        authManager.disconnect()
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                } else {
+                    Button("Connect to GitHub") {
+                        Task {
+                            try? await authManager.authenticate()
+                        }
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(4)
+        }
+    }
+}
+
+// MARK: - GitHub Sync GroupBox
+
+struct GitHubSyncGroupBox: View {
+    let coordinator: SyncCoordinator
+
+    var body: some View {
+        GroupBox {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("GitHub Sync")
+                        .fontWeight(.medium)
+                    if let lastSync = coordinator.lastSyncDate {
+                        Text("Last synced \(lastSync, style: .relative) ago")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Not yet synced this session")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let error = coordinator.lastSyncError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer()
+
+                if coordinator.isSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button("Sync Now") {
+                        coordinator.syncNow()
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(4)
         }
     }
 }

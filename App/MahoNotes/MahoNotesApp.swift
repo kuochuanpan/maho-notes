@@ -5,6 +5,7 @@ import MahoNotesKit
 struct MahoNotesApp: App {
     @State private var appState = AppState()
     @AppStorage("appTheme") private var appTheme: String = "system"
+    @Environment(\.scenePhase) private var scenePhase
 
     private var settingsColorScheme: ColorScheme? {
         switch appTheme {
@@ -18,6 +19,17 @@ struct MahoNotesApp: App {
         WindowGroup {
             ContentView()
                 .environment(appState)
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        Task {
+                            await appState.syncCoordinator.pullAll()
+                        }
+                    }
+                }
+                // TODO: The mahonotes://github-callback URL scheme is handled automatically
+                // by ASWebAuthenticationSession during the OAuth flow. If manual deep-link
+                // processing is needed in the future, handle it here.
+                .onOpenURL { _ in }
         }
         #if os(macOS)
         .windowToolbarStyle(.unified(showsTitle: false))

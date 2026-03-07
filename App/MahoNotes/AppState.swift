@@ -602,6 +602,7 @@ final class AppState {
 
             let newContent = frontmatterLines.joined(separator: "\n") + "\n" + editingBody
             try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+            syncCoordinator.notifyContentChanged(vault: entry)
 
             // Reload the note in allNotes
             if let updated = try parseNote(at: filePath, relativeTo: vaultPath) {
@@ -836,6 +837,14 @@ final class AppState {
         return name
     }
 
+    // MARK: - GitHub Auth
+
+    let authManager = GitHubAuthManager()
+
+    // MARK: - GitHub Sync
+
+    let syncCoordinator = SyncCoordinator()
+
     // MARK: - iCloud Sync
 
     var iCloudManager = iCloudSyncManager()
@@ -934,6 +943,8 @@ final class AppState {
             self.isLoaded = true
             loadCloudSyncMode()
             loadSelectedVault()
+            syncCoordinator.startResolving(vaults: self.vaults)
+            Task { await authManager.checkAuth() }
         } catch {
             self.errorMessage = "Failed to load vault registry: \(error.localizedDescription)"
             self.vaults = []

@@ -321,17 +321,28 @@ struct VaultRailView: View {
         isCreating = true
         errorMessage = nil
 
-        let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
+        Task { @MainActor in
+            do {
+                // Authenticate if no token is available yet.
+                if !appState.authManager.isAuthenticated {
+                    try await appState.authManager.authenticate()
+                    // If user cancelled (authenticate() returns without throwing), stop.
+                    guard appState.authManager.isAuthenticated else {
+                        isCreating = false
+                        return
+                    }
+                }
 
-        do {
-            try appState.importGitHubVault(
-                repo: repo,
-                name: vaultName.isEmpty ? nil : vaultName
-            )
-            showingAddPopover = false
-        } catch {
-            errorMessage = error.localizedDescription
-            isCreating = false
+                let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
+                try appState.importGitHubVault(
+                    repo: repo,
+                    name: vaultName.isEmpty ? nil : vaultName
+                )
+                showingAddPopover = false
+            } catch {
+                errorMessage = error.localizedDescription
+                isCreating = false
+            }
         }
     }
 
