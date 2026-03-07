@@ -12,11 +12,11 @@ enum MahoTheme {
 
     // MARK: - B Column (Navigator)
 
-    /// Dark: #7F1084 (NTHU Seance purple, brighter than A), Light: #F3E6F5 (pale lavender).
+    /// Dark: #4A1050 (deeper purple than A), Light: #E0CCE6 (muted lavender).
     static func navigatorBackground(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(red: 127 / 255, green: 16 / 255, blue: 132 / 255)
-            : Color(red: 243 / 255, green: 230 / 255, blue: 245 / 255)
+            ? Color(red: 74 / 255, green: 16 / 255, blue: 80 / 255)
+            : Color(red: 224 / 255, green: 204 / 255, blue: 230 / 255)
     }
 
     /// Dark: white, Light: primary (system default).
