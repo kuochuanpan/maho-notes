@@ -11,6 +11,9 @@ struct iPadContentView: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var selectedNotePath: String?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    /// Independent cycle tracker (0=all, 1=doubleColumn, 2=detailOnly)
+    /// because NavigationSplitViewVisibility is a preference the system can override
+    @State private var columnCycleState: Int = 0
     @State private var showingNewNote = false
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
@@ -47,10 +50,12 @@ struct iPadContentView: View {
         } detail: {
             // C — Note Content (no NavigationStack — avoids second nav bar / system toggle)
             NoteContentView()
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar(removing: .sidebarToggle)
                 .toolbar {
                     // Show toggle in C only when B is hidden (detailOnly)
-                    if columnVisibility == .detailOnly {
+                    if columnCycleState == 2 {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
                                 withAnimation { cycleColumns() }
@@ -134,10 +139,11 @@ struct iPadContentView: View {
     // MARK: - Column Visibility Cycle
     // A+B+C → B+C → C only → A+B+C
     private func cycleColumns() {
-        switch columnVisibility {
-        case .all: columnVisibility = .doubleColumn
-        case .doubleColumn: columnVisibility = .detailOnly
-        case .detailOnly: columnVisibility = .all
+        columnCycleState = (columnCycleState + 1) % 3
+        switch columnCycleState {
+        case 0: columnVisibility = .all
+        case 1: columnVisibility = .doubleColumn
+        case 2: columnVisibility = .detailOnly
         default: columnVisibility = .all
         }
     }
