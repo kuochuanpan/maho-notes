@@ -150,13 +150,20 @@ final class SyncCoordinator: @unchecked Sendable {
     // MARK: - Sync Operations
 
     /// Trigger a full sync (pull + push) across all GitHub vaults immediately.
-    /// Cancels any pending debounce tasks to prevent concurrent sync races.
+    /// Cancels any pending debounce tasks, waits for in-progress syncs to finish,
+    /// then runs a fresh sync.
     @MainActor
     func syncNow() {
         // Cancel debounce tasks to avoid racing with manual sync
         for task in debounceTasks.values { task.cancel() }
         debounceTasks = [:]
-        Task { @MainActor in await syncAll() }
+        Task { @MainActor in
+            // Wait for any in-progress sync to complete before starting fresh
+            while !syncInProgress.isEmpty {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            await syncAll()
+        }
     }
 
     /// Pull from all GitHub vaults (e.g., on app foreground).

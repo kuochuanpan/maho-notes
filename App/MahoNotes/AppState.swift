@@ -1258,6 +1258,9 @@ import MahoNotesKit
             viewMode = .preview
         }
         reloadCurrentVault()
+
+        // Trigger sync so deletion is pushed to remote
+        syncCoordinator.notifyContentChanged(vault: entry)
     }
 
     /// Delete a sub-collection by moving its notes to the parent collection, then removing the directory.
@@ -1316,6 +1319,9 @@ import MahoNotesKit
             viewMode = .preview
         }
         reloadCurrentVault()
+
+        // Trigger sync so deletion is pushed to remote
+        syncCoordinator.notifyContentChanged(vault: entry)
     }
 
     /// Reorder notes within a collection directory by writing order to `_index.md`.
