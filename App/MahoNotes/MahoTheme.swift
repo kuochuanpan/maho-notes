@@ -38,4 +38,14 @@ enum MahoTheme {
     static func navigatorSecondaryForeground(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? .white.opacity(0.7) : .secondary
     }
+
+    // MARK: - C Column (Note Content)
+
+    /// Dark: #1E1E1E (macOS-matching dark gray), Light: system background.
+    /// Prevents pure-black on iPad NavigationSplitView detail column.
+    static func contentBackground(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(red: 30 / 255, green: 30 / 255, blue: 30 / 255)
+            : Color(red: 1.0, green: 1.0, blue: 1.0)
+    }
 }

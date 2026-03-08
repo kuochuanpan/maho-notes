@@ -6,6 +6,7 @@ import MahoNotesKit
 /// A (VaultRail) | B (Navigator) | C (NoteContent)
 struct iPadContentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var searchQuery = ""
     @State private var searchResults: [Note] = []
     @State private var debounceTask: Task<Void, Never>?
@@ -34,6 +35,8 @@ struct iPadContentView: View {
         } content: {
             // B — Navigator
             navigatorContent
+                .scrollContentBackground(.hidden)
+                .background(MahoTheme.navigatorBackground(for: colorScheme))
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
@@ -50,6 +53,7 @@ struct iPadContentView: View {
         } detail: {
             // C — Note Content (nav bar hidden; toggle + actions live in breadcrumb bar)
             NoteContentView()
+                .background(MahoTheme.contentBackground(for: colorScheme))
                 .navigationBarHidden(true)
                 .toolbar(removing: .sidebarToggle)
                 .environment(\.sidebarToggleAction, columnCycleState == 2
