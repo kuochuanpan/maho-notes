@@ -107,7 +107,7 @@ struct iPadContentView: View {
                 if appState.selectedVaultName == entry.name {
                     Image(systemName: "checkmark")
                         .font(.caption2)
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
             .contentShape(Rectangle())
@@ -202,6 +202,7 @@ struct iPadContentView: View {
 
     // MARK: - Collection Tree Row (Recursive)
 
+    @ViewBuilder
     private func iPadCollectionRow(node: FileTreeNode, depth: Int) -> some View {
         DisclosureGroup {
             ForEach(node.children, id: \.id) { child in
