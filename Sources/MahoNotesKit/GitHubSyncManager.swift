@@ -103,6 +103,7 @@ public actor GitHubSyncManager {
         ".maho",
         ".DS_Store",
         ".conflict-",
+        "_site",
     ]
 
     /// Committer info for created commits.
@@ -604,19 +605,28 @@ public actor GitHubSyncManager {
         return "\(dir)/\(conflictName)"
     }
 
-    /// Ensure .gitignore has .maho/ entry.
+    /// Ensure .gitignore has required entries.
     private func ensureGitignore() throws {
         let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
         let fm = FileManager.default
+        let requiredEntries = [".maho/", "_site/"]
 
         if fm.fileExists(atPath: gitignorePath) {
-            let content = try String(contentsOfFile: gitignorePath, encoding: .utf8)
-            if !content.contains(".maho/") && !content.contains(".maho\n") {
-                let updated = content + "\n.maho/\n"
-                try updated.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+            var content = try String(contentsOfFile: gitignorePath, encoding: .utf8)
+            var modified = false
+            for entry in requiredEntries {
+                let bare = entry.replacingOccurrences(of: "/", with: "")
+                if !content.contains(entry) && !content.contains(bare + "\n") {
+                    content += "\n\(entry)\n"
+                    modified = true
+                }
+            }
+            if modified {
+                try content.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
             }
         } else {
-            try ".maho/\n".write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+            let content = requiredEntries.joined(separator: "\n") + "\n"
+            try content.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
         }
     }
 }
