@@ -544,7 +544,7 @@ public actor GitHubSyncManager {
         guard let enumerator = fm.enumerator(
             at: baseURL,
             includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
             return [:]
         }
@@ -563,9 +563,6 @@ public actor GitHubSyncManager {
                 : fullPath
 
             if shouldExclude(path: relativePath) { continue }
-
-            // Also skip hidden files/dirs that the enumerator might find
-            if relativePath.hasPrefix(".") { continue }
 
             files[relativePath] = true
         }
