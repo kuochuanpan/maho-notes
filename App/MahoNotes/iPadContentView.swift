@@ -25,7 +25,8 @@ struct iPadContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // A — Vault Rail
             iPadVaultRail(showingSettings: $showingSettings)
-                .navigationBarHidden(true)
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
                 .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
         } content: {
             // B — Navigator
