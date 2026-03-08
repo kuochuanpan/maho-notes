@@ -57,6 +57,8 @@ final class SyncCoordinator: @unchecked Sendable {
     private var vaultPaths: [String: String] = [:]
     private var periodicTask: Task<Void, Never>?
     private var debounceTasks: [String: Task<Void, Never>] = [:]
+    /// Per-vault lock to prevent concurrent sync operations (avoids 409 race).
+    private var syncInProgress: Set<String> = []
 
     // MARK: - Lifecycle
 
@@ -126,6 +128,7 @@ final class SyncCoordinator: @unchecked Sendable {
         vaultPaths = [:]
         vaultSyncStatus = [:]
         githubConflictFiles = [:]
+        syncInProgress = []
         isSyncing = false
     }
 
@@ -147,8 +150,12 @@ final class SyncCoordinator: @unchecked Sendable {
     // MARK: - Sync Operations
 
     /// Trigger a full sync (pull + push) across all GitHub vaults immediately.
+    /// Cancels any pending debounce tasks to prevent concurrent sync races.
     @MainActor
     func syncNow() {
+        // Cancel debounce tasks to avoid racing with manual sync
+        for task in debounceTasks.values { task.cancel() }
+        debounceTasks = [:]
         Task { @MainActor in await syncAll() }
     }
 
@@ -184,6 +191,11 @@ final class SyncCoordinator: @unchecked Sendable {
 
     @MainActor
     private func runSync(vaultName: String, manager: GitHubSyncManager, operation: SyncOp) async {
+        // Per-vault lock: skip if another sync is already in-flight for this vault.
+        guard !syncInProgress.contains(vaultName) else { return }
+        syncInProgress.insert(vaultName)
+        defer { syncInProgress.remove(vaultName) }
+
         vaultSyncStatus[vaultName, default: VaultSyncStatus()].isSyncing = true
         do {
             let result: SyncResult
@@ -199,8 +211,8 @@ final class SyncCoordinator: @unchecked Sendable {
             processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
         } catch {
             vaultSyncStatus[vaultName]?.isSyncing = false
-            vaultSyncStatus[vaultName]?.lastError = error.localizedDescription
-            lastSyncError = error.localizedDescription
+            vaultSyncStatus[vaultName]?.lastError = String(describing: error)
+            lastSyncError = String(describing: error)
         }
     }
 
