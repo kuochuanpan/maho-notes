@@ -25,8 +25,7 @@ struct iPadContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // A — Vault Rail
             iPadVaultRail(showingSettings: $showingSettings)
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarHidden(true)
                 .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
         } content: {
             // B — Navigator
@@ -39,6 +38,16 @@ struct iPadContentView: View {
             NavigationStack {
                 NoteContentView()
                     .toolbar {
+                        // Show restore toggle only when A+B are hidden
+                        if columnVisibility == .detailOnly {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    withAnimation { columnVisibility = .all }
+                                } label: {
+                                    Image(systemName: "sidebar.left")
+                                }
+                            }
+                        }
                         ToolbarItem(placement: .primaryAction) {
                             Button {
                                 presentNewNote()
