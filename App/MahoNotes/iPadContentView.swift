@@ -38,15 +38,6 @@ struct iPadContentView: View {
             NavigationStack {
                 NoteContentView()
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                withAnimation {
-                                    cycleColumnVisibility()
-                                }
-                            } label: {
-                                Image(systemName: "sidebar.left")
-                            }
-                        }
                         ToolbarItem(placement: .primaryAction) {
                             Button {
                                 presentNewNote()
@@ -93,8 +84,6 @@ struct iPadContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbarRole(.editor)
-        .toolbar(removing: .sidebarToggle)
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
@@ -120,27 +109,6 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
-
-    // MARK: - Column Visibility Cycle
-    // all (A+B+C) → doubleColumn (B+C, A hidden) → detailOnly (C only, B hidden)
-    // → detailOnly stays until toggle pressed → back to all
-    // When in B column: all → doubleColumn → detailOnly
-    // When in C column (detailOnly): → all
-    private func cycleColumnVisibility() {
-        switch columnVisibility {
-        case .all:
-            // Hide A, show B+C
-            columnVisibility = .doubleColumn
-        case .doubleColumn:
-            // Hide A+B, show only C
-            columnVisibility = .detailOnly
-        case .detailOnly:
-            // Restore all
-            columnVisibility = .all
-        default:
-            columnVisibility = .all
-        }
-    }
 
     private var viewModeIcon: String {
         switch appState.viewMode {
