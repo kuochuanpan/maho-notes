@@ -85,6 +85,17 @@ struct iPadContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // 3-state cycle via system toggle interception:
+        // .all → .doubleColumn (system hides A) → .detailOnly (we hide B) → .all (we restore)
+        .onChange(of: columnVisibility) { oldValue, newValue in
+            if oldValue == .doubleColumn && newValue == .all {
+                // System tries to restore A — redirect to hide B instead
+                Task { @MainActor in columnVisibility = .detailOnly }
+            } else if oldValue == .detailOnly && newValue == .doubleColumn {
+                // System restores B — redirect to restore all
+                Task { @MainActor in columnVisibility = .all }
+            }
+        }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
