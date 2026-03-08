@@ -5,6 +5,15 @@ struct FloatingToolbarView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
+        #if os(macOS)
+        macOSFloatingButton
+        #else
+        iOSFloatingButton
+        #endif
+    }
+
+    #if os(macOS)
+    private var macOSFloatingButton: some View {
         Button(action: { appState.cycleViewMode() }) {
             Image(systemName: iconName)
                 .font(.system(size: 14, weight: .medium))
@@ -18,6 +27,22 @@ struct FloatingToolbarView: View {
         .help(tooltip)
         .padding(12)
     }
+    #else
+    private var iOSFloatingButton: some View {
+        Button(action: { appState.cycleViewMode() }) {
+            Image(systemName: iconName)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 44, height: 44) // Touch-friendly tap target
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(appState.isReadOnly ? .tertiary : .secondary)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+        .disabled(appState.isReadOnly)
+        .padding(12)
+        .keyboardShortcut("e", modifiers: .command) // ⌘E for iPad external keyboard
+    }
+    #endif
 
     private var iconName: String {
         switch appState.viewMode {
@@ -27,6 +52,7 @@ struct FloatingToolbarView: View {
         }
     }
 
+    #if os(macOS)
     private var tooltip: String {
         if appState.isReadOnly { return "Read-only vault" }
         switch appState.viewMode {
@@ -35,4 +61,5 @@ struct FloatingToolbarView: View {
         case .split: return "Switch to Preview (Cmd+E)"
         }
     }
+    #endif
 }

@@ -30,7 +30,7 @@ struct ContentView: View {
             #if os(macOS)
             MacContentView()
             #else
-            iPhoneContentView()
+            AdaptiveIOSContentView()
             #endif
         }
         .preferredColorScheme(colorScheme)
@@ -368,6 +368,23 @@ struct MacContentView: View {
         } else {
             appState.showVaultRail = appState.userShowVaultRail
             appState.showNavigator = appState.userShowNavigator
+        }
+    }
+}
+#endif
+
+// MARK: - iOS Adaptive Layout
+
+#if os(iOS)
+/// Routes to iPad (NavigationSplitView) or iPhone (TabView) based on size class.
+struct AdaptiveIOSContentView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    var body: some View {
+        if horizontalSizeClass == .regular {
+            iPadContentView()
+        } else {
+            iPhoneContentView()
         }
     }
 }
