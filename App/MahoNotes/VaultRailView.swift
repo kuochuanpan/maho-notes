@@ -13,6 +13,9 @@ struct VaultRailView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showingDeviceFlow = false
+    @State private var showingRenameDialog = false
+    @State private var renameTarget: VaultEntry?
+    @State private var renameText = ""
 
     private enum AddVaultMode: Identifiable {
         case create, github
@@ -110,6 +113,17 @@ struct VaultRailView: View {
             }
         }) {
             DeviceFlowSheet(authManager: appState.authManager)
+        }
+        .alert("Rename Vault", isPresented: $showingRenameDialog) {
+            TextField("Display name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                if let target = renameTarget {
+                    appState.renameVaultDisplay(name: target.name, displayName: renameText)
+                }
+            }
+        } message: {
+            Text("Enter a display name for this vault.")
         }
     }
 
@@ -384,11 +398,11 @@ struct VaultRailView: View {
             appState.selectedVaultName = entry.name
         } label: {
             ZStack(alignment: .bottomTrailing) {
-                Text(String(entry.name.prefix(1)).uppercased())
+                Text(String((entry.displayName ?? entry.name).prefix(1)).uppercased())
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(color(for: entry.name), in: RoundedRectangle(cornerRadius: 8))
+                    .background(resolvedColor(for: entry), in: RoundedRectangle(cornerRadius: 8))
 
                 if entry.type == .icloud {
                     Image(systemName: "icloud.fill")
@@ -436,6 +450,32 @@ struct VaultRailView: View {
 
         Divider()
 
+        Button {
+            renameTarget = entry
+            renameText = entry.displayName ?? ""
+            showingRenameDialog = true
+        } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+
+        Menu {
+            ForEach(colorOptions, id: \.name) { option in
+                Button {
+                    appState.setVaultColor(name: entry.name, color: option.name)
+                } label: {
+                    Label(option.name.capitalized, systemImage: entry.color == option.name ? "checkmark.circle.fill" : "circle.fill")
+                }
+            }
+            Divider()
+            Button("Reset to Default") {
+                appState.setVaultColor(name: entry.name, color: "")
+            }
+        } label: {
+            Label("Change Color", systemImage: "paintpalette")
+        }
+
+        Divider()
+
         #if os(macOS)
         SettingsLink {
             Label("Vault Settings", systemImage: "gearshape")
@@ -444,6 +484,37 @@ struct VaultRailView: View {
     }
 
     // MARK: - Helpers
+
+    private struct ColorOption {
+        let name: String
+        let color: Color
+    }
+
+    private var colorOptions: [ColorOption] {
+        [
+            ColorOption(name: "blue", color: .blue),
+            ColorOption(name: "purple", color: .purple),
+            ColorOption(name: "pink", color: .pink),
+            ColorOption(name: "red", color: .red),
+            ColorOption(name: "orange", color: .orange),
+            ColorOption(name: "yellow", color: .yellow),
+            ColorOption(name: "green", color: .green),
+            ColorOption(name: "teal", color: .teal),
+            ColorOption(name: "cyan", color: .cyan),
+            ColorOption(name: "indigo", color: .indigo),
+        ]
+    }
+
+    private func colorFromName(_ name: String) -> Color? {
+        colorOptions.first { $0.name == name }?.color
+    }
+
+    private func resolvedColor(for entry: VaultEntry) -> Color {
+        if let colorName = entry.color, let c = colorFromName(colorName) {
+            return c
+        }
+        return color(for: entry.name)
+    }
 
     private func color(for name: String) -> Color {
         let colors: [Color] = [

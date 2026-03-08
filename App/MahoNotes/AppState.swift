@@ -1090,6 +1090,24 @@ import MahoNotesKit
         selectedVaultName = name
     }
 
+    /// Rename a vault's display name (UI only — does not affect internal name/paths/sync).
+    func renameVaultDisplay(name: String, displayName: String) {
+        let existing = vaults.first { $0.name == name }
+        Task {
+            try? await store.updateVaultEntry(named: name, displayName: displayName.isEmpty ? nil : displayName, color: existing?.color)
+            await loadRegistryAsync()
+        }
+    }
+
+    /// Set a custom color for a vault icon.
+    func setVaultColor(name: String, color: String) {
+        let existing = vaults.first { $0.name == name }
+        Task {
+            try? await store.updateVaultEntry(named: name, displayName: existing?.displayName, color: color.isEmpty ? nil : color)
+            await loadRegistryAsync()
+        }
+    }
+
     /// Import a vault from GitHub using the REST API (no git binary required).
     func importGitHubVault(repo: String, name: String?) async throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath

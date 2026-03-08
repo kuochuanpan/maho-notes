@@ -16,13 +16,17 @@ public struct VaultEntry: Codable, Sendable {
     public var github: String?
     public var path: String?
     public var access: VaultAccess
+    public var displayName: String?
+    public var color: String?
 
-    public init(name: String, type: VaultType, github: String? = nil, path: String? = nil, access: VaultAccess) {
+    public init(name: String, type: VaultType, github: String? = nil, path: String? = nil, access: VaultAccess, displayName: String? = nil, color: String? = nil) {
         self.name = name
         self.type = type
         self.github = github
         self.path = path
         self.access = access
+        self.displayName = displayName
+        self.color = color
     }
 }
 
@@ -136,7 +140,9 @@ func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
             type: .icloud,
             github: entry.github,
             path: nil,
-            access: entry.access
+            access: entry.access,
+            displayName: entry.displayName,
+            color: entry.color
         )
     }
 
@@ -169,7 +175,9 @@ func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
             type: .device,
             github: entry.github,
             path: nil,
-            access: entry.access
+            access: entry.access,
+            displayName: entry.displayName,
+            color: entry.color
         )
     }
 
@@ -301,14 +309,18 @@ func mergeRegistries(
                     type: localEntry.type,
                     github: localEntry.github,
                     path: localEntry.path,
-                    access: localEntry.access
+                    access: localEntry.access,
+                    displayName: localEntry.displayName,
+                    color: localEntry.color
                 )
                 let renamedCloud = VaultEntry(
                     name: cloudRenamed,
                     type: cloudEntry.type,
                     github: cloudEntry.github,
                     path: cloudEntry.path,
-                    access: cloudEntry.access
+                    access: cloudEntry.access,
+                    displayName: cloudEntry.displayName,
+                    color: cloudEntry.color
                 )
                 merged.append(renamedLocal)
                 merged.append(renamedCloud)

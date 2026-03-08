@@ -78,7 +78,9 @@ public actor VaultStore {
                 type: .local,
                 github: entry.github,
                 path: expanded,
-                access: entry.access
+                access: entry.access,
+                displayName: entry.displayName,
+                color: entry.color
             )
         case .icloud, .github, .device:
             // Path is derived from name for these types — ignore any provided path
@@ -87,7 +89,9 @@ public actor VaultStore {
                 type: entry.type,
                 github: entry.github,
                 path: nil,
-                access: entry.access
+                access: entry.access,
+                displayName: entry.displayName,
+                color: entry.color
             )
         }
 
@@ -99,6 +103,27 @@ public actor VaultStore {
             try registry.setPrimary(sanitized.name)
         }
 
+        try self.saveRegistry(registry)
+    }
+
+    /// Update display name and/or color for a vault entry.
+    public func updateVaultEntry(named name: String, displayName: String?, color: String?) throws {
+        guard var registry = try self.loadRegistry() else {
+            throw VaultRegistryError.notFound(name)
+        }
+        guard let index = registry.vaults.firstIndex(where: { $0.name == name }) else {
+            throw VaultRegistryError.notFound(name)
+        }
+        let old = registry.vaults[index]
+        registry.vaults[index] = VaultEntry(
+            name: old.name,
+            type: old.type,
+            github: old.github,
+            path: old.path,
+            access: old.access,
+            displayName: displayName,
+            color: color
+        )
         try self.saveRegistry(registry)
     }
 
