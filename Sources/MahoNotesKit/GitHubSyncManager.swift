@@ -418,9 +418,16 @@ public actor GitHubSyncManager {
             }
         }
 
-        // Normal sync: pull first, then push
+        // Normal sync: pull first, then push (with retry on conflict)
         let pullResult = try await pull()
-        let pushResult = try await push()
+        let pushResult: SyncResult
+        do {
+            pushResult = try await push()
+        } catch GitHubSyncError.nonFastForward {
+            // Remote moved between our pull and push — pull again and retry once
+            let _ = try await pull()
+            pushResult = try await push()
+        }
 
         var message = pullResult.message
         if !pushResult.message.contains("Nothing") {
@@ -637,10 +644,12 @@ public actor GitHubSyncManager {
 
 // MARK: - Errors
 
-public enum GitHubSyncError: Error, CustomStringConvertible, Sendable {
+public enum GitHubSyncError: Error, LocalizedError, CustomStringConvertible, Sendable {
     case noManifest
     case invalidRemoteState(String)
     case nonFastForward
+
+    public var errorDescription: String? { description }
 
     public var description: String {
         switch self {
