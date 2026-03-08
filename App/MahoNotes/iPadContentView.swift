@@ -86,8 +86,6 @@ struct iPadContentView: View {
         return vault.displayName ?? vault.name
     }
 
-    // MARK: - View Mode Icon
-
     // MARK: - Detail Inline Action Buttons (in breadcrumb bar)
     private var detailInlineActions: some View {
         HStack(spacing: 16) {
@@ -141,14 +139,6 @@ struct iPadContentView: View {
                 columnVisibility = .all
             }
         default: columnVisibility = .all
-        }
-    }
-
-    private var viewModeIcon: String {
-        switch appState.viewMode {
-        case .preview: return "eye"
-        case .editor: return "pencil"
-        case .split: return "rectangle.split.2x1"
         }
     }
 
@@ -509,7 +499,7 @@ private struct iPadVaultRail: View {
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
-                    .background(resolvedColor(for: entry), in: RoundedRectangle(cornerRadius: 10))
+                    .background(MahoTheme.resolvedVaultColor(for: entry), in: RoundedRectangle(cornerRadius: 10))
 
                 if entry.type == .icloud {
                     Image(systemName: "icloud.fill")
@@ -585,7 +575,7 @@ private struct iPadVaultRail: View {
                     .foregroundStyle(.secondary)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 10), count: 6), spacing: 10) {
-                    ForEach(colorOptions, id: \.name) { option in
+                    ForEach(MahoTheme.vaultColorOptions) { option in
                         Button {
                             if let target = colorPickerTarget {
                                 appState.setVaultColor(name: target.name, color: option.name)
@@ -836,54 +826,6 @@ private struct iPadVaultRail: View {
         }
     }
 
-    // MARK: - Color Helpers
-
-    private struct ColorOption {
-        let name: String
-        let color: Color
-    }
-
-    private var colorOptions: [ColorOption] {
-        [
-            ColorOption(name: "red", color: .red),
-            ColorOption(name: "orange", color: .orange),
-            ColorOption(name: "yellow", color: .yellow),
-            ColorOption(name: "green", color: .green),
-            ColorOption(name: "mint", color: .mint),
-            ColorOption(name: "teal", color: .teal),
-            ColorOption(name: "cyan", color: .cyan),
-            ColorOption(name: "blue", color: .blue),
-            ColorOption(name: "indigo", color: .indigo),
-            ColorOption(name: "purple", color: .purple),
-            ColorOption(name: "pink", color: .pink),
-            ColorOption(name: "brown", color: .brown),
-            ColorOption(name: "coral", color: Color(red: 1.0, green: 0.45, blue: 0.35)),
-            ColorOption(name: "lavender", color: Color(red: 0.69, green: 0.56, blue: 0.87)),
-            ColorOption(name: "sage", color: Color(red: 0.52, green: 0.69, blue: 0.52)),
-            ColorOption(name: "sky", color: Color(red: 0.45, green: 0.72, blue: 0.95)),
-            ColorOption(name: "slate", color: Color(red: 0.44, green: 0.50, blue: 0.56)),
-            ColorOption(name: "charcoal", color: Color(red: 0.30, green: 0.30, blue: 0.35)),
-        ]
-    }
-
-    private func colorFromName(_ name: String) -> Color? {
-        colorOptions.first { $0.name == name }?.color
-    }
-
-    private func resolvedColor(for entry: VaultEntry) -> Color {
-        if let colorName = entry.color, let c = colorFromName(colorName) {
-            return c
-        }
-        let colors: [Color] = [
-            .blue, .purple, .pink, .red, .orange,
-            .yellow, .green, .teal, .cyan, .indigo,
-        ]
-        var hash = 0
-        for char in entry.name.unicodeScalars {
-            hash = hash &* 31 &+ Int(char.value)
-        }
-        return colors[abs(hash) % colors.count]
-    }
 }
 
 #endif
