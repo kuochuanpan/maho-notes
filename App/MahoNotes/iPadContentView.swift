@@ -39,6 +39,16 @@ struct iPadContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    withAnimation {
+                        cycleSidebarVisibility()
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     presentNewNote()
@@ -107,6 +117,22 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
+
+    // MARK: - Sidebar Toggle (3-state cycle)
+
+    /// Cycles: .all → .doubleColumn (B+C, hide A) → .detailOnly (C only) → .all
+    private func cycleSidebarVisibility() {
+        switch columnVisibility {
+        case .all:
+            columnVisibility = .doubleColumn
+        case .doubleColumn:
+            columnVisibility = .detailOnly
+        case .detailOnly:
+            columnVisibility = .all
+        default:
+            columnVisibility = .all
+        }
+    }
 
     private var viewModeIcon: String {
         switch appState.viewMode {
