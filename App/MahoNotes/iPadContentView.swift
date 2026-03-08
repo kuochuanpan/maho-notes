@@ -33,11 +33,13 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                .toolbarRole(.editor) // Suppress system sidebar toggle
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    // Our own toggle in B column — left side
+                    ToolbarItem(placement: .topBarLeading) {
                         Button {
                             withAnimation {
-                                columnVisibility = .detailOnly
+                                cycleColumnVisibility()
                             }
                         } label: {
                             Image(systemName: "sidebar.left")
@@ -49,15 +51,15 @@ struct iPadContentView: View {
             NavigationStack {
                 NoteContentView()
                     .toolbar {
-                        // Only show expand button when A+B are both collapsed
+                        // Show toggle in C column only when B is not visible
                         if columnVisibility == .detailOnly {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button {
                                     withAnimation {
-                                        columnVisibility = .all
+                                        cycleColumnVisibility()
                                     }
                                 } label: {
-                                    Image(systemName: "sidebar.squares.left")
+                                    Image(systemName: "sidebar.left")
                                 }
                             }
                         }
@@ -132,6 +134,27 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
+
+    // MARK: - Column Visibility Cycle
+    // all (A+B+C) → doubleColumn (B+C, A hidden) → detailOnly (C only, B hidden)
+    // → detailOnly stays until toggle pressed → back to all
+    // When in B column: all → doubleColumn → detailOnly
+    // When in C column (detailOnly): → all
+    private func cycleColumnVisibility() {
+        switch columnVisibility {
+        case .all:
+            // Hide A, show B+C
+            columnVisibility = .doubleColumn
+        case .doubleColumn:
+            // Hide A+B, show only C
+            columnVisibility = .detailOnly
+        case .detailOnly:
+            // Restore all
+            columnVisibility = .all
+        default:
+            columnVisibility = .all
+        }
+    }
 
     private var viewModeIcon: String {
         switch appState.viewMode {
