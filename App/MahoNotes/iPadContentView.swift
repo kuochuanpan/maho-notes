@@ -33,33 +33,18 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
-                .toolbar {
-                    // Our own toggle in B column — left side
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation {
-                                cycleColumnVisibility()
-                            }
-                        } label: {
-                            Image(systemName: "sidebar.left")
-                        }
-                    }
-                }
         } detail: {
             // C — Note Content (wrapped in NavigationStack for toolbar)
             NavigationStack {
                 NoteContentView()
                     .toolbar {
-                        // Show toggle in C column only when B is not visible
-                        if columnVisibility == .detailOnly {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button {
-                                    withAnimation {
-                                        cycleColumnVisibility()
-                                    }
-                                } label: {
-                                    Image(systemName: "sidebar.left")
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                withAnimation {
+                                    cycleColumnVisibility()
                                 }
+                            } label: {
+                                Image(systemName: "sidebar.left")
                             }
                         }
                         ToolbarItem(placement: .primaryAction) {
@@ -108,6 +93,7 @@ struct iPadContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbarRole(.editor)
         .toolbar(removing: .sidebarToggle)
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
