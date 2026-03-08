@@ -33,20 +33,33 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            withAnimation {
+                                columnVisibility = .detailOnly
+                            }
+                        } label: {
+                            Image(systemName: "sidebar.left")
+                        }
+                    }
+                }
         } detail: {
             // C — Note Content (wrapped in NavigationStack for toolbar)
             NavigationStack {
                 NoteContentView()
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                withAnimation {
-                                    cycleSidebarVisibility()
+                        // Only show expand button when A+B are both collapsed
+                        if columnVisibility == .detailOnly {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    withAnimation {
+                                        columnVisibility = .all
+                                    }
+                                } label: {
+                                    Image(systemName: "sidebar.squares.left")
                                 }
-                            } label: {
-                                Image(systemName: sidebarToggleIcon)
                             }
-                            .keyboardShortcut("s", modifiers: [.command, .shift])
                         }
                         ToolbarItem(placement: .primaryAction) {
                             Button {
@@ -119,31 +132,6 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
-
-    // MARK: - Sidebar Toggle (3-state cycle)
-
-    /// Cycles: .all → .doubleColumn (B+C, hide A) → .detailOnly (C only) → .all
-    private func cycleSidebarVisibility() {
-        switch columnVisibility {
-        case .all:
-            columnVisibility = .doubleColumn
-        case .doubleColumn:
-            columnVisibility = .detailOnly
-        case .detailOnly:
-            columnVisibility = .all
-        default:
-            columnVisibility = .all
-        }
-    }
-
-    private var sidebarToggleIcon: String {
-        switch columnVisibility {
-        case .all: return "sidebar.left"
-        case .doubleColumn: return "sidebar.left"
-        case .detailOnly: return "sidebar.squares.left"
-        default: return "sidebar.left"
-        }
-    }
 
     private var viewModeIcon: String {
         switch appState.viewMode {
