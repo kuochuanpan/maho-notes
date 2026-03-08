@@ -141,9 +141,17 @@ struct iPadContentView: View {
     private func cycleColumns() {
         columnCycleState = (columnCycleState + 1) % 3
         switch columnCycleState {
-        case 0: columnVisibility = .all
         case 1: columnVisibility = .doubleColumn
         case 2: columnVisibility = .detailOnly
+        case 0:
+            // Restore all: system may ignore .all from .detailOnly directly.
+            // Step through .doubleColumn first so the system restores B,
+            // then set .all on next run loop to restore A.
+            columnVisibility = .doubleColumn
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(50))
+                columnVisibility = .all
+            }
         default: columnVisibility = .all
         }
     }
