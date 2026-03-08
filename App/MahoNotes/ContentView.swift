@@ -382,7 +382,7 @@ struct AdaptiveIOSContentView: View {
 
     var body: some View {
         if horizontalSizeClass == .regular {
-            iPadContentView()
+            IPadContentView()
         } else {
             iPhoneContentView()
         }
