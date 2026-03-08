@@ -17,6 +17,48 @@ struct iOSSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Cloud Sync
+                Section("Cloud Sync") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "icloud")
+                            .font(.title3)
+                            .foregroundStyle(.blue)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("iCloud Sync")
+                                .fontWeight(.medium)
+                            Text("Sync vaults and settings via iCloud")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: Binding(
+                            get: { appState.cloudSyncMode },
+                            set: { appState.requestCloudSyncChange(to: $0) }
+                        )) {
+                            Text("iCloud").tag(CloudSyncMode.icloud)
+                            Text("Off").tag(CloudSyncMode.off)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 140)
+                    }
+                }
+
+                // GitHub Account
+                Section("GitHub Account") {
+                    GitHubAccountGroupBox(authManager: appState.authManager)
+                }
+
+                // GitHub Sync
+                if !appState.vaults.filter({ $0.github != nil }).isEmpty {
+                    Section("GitHub Sync") {
+                        GitHubSyncGroupBox(coordinator: appState.syncCoordinator)
+                    }
+                }
+
                 // Vaults
                 Section("Vaults") {
                     ForEach(appState.vaults, id: \.name) { entry in
@@ -138,6 +180,29 @@ struct iOSSettingsView: View {
                 }
             } message: {
                 Text("Remove \"\(vaultToRemove ?? "")\" from the registry? Files on disk will not be deleted.")
+            }
+            // Cloud Sync Merge Sheet
+            .sheet(isPresented: Binding(
+                get: { appState.showMergeSheet },
+                set: { if !$0 { appState.cancelMerge() } }
+            )) {
+                iOSCloudSyncMergeSheet()
+            }
+            // Merge Result Alert
+            .alert("Merge Complete", isPresented: Binding(
+                get: { appState.showMergeResult },
+                set: { _ in appState.showMergeResult = false }
+            )) {
+                Button("OK") { appState.showMergeResult = false }
+            } message: {
+                let conflicts = appState.lastMergeConflicts
+                if conflicts.isEmpty {
+                    Text("Vaults merged successfully with no conflicts.")
+                } else {
+                    Text("Merged with \(conflicts.count) rename(s):\n" +
+                         conflicts.map { "• \"\($0.originalName)\" → \"\($0.localRenamed)\" (local) & \"\($0.cloudRenamed)\" (cloud)" }
+                             .joined(separator: "\n"))
+                }
             }
         }
     }
@@ -293,6 +358,90 @@ struct iOSSettingsView: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+}
+
+// MARK: - iOS Cloud Sync Merge Sheet
+
+/// Merge sheet for iOS — same content as macOS VaultsSettingsTab's cloudSyncMergeSheet.
+private struct iOSCloudSyncMergeSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            let cloudVaults = appState.pendingCloudRegistry?.vaults ?? []
+            VStack(spacing: 16) {
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.largeTitle)
+                    .foregroundStyle(.blue)
+
+                Text("iCloud Already Has Vaults")
+                    .font(.headline)
+
+                Text("Found \(cloudVaults.count) vault(s) in iCloud. How would you like to proceed?")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(cloudVaults, id: \.name) { vault in
+                            HStack(spacing: 6) {
+                                Image(systemName: typeIcon(vault.type))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 16)
+                                Text(vault.name)
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                    .padding(4)
+                }
+                .frame(maxWidth: 280)
+
+                VStack(spacing: 8) {
+                    Button(action: { appState.performMerge(); dismiss() }) {
+                        Label("Merge", systemImage: "arrow.triangle.merge")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button(action: { appState.replaceCloudWithLocal(); dismiss() }) {
+                        Label("Replace with Local", systemImage: "arrow.up.to.line")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
+                    Button("Cancel", role: .cancel) {
+                        appState.cancelMerge()
+                        dismiss()
+                    }
+                    .controlSize(.large)
+                }
+                .frame(width: 240)
+
+                Text("Merge combines both sets of vaults.\nConflicting names will be renamed with a device suffix.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(24)
+            .navigationTitle("Cloud Sync")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func typeIcon(_ type: VaultType) -> String {
+        switch type {
+        case .icloud: return "icloud"
+        case .github: return "network"
+        case .local: return "folder"
+        case .device: return "internaldrive"
+        }
     }
 }
 #endif

@@ -2,14 +2,15 @@
 import SwiftUI
 import MahoNotesKit
 
-/// iPad layout using NavigationSplitView with sidebar (vaults + collections) and detail (note content).
+/// iPad layout using 3-column NavigationSplitView matching macOS:
+/// A (VaultRail) | B (Navigator) | C (NoteContent)
 struct iPadContentView: View {
     @Environment(AppState.self) private var appState
     @State private var searchQuery = ""
     @State private var searchResults: [Note] = []
     @State private var debounceTask: Task<Void, Never>?
     @State private var selectedNotePath: String?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showingNewNote = false
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
@@ -22,20 +23,20 @@ struct iPadContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            sidebarContent
-                .navigationTitle("Maho Notes")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            showingSettings = true
-                        } label: {
-                            Image(systemName: "gear")
-                        }
-                    }
-                }
+            // A — Vault Rail
+            iPadVaultRail(showingSettings: $showingSettings)
+                .navigationBarHidden(true)
+        } content: {
+            // B — Navigator
+            navigatorContent
+                .navigationTitle(selectedVaultTitle)
+                .navigationBarTitleDisplayMode(.inline)
+                .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
         } detail: {
+            // C — Note Content
             NoteContentView()
         }
+        .navigationSplitViewStyle(.balanced)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -80,7 +81,6 @@ struct iPadContentView: View {
                 .disabled(appState.selectedVault == nil)
             }
         }
-        .searchable(text: $searchQuery, placement: .sidebar, prompt: "Search notes...")
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
@@ -98,6 +98,13 @@ struct iPadContentView: View {
         }
     }
 
+    // MARK: - Vault Title
+
+    private var selectedVaultTitle: String {
+        guard let vault = appState.selectedVault else { return "Maho Notes" }
+        return vault.displayName ?? vault.name
+    }
+
     // MARK: - View Mode Icon
 
     private var viewModeIcon: String {
@@ -111,7 +118,6 @@ struct iPadContentView: View {
     // MARK: - New Note
 
     private func presentNewNote() {
-        // Default to first collection
         if let first = appState.collections.first {
             newNoteCollectionId = first.id
         }
@@ -198,154 +204,24 @@ struct iPadContentView: View {
         .presentationDetents([.medium])
     }
 
-    // MARK: - Sidebar
+    // MARK: - B Column (Navigator)
 
     @ViewBuilder
-    private var sidebarContent: some View {
+    private var navigatorContent: some View {
         List(selection: $selectedNotePath) {
-            // Search results section (when searching)
             if !searchQuery.isEmpty {
                 searchResultsSection
             } else {
-                // Vault sections
-                vaultSections
-
-                // Collection tree for selected vault
                 if appState.selectedVault != nil {
                     collectionsSection
-                }
-
-                // Settings link at bottom
-                Section {
-                    NavigationLink {
-                        iOSSettingsView()
-                    } label: {
-                        Label("Settings", systemImage: "gear")
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Vault Sections
-
-    @ViewBuilder
-    private var vaultSections: some View {
-        if !appState.icloudVaults.isEmpty {
-            Section("iCloud") {
-                ForEach(appState.icloudVaults, id: \.name) { entry in
-                    vaultRow(entry)
-                }
-            }
-        }
-        if !appState.githubVaults.isEmpty {
-            Section("GitHub") {
-                ForEach(appState.githubVaults, id: \.name) { entry in
-                    vaultRow(entry)
-                }
-            }
-        }
-        if !appState.localVaults.isEmpty {
-            Section("Local") {
-                ForEach(appState.localVaults, id: \.name) { entry in
-                    vaultRow(entry)
-                }
-            }
-        }
-    }
-
-    private func vaultRow(_ entry: VaultEntry) -> some View {
-        Button {
-            appState.selectedVaultName = entry.name
-        } label: {
-            HStack(spacing: 8) {
-                vaultIcon(entry)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.displayName ?? entry.name)
-                        .fontWeight(appState.selectedVaultName == entry.name ? .semibold : .regular)
-                    if entry.access == .readOnly {
-                        Text("read-only")
-                            .font(.caption2)
+                } else {
+                    Section {
+                        Text("Select a vault")
                             .foregroundStyle(.secondary)
                     }
                 }
-                Spacer()
-                if appState.primaryVaultName == entry.name {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                }
-                if appState.selectedVaultName == entry.name {
-                    Image(systemName: "checkmark")
-                        .font(.caption2)
-                        .foregroundStyle(Color.accentColor)
-                }
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .listRowBackground(
-            appState.selectedVaultName == entry.name
-                ? Color.accentColor.opacity(0.12)
-                : Color.clear
-        )
-    }
-
-    private func vaultIcon(_ entry: VaultEntry) -> some View {
-        let letter = (entry.displayName ?? entry.name).prefix(1).uppercased()
-        let bgColor = vaultColor(for: entry)
-        return Text(letter)
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 32, height: 32)
-            .background(bgColor, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(alignment: .bottomTrailing) {
-                if entry.type == .icloud {
-                    Image(systemName: "icloud.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.white)
-                        .padding(2)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .offset(x: 4, y: 4)
-                } else if entry.access == .readOnly {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.white)
-                        .padding(2)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .offset(x: 4, y: 4)
-                }
-            }
-    }
-
-    private func vaultColor(for entry: VaultEntry) -> Color {
-        if let colorName = entry.color, let c = colorFromName(colorName) {
-            return c
-        }
-        // Hash-derived color fallback (same logic as VaultRailView)
-        let colors: [Color] = [
-            .blue, .purple, .pink, .red, .orange,
-            .yellow, .green, .teal, .cyan, .indigo,
-        ]
-        var hash = 0
-        for char in entry.name.unicodeScalars {
-            hash = hash &* 31 &+ Int(char.value)
-        }
-        return colors[abs(hash) % colors.count]
-    }
-
-    private func colorFromName(_ name: String) -> Color? {
-        let map: [String: Color] = [
-            "red": .red, "orange": .orange, "yellow": .yellow,
-            "green": .green, "mint": .mint, "teal": .teal,
-            "blue": .blue, "indigo": .indigo, "purple": .purple,
-            "pink": .pink, "brown": .brown, "cyan": .cyan,
-            "gray": .gray, "black": .black, "white": .white,
-            "mahoPlum": Color(red: 114/255, green: 31/255, blue: 109/255),
-            "forest": Color(red: 34/255, green: 100/255, blue: 60/255),
-            "navy": Color(red: 20/255, green: 40/255, blue: 100/255),
-        ]
-        return map[name]
     }
 
     // MARK: - Collections Section
@@ -360,7 +236,6 @@ struct iPadContentView: View {
             }
         }
 
-        // Recent notes
         if !appState.recentNotes.isEmpty {
             Section("Recent") {
                 ForEach(appState.recentNotes, id: \.relativePath) { note in
@@ -401,7 +276,7 @@ struct iPadContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .frame(minHeight: 44) // Touch-friendly tap target
+        .frame(minHeight: 44)
         .contextMenu {
             if let conflict = appState.conflict(for: note.relativePath) {
                 Button("Keep Current Version") {
@@ -445,6 +320,526 @@ struct iPadContentView: View {
             let vault = Vault(path: appState.store.resolvedPath(for: entry))
             searchResults = (try? Array(vault.searchNotes(query: trimmed).prefix(20))) ?? []
         }
+    }
+}
+
+// MARK: - A Column: iPad Vault Rail
+
+private struct iPadVaultRail: View {
+    @Environment(AppState.self) private var appState
+    @Binding var showingSettings: Bool
+    @State private var showingAddVault = false
+    @State private var addVaultMode: AddVaultMode?
+    @State private var newVaultName = ""
+    @State private var newVaultAuthor = ""
+    @State private var githubRepo = ""
+    @State private var githubVaultName = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+    @State private var showingDeviceFlow = false
+    @State private var showingRenameDialog = false
+    @State private var renameTarget: VaultEntry?
+    @State private var renameText = ""
+    @State private var showingColorPicker = false
+    @State private var colorPickerTarget: VaultEntry?
+
+    private enum AddVaultMode: Identifiable {
+        case create, github
+        var id: Self { self }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Add button
+            Button {
+                showingAddVault = true
+                addVaultMode = nil
+                resetForm()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .background(
+                        appState.vaults.isEmpty
+                            ? AnyShapeStyle(Color.accentColor)
+                            : AnyShapeStyle(.quaternary),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                    .foregroundStyle(appState.vaults.isEmpty ? .white : .primary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            Divider()
+                .overlay(Color.white.opacity(0.2))
+                .padding(.horizontal, 8)
+
+            // Scrollable vault icons
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 8) {
+                    vaultGroup(appState.icloudVaults)
+                    if !appState.icloudVaults.isEmpty && !appState.githubVaults.isEmpty {
+                        railDivider
+                    }
+                    vaultGroup(appState.githubVaults)
+                    if (!appState.icloudVaults.isEmpty || !appState.githubVaults.isEmpty)
+                        && !appState.localVaults.isEmpty {
+                        railDivider
+                    }
+                    vaultGroup(appState.localVaults)
+                }
+                .padding(.vertical, 8)
+            }
+
+            Spacer()
+
+            // Settings gear at bottom
+            Divider()
+                .overlay(Color.white.opacity(0.2))
+                .padding(.horizontal, 8)
+
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 8)
+        }
+        .frame(width: 68)
+        .background(MahoTheme.vaultRailBackground)
+        .sheet(isPresented: $showingAddVault) {
+            addVaultSheet
+        }
+        .onChange(of: appState.authManager.userCode) { _, newValue in
+            showingDeviceFlow = newValue != nil
+        }
+        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
+            if authenticated { showingDeviceFlow = false }
+        }
+        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            if !appState.authManager.isAuthenticated {
+                appState.authManager.cancelAuth()
+                isCreating = false
+            }
+        }) {
+            DeviceFlowSheet(authManager: appState.authManager)
+        }
+        .alert("Rename Vault", isPresented: $showingRenameDialog) {
+            TextField("Display name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                if let target = renameTarget {
+                    appState.renameVaultDisplay(name: target.name, displayName: renameText)
+                }
+            }
+        } message: {
+            Text("Enter a display name for this vault.")
+        }
+        .sheet(isPresented: $showingColorPicker) {
+            colorPickerSheet
+        }
+    }
+
+    // MARK: - Vault Group
+
+    @ViewBuilder
+    private func vaultGroup(_ entries: [VaultEntry]) -> some View {
+        ForEach(entries, id: \.name) { entry in
+            vaultIcon(entry)
+        }
+    }
+
+    private var railDivider: some View {
+        Divider()
+            .overlay(Color.white.opacity(0.2))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+    }
+
+    // MARK: - Vault Icon
+
+    private func vaultIcon(_ entry: VaultEntry) -> some View {
+        Button {
+            appState.selectedVaultName = entry.name
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Text(String((entry.displayName ?? entry.name).prefix(1)).uppercased())
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(resolvedColor(for: entry), in: RoundedRectangle(cornerRadius: 10))
+
+                if entry.type == .icloud {
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.white)
+                        .padding(2)
+                        .background(.black.opacity(0.5), in: Circle())
+                        .offset(x: 2, y: 2)
+                } else if entry.access == .readOnly {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.white)
+                        .padding(2)
+                        .background(.black.opacity(0.5), in: Circle())
+                        .offset(x: 2, y: 2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .leading) {
+            if appState.selectedVaultName == entry.name {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(.blue)
+                    .frame(width: 3, height: 24)
+                    .offset(x: -8)
+            }
+        }
+        .contextMenu {
+            vaultContextMenu(entry)
+        }
+    }
+
+    // MARK: - Vault Context Menu
+
+    @ViewBuilder
+    private func vaultContextMenu(_ entry: VaultEntry) -> some View {
+        Text(entry.displayName ?? entry.name)
+            .foregroundStyle(.secondary)
+
+        Divider()
+
+        Button {
+            renameTarget = entry
+            renameText = entry.displayName ?? ""
+            showingRenameDialog = true
+        } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+
+        Button {
+            colorPickerTarget = entry
+            showingColorPicker = true
+        } label: {
+            Label("Change Color", systemImage: "paintpalette")
+        }
+
+        if appState.primaryVaultName != entry.name {
+            Button {
+                appState.setPrimaryVault(name: entry.name)
+            } label: {
+                Label("Set as Primary", systemImage: "star")
+            }
+        }
+    }
+
+    // MARK: - Color Picker Sheet
+
+    private var colorPickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text("Choose a color for this vault")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 10), count: 6), spacing: 10) {
+                    ForEach(colorOptions, id: \.name) { option in
+                        Button {
+                            if let target = colorPickerTarget {
+                                appState.setVaultColor(name: target.name, color: option.name)
+                            }
+                            showingColorPicker = false
+                        } label: {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(option.color)
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+                                )
+                                .overlay {
+                                    if colorPickerTarget?.color == option.name {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Vault Color")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingColorPicker = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - Add Vault Sheet
+
+    private var addVaultSheet: some View {
+        NavigationStack {
+            Group {
+                if addVaultMode == nil {
+                    addVaultPicker
+                } else if addVaultMode == .create {
+                    createVaultForm
+                } else {
+                    githubImportForm
+                }
+            }
+            .navigationTitle(addVaultTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingAddVault = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private var addVaultTitle: String {
+        switch addVaultMode {
+        case .none: return "Add Vault"
+        case .create: return "Create New Vault"
+        case .github: return "Import from GitHub"
+        }
+    }
+
+    private var addVaultPicker: some View {
+        List {
+            Button {
+                addVaultMode = .create
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
+                        .font(.title3)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Create New Vault")
+                            .fontWeight(.medium)
+                        Text(appState.cloudSyncMode == .icloud ? "Stored in iCloud" : "Stored on this device")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .frame(minHeight: 44)
+
+            Button {
+                addVaultMode = .github
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.title3)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Import from GitHub")
+                            .fontWeight(.medium)
+                        Text("Clone a repository as a vault")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .frame(minHeight: 44)
+        }
+    }
+
+    private var createVaultForm: some View {
+        Form {
+            Section {
+                TextField("e.g. personal, research", text: $newVaultName)
+            } header: {
+                Text("Vault Name")
+            }
+
+            Section {
+                TextField("Your name", text: $newVaultAuthor)
+            } header: {
+                Text("Author Name (optional)")
+            }
+
+            Section {
+                HStack {
+                    Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
+                        .foregroundStyle(.secondary)
+                    Text(appState.cloudSyncMode == .icloud ? "Will sync via iCloud" : "Stored on this device only")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let error = errorMessage {
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+
+            Section {
+                Button("Create Vault") {
+                    createVault()
+                }
+                .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var githubImportForm: some View {
+        Form {
+            Section {
+                TextField("user/repo", text: $githubRepo)
+            } header: {
+                Text("GitHub Repository")
+            }
+
+            Section {
+                TextField("Defaults to repo name", text: $githubVaultName)
+            } header: {
+                Text("Vault Name (optional)")
+            }
+
+            if let error = errorMessage {
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+
+            Section {
+                Button(isCreating ? "Cloning..." : "Import") {
+                    importFromGitHub()
+                }
+                .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func resetForm() {
+        newVaultName = ""
+        newVaultAuthor = ""
+        githubRepo = ""
+        githubVaultName = ""
+        errorMessage = nil
+        isCreating = false
+    }
+
+    private func createVault() {
+        let name = newVaultName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        isCreating = true
+        errorMessage = nil
+        do {
+            try appState.createNewVault(name: name, authorName: newVaultAuthor.trimmingCharacters(in: .whitespaces))
+            showingAddVault = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isCreating = false
+        }
+    }
+
+    private func importFromGitHub() {
+        let repo = githubRepo.trimmingCharacters(in: .whitespaces)
+        guard !repo.isEmpty else { return }
+        isCreating = true
+        errorMessage = nil
+        Task { @MainActor in
+            do {
+                if !appState.authManager.isAuthenticated {
+                    try await appState.authManager.authenticate()
+                    guard appState.authManager.isAuthenticated else {
+                        isCreating = false
+                        return
+                    }
+                }
+                let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
+                try await appState.importGitHubVault(
+                    repo: repo,
+                    name: vaultName.isEmpty ? nil : vaultName
+                )
+                showingAddVault = false
+            } catch {
+                errorMessage = error.localizedDescription
+                isCreating = false
+            }
+        }
+    }
+
+    // MARK: - Color Helpers
+
+    private struct ColorOption {
+        let name: String
+        let color: Color
+    }
+
+    private var colorOptions: [ColorOption] {
+        [
+            ColorOption(name: "red", color: .red),
+            ColorOption(name: "orange", color: .orange),
+            ColorOption(name: "yellow", color: .yellow),
+            ColorOption(name: "green", color: .green),
+            ColorOption(name: "mint", color: .mint),
+            ColorOption(name: "teal", color: .teal),
+            ColorOption(name: "cyan", color: .cyan),
+            ColorOption(name: "blue", color: .blue),
+            ColorOption(name: "indigo", color: .indigo),
+            ColorOption(name: "purple", color: .purple),
+            ColorOption(name: "pink", color: .pink),
+            ColorOption(name: "brown", color: .brown),
+            ColorOption(name: "coral", color: Color(red: 1.0, green: 0.45, blue: 0.35)),
+            ColorOption(name: "lavender", color: Color(red: 0.69, green: 0.56, blue: 0.87)),
+            ColorOption(name: "sage", color: Color(red: 0.52, green: 0.69, blue: 0.52)),
+            ColorOption(name: "sky", color: Color(red: 0.45, green: 0.72, blue: 0.95)),
+            ColorOption(name: "slate", color: Color(red: 0.44, green: 0.50, blue: 0.56)),
+            ColorOption(name: "charcoal", color: Color(red: 0.30, green: 0.30, blue: 0.35)),
+        ]
+    }
+
+    private func colorFromName(_ name: String) -> Color? {
+        colorOptions.first { $0.name == name }?.color
+    }
+
+    private func resolvedColor(for entry: VaultEntry) -> Color {
+        if let colorName = entry.color, let c = colorFromName(colorName) {
+            return c
+        }
+        let colors: [Color] = [
+            .blue, .purple, .pink, .red, .orange,
+            .yellow, .green, .teal, .cyan, .indigo,
+        ]
+        var hash = 0
+        for char in entry.name.unicodeScalars {
+            hash = hash &* 31 &+ Int(char.value)
+        }
+        return colors[abs(hash) % colors.count]
     }
 }
 
