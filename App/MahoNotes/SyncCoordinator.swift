@@ -91,7 +91,7 @@ final class SyncCoordinator: @unchecked Sendable {
 
         for entry in vaults {
             guard let ownerRepo = entry.github else { continue }
-            let vaultPath = VaultStore().resolvedPath(for: entry)
+            let vaultPath = VaultStore.shared.resolvedPath(for: entry)
             guard let manager = GitHubSyncManager.make(
                 ownerRepo: ownerRepo,
                 branch: "main",

@@ -12,10 +12,10 @@ final class VaultRegistryPresenter: NSObject, NSFilePresenter {
         return q
     }()
 
-    private var onChange: (() -> Void)?
+    private var onChange: (@Sendable () -> Void)?
     private var debounceItem: DispatchWorkItem?
 
-    init(registryURL: URL, onChange: @escaping () -> Void) {
+    init(registryURL: URL, onChange: @escaping @Sendable () -> Void) {
         self.presentedItemURL = registryURL
         self.onChange = onChange
         super.init()

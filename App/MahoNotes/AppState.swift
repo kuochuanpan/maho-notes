@@ -4,11 +4,11 @@ import MahoNotesKit
 
 /// Central app state — loads vault registry, resolves vault paths, tracks selection.
 @Observable
-final class AppState {
+@MainActor final class AppState {
 
     // MARK: - VaultStore
 
-    let store = VaultStore()
+    let store = VaultStore.shared
 
     // MARK: - Vault Registry
 
@@ -78,7 +78,6 @@ final class AppState {
     }
 
     /// Called when user toggles cloud sync. Checks for merge needs before applying.
-    @MainActor
     func requestCloudSyncChange(to mode: CloudSyncMode) {
         Task {
             if mode == .off {
@@ -117,7 +116,6 @@ final class AppState {
     }
 
     /// Merge local vaults with cloud registry.
-    @MainActor
     func performMerge() {
         Task {
             // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
@@ -163,7 +161,6 @@ final class AppState {
     }
 
     /// Replace cloud registry with local registry (discard cloud).
-    @MainActor
     func replaceCloudWithLocal() {
         Task {
             // Load local registry BEFORE switching to iCloud mode
@@ -322,7 +319,6 @@ final class AppState {
     }
 
     /// Perform search (async — supports FTS, semantic, and hybrid modes).
-    @MainActor
     func performSearch() {
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
@@ -344,7 +340,6 @@ final class AppState {
     }
 
     /// Synchronous FTS-only search.
-    @MainActor
     private func performFTSSearch(query: String) {
         searchError = nil
         if searchScope == "allVaults" {
@@ -361,7 +356,6 @@ final class AppState {
     }
 
     /// Async search for semantic and hybrid modes.
-    @MainActor
     private func performAsyncSearch(query: String, mode: String) async {
         let entries = searchScope == "allVaults" ? vaults : (selectedVault.map { [$0] } ?? [])
 
@@ -579,7 +573,6 @@ final class AppState {
     }
 
     /// Save the editing buffer back to the markdown file, preserving frontmatter.
-    @MainActor
     func saveNote() {
         // Only save when actively editing (not in preview mode with stale/empty buffer)
         guard viewMode != .preview else { return }
@@ -685,7 +678,6 @@ final class AppState {
     }
 
     /// Revert editing buffer and switch to preview.
-    @MainActor
     func cancelEditing() {
         if let note = selectedNote {
             editingBody = note.body
@@ -707,7 +699,6 @@ final class AppState {
     var navigatorSelection: Set<String> = []
 
     /// Called from view's onChange(of: navigatorSelection) to sync back to selectedNotePath.
-    @MainActor
     func handleNavigatorSelectionChange(_ newSelection: Set<String>) {
         // Avoid re-entrant loops: only act if actually different
         if newSelection.count == 1, let path = newSelection.first {
@@ -750,7 +741,6 @@ final class AppState {
     }
 
     /// Normal click — single-select, clears multi-selection.
-    @MainActor
     func selectNote(path: String?) {
         // Auto-save when switching notes
         if selectedNotePath != nil && selectedNotePath != path && hasUnsavedChanges {
@@ -765,7 +755,6 @@ final class AppState {
     }
 
     /// Cmd+Click — toggle note in multi-selection.
-    @MainActor
     func toggleNoteSelection(path: String) {
         if selectedNotePaths.isEmpty {
             // Start multi-select from current single selection
@@ -800,7 +789,6 @@ final class AppState {
     }
 
     /// Batch move selected notes to a target collection.
-    @MainActor
     func moveSelectedNotes(toCollection: String) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -893,7 +881,6 @@ final class AppState {
     }
 
     /// Start iCloud monitoring for the given vault entry if it's an iCloud vault.
-    @MainActor
     private func startICloudMonitoringIfNeeded(for entry: VaultEntry) {
         iCloudManager.stopMonitoring()
 
@@ -912,7 +899,6 @@ final class AppState {
     }
 
     /// Reload the current vault's notes without changing selection.
-    @MainActor
     func reloadCurrentVault() {
         guard let entry = selectedVault else { return }
 
@@ -951,18 +937,16 @@ final class AppState {
 
     // MARK: - Init
 
-    init() {}
+    nonisolated init() {}
 
     // MARK: - Loading
 
     /// Load the vault registry. Call on app launch.
-    @MainActor
     func loadRegistry() {
         Task { await loadRegistryAsync() }
     }
 
     /// Async implementation of loadRegistry.
-    @MainActor
     func loadRegistryAsync() async {
         do {
             let result: VaultRegistry? = try await store.loadRegistry()
@@ -1007,13 +991,11 @@ final class AppState {
     }
 
     /// Reload the vault registry.
-    @MainActor
     func reloadRegistry() {
         loadRegistry()
     }
 
     /// Load collections and notes for the currently selected vault.
-    @MainActor
     func loadSelectedVault() {
         guard let entry = selectedVault else {
             collections = []
@@ -1062,7 +1044,6 @@ final class AppState {
     // MARK: - Vault Management
 
     /// Remove a vault from the registry (does not delete files).
-    @MainActor
     func removeVault(name: String) {
         Task {
             guard var registry = try? await store.loadRegistry() else { return }
@@ -1080,7 +1061,6 @@ final class AppState {
     }
 
     /// Set a vault as the primary vault.
-    @MainActor
     func setPrimaryVault(name: String) {
         Task {
             guard var registry = try? await store.loadRegistry() else { return }
@@ -1093,7 +1073,6 @@ final class AppState {
     // MARK: - Vault Creation
 
     /// Create a new vault. Storage location is determined by cloudSyncMode.
-    @MainActor
     func createNewVault(name: String, authorName: String) throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
@@ -1112,7 +1091,6 @@ final class AppState {
     }
 
     /// Import a vault from GitHub using the REST API (no git binary required).
-    @MainActor
     func importGitHubVault(repo: String, name: String?) async throws {
         let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
         // GitHub vaults always stored in ~/.maho/vaults/ (not iCloud) —
@@ -1137,7 +1115,6 @@ final class AppState {
     // MARK: - Collection & Note Creation
 
     /// Create a new collection in the current vault.
-    @MainActor
     func createCollection(name: String, icon: String = "folder") throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1151,7 +1128,6 @@ final class AppState {
     ///   - collectionId: The collection directory name (relative path from vault root).
     /// - Returns: The relative path of the created note.
     @discardableResult
-    @MainActor
     func createNote(title: String, collectionId: String) throws -> String {
         guard let entry = selectedVault else { throw CollectionError.invalidName }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1181,7 +1157,6 @@ final class AppState {
     }
 
     /// Create a sub-collection (subdirectory) under an existing collection.
-    @MainActor
     func createSubCollection(name: String, parentId: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1212,7 +1187,6 @@ final class AppState {
     }
 
     /// Reorder top-level collections in maho.yaml.
-    @MainActor
     func reorderCollections(orderedIds: [String]) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1223,7 +1197,6 @@ final class AppState {
     // MARK: - Rename & Icon
 
     /// Rename a collection (top-level: update maho.yaml; sub-collection: update _index.md title).
-    @MainActor
     func renameCollection(collectionId: String, newName: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1241,7 +1214,6 @@ final class AppState {
     }
 
     /// Change a top-level collection's icon in maho.yaml.
-    @MainActor
     func changeCollectionIcon(collectionId: String, newIcon: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1250,7 +1222,6 @@ final class AppState {
     }
 
     /// Rename a note by updating its frontmatter title.
-    @MainActor
     func renameNote(relativePath: String, newTitle: String) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1262,7 +1233,6 @@ final class AppState {
     // MARK: - Delete
 
     /// Delete a note by moving it to Trash.
-    @MainActor
     func deleteNote(relativePath: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1291,7 +1261,6 @@ final class AppState {
     }
 
     /// Delete a sub-collection by moving its notes to the parent collection, then removing the directory.
-    @MainActor
     func deleteSubCollection(collectionId: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1329,7 +1298,6 @@ final class AppState {
     }
 
     /// Delete a top-level collection by moving the entire directory to Trash and removing from maho.yaml.
-    @MainActor
     func deleteTopLevelCollection(collectionId: String) throws {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1351,7 +1319,6 @@ final class AppState {
     }
 
     /// Reorder notes within a collection directory by writing order to `_index.md`.
-    @MainActor
     func reorderNotes(collectionId: String, orderedPaths: [String]) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1361,7 +1328,6 @@ final class AppState {
     }
 
     /// Move a note to a different collection.
-    @MainActor
     func moveNote(relativePath: String, toCollection: String) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1375,7 +1341,6 @@ final class AppState {
     }
 
     /// Move a collection into another parent collection.
-    @MainActor
     func moveCollection(collectionId: String, intoParent: String) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1385,7 +1350,6 @@ final class AppState {
     }
 
     /// Promote a sub-collection to a top-level collection.
-    @MainActor
     func promoteToTopLevel(collectionId: String) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
@@ -1395,7 +1359,6 @@ final class AppState {
     }
 
     /// Reorder sub-collections within a parent directory.
-    @MainActor
     func reorderSubCollections(parentId: String, orderedIds: [String]) {
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
