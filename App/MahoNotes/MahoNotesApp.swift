@@ -22,7 +22,7 @@ struct MahoNotesApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         Task {
-                            await appState.syncCoordinator.pullAll()
+                            await appState.syncCoordinator.syncOnActive()
                         }
                     }
                 }

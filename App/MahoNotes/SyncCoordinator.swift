@@ -36,8 +36,11 @@ struct VaultSyncStatus {
 
 /// Manages GitHub sync lifecycle for all vaults that have a `github` remote.
 ///
-/// - Periodic pull every 5 minutes.
-/// - Debounced push (30 s) after content changes.
+/// All sync operations use full sync (pull + push) to avoid conflicts
+/// between pull-only and push-only operations.
+///
+/// - Periodic sync every 5 minutes.
+/// - Debounced sync (30 s) after content changes.
 /// - Manual full sync via ``syncNow()``.
 @Observable
 final class SyncCoordinator: @unchecked Sendable {
@@ -107,12 +110,12 @@ final class SyncCoordinator: @unchecked Sendable {
 
         guard !managers.isEmpty else { return }
 
-        // Periodic pull every 5 minutes
+        // Periodic full sync every 5 minutes
         periodicTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(300))
                 guard !Task.isCancelled else { break }
-                await self?.pullAll()
+                await self?.syncAllQuiet()
             }
         }
     }
@@ -166,38 +169,42 @@ final class SyncCoordinator: @unchecked Sendable {
         }
     }
 
-    /// Pull from all GitHub vaults (e.g., on app foreground).
+    /// Full sync on app foreground (replaces pull-only).
     @MainActor
-    func pullAll() async {
-        for (name, manager) in managers {
-            await runSync(vaultName: name, manager: manager, operation: .pull)
-        }
-        lastSyncDate = Date()
+    func syncOnActive() async {
+        await syncAllQuiet()
     }
 
-    /// Full sync (pull + push) for a single vault.
+    /// Full sync (pull + push) for a single vault (debounce target).
     @MainActor
     func syncVault(_ entry: VaultEntry) async {
         guard let manager = managers[entry.name] else { return }
-        await runSync(vaultName: entry.name, manager: manager, operation: .sync)
+        await runSync(vaultName: entry.name, manager: manager)
     }
 
     // MARK: - Private Helpers
-
-    private enum SyncOp { case sync, pull, push }
 
     @MainActor
     private func syncAll() async {
         isSyncing = true
         for (name, manager) in managers {
-            await runSync(vaultName: name, manager: manager, operation: .sync)
+            await runSync(vaultName: name, manager: manager)
         }
         isSyncing = false
         lastSyncDate = Date()
     }
 
+    /// Full sync without updating `isSyncing` (for periodic/background use).
     @MainActor
-    private func runSync(vaultName: String, manager: GitHubSyncManager, operation: SyncOp) async {
+    private func syncAllQuiet() async {
+        for (name, manager) in managers {
+            await runSync(vaultName: name, manager: manager)
+        }
+        lastSyncDate = Date()
+    }
+
+    @MainActor
+    private func runSync(vaultName: String, manager: GitHubSyncManager) async {
         // Per-vault lock: skip if another sync is already in-flight for this vault.
         guard !syncInProgress.contains(vaultName) else { return }
         syncInProgress.insert(vaultName)
@@ -205,12 +212,7 @@ final class SyncCoordinator: @unchecked Sendable {
 
         vaultSyncStatus[vaultName, default: VaultSyncStatus()].isSyncing = true
         do {
-            let result: SyncResult
-            switch operation {
-            case .sync: result = try await manager.sync()
-            case .pull: result = try await manager.pull()
-            case .push: result = try await manager.push()
-            }
+            let result = try await manager.sync()
             vaultSyncStatus[vaultName]?.isSyncing = false
             vaultSyncStatus[vaultName]?.lastSyncDate = Date()
             vaultSyncStatus[vaultName]?.lastError = nil
