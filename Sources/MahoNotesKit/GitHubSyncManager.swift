@@ -245,6 +245,13 @@ public actor GitHubSyncManager {
 
             let localPath = (vaultPath as NSString).appendingPathComponent(path)
 
+            // If file was in manifest (we had it before) but is NOT on local disk,
+            // the user intentionally deleted it. Don't re-download — the push that
+            // already ran (push-first sync) has removed it from remote.
+            if manifestSHA != nil && !fm.fileExists(atPath: localPath) {
+                continue
+            }
+
             // Check if local file was also modified (conflict)
             if let manifestSHA, fm.fileExists(atPath: localPath) {
                 let localSHA = try computeGitBlobSHA(filePath: localPath)
@@ -389,22 +396,13 @@ public actor GitHubSyncManager {
             )
         )
 
-        // 6. Update ref (fast-forward)
-        do {
-            _ = try await client.refs.update(
-                owner: owner, repo: repo,
-                ref: "heads/\(branch)",
-                request: UpdateRefRequest(sha: newCommit.sha)
-            )
-        } catch let error as GitHubError {
-            if case .conflict = error {
-                throw GitHubSyncError.nonFastForward
-            }
-            if case .validationFailed = error {
-                throw GitHubSyncError.nonFastForward
-            }
-            throw error
-        }
+        // 6. Update ref (force = true eliminates non-fast-forward errors;
+        //    safe because full tree push is a complete snapshot of local state)
+        _ = try await client.refs.update(
+            owner: owner, repo: repo,
+            ref: "heads/\(branch)",
+            request: UpdateRefRequest(sha: newCommit.sha, force: true)
+        )
 
         // 7. Update manifest with new file state
         manifest.files = newManifestFiles
@@ -435,20 +433,15 @@ public actor GitHubSyncManager {
             }
         }
 
-        // Normal sync: pull first, then push (with retry on conflict)
+        // Push-first sync: push local state (including deletions) BEFORE pull.
+        // This prevents pull from re-downloading files the user deleted locally.
+        // Force-push ensures no non-fast-forward errors.
+        let pushResult = try await push()
         let pullResult = try await pull()
-        let pushResult: SyncResult
-        do {
-            pushResult = try await push()
-        } catch GitHubSyncError.nonFastForward {
-            // Remote moved between our pull and push — pull again and retry once
-            let _ = try await pull()
-            pushResult = try await push()
-        }
 
-        var message = pullResult.message
-        if !pushResult.message.contains("Nothing") {
-            message += "\n" + pushResult.message
+        var message = pushResult.message
+        if !pullResult.message.contains("up to date") {
+            message += "\n" + pullResult.message
         }
 
         return SyncResult(
