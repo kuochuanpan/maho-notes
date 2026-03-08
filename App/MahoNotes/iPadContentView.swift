@@ -34,64 +34,66 @@ struct iPadContentView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
         } detail: {
-            // C — Note Content
-            NoteContentView()
+            // C — Note Content (wrapped in NavigationStack for toolbar)
+            NavigationStack {
+                NoteContentView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                withAnimation {
+                                    cycleSidebarVisibility()
+                                }
+                            } label: {
+                                Image(systemName: sidebarToggleIcon)
+                            }
+                            .keyboardShortcut("s", modifiers: [.command, .shift])
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                presentNewNote()
+                            } label: {
+                                Image(systemName: "square.and.pencil")
+                            }
+                            .keyboardShortcut("n", modifiers: .command)
+                            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                appState.cycleViewMode()
+                            } label: {
+                                Image(systemName: viewModeIcon)
+                            }
+                            .keyboardShortcut("e", modifiers: .command)
+                            .disabled(appState.isReadOnly)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                appState.syncCoordinator.syncNow()
+                            } label: {
+                                if appState.syncCoordinator.isSyncing {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                }
+                            }
+                            .disabled(appState.syncCoordinator.isSyncing)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                showingNewCollection = true
+                                newCollectionName = ""
+                                newCollectionIcon = "folder"
+                                collectionError = nil
+                            } label: {
+                                Image(systemName: "folder.badge.plus")
+                            }
+                            .disabled(appState.selectedVault == nil)
+                        }
+                    }
+            }
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    withAnimation {
-                        cycleSidebarVisibility()
-                    }
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    presentNewNote()
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    appState.cycleViewMode()
-                } label: {
-                    Image(systemName: viewModeIcon)
-                }
-                .keyboardShortcut("e", modifiers: .command)
-                .disabled(appState.isReadOnly)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    appState.syncCoordinator.syncNow()
-                } label: {
-                    if appState.syncCoordinator.isSyncing {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .disabled(appState.syncCoordinator.isSyncing)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingNewCollection = true
-                    newCollectionName = ""
-                    newCollectionIcon = "folder"
-                    collectionError = nil
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                }
-                .disabled(appState.selectedVault == nil)
-            }
-        }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
@@ -131,6 +133,15 @@ struct iPadContentView: View {
             columnVisibility = .all
         default:
             columnVisibility = .all
+        }
+    }
+
+    private var sidebarToggleIcon: String {
+        switch columnVisibility {
+        case .all: return "sidebar.left"
+        case .doubleColumn: return "sidebar.left"
+        case .detailOnly: return "sidebar.squares.left"
+        default: return "sidebar.left"
         }
     }
 
