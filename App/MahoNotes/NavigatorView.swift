@@ -315,7 +315,7 @@ struct NavigatorView: View {
             if let vault = appState.selectedVault {
                 Image(systemName: vaultIcon(for: vault))
                     .foregroundStyle(.secondary)
-                Text(vault.name)
+                Text(vault.displayName ?? vault.name)
                     .font(.headline)
                     .lineLimit(1)
             } else {

@@ -16,6 +16,8 @@ struct VaultRailView: View {
     @State private var showingRenameDialog = false
     @State private var renameTarget: VaultEntry?
     @State private var renameText = ""
+    @State private var showingColorPicker = false
+    @State private var colorPickerTarget: VaultEntry?
 
     private enum AddVaultMode: Identifiable {
         case create, github
@@ -124,6 +126,9 @@ struct VaultRailView: View {
             }
         } message: {
             Text("Enter a display name for this vault.")
+        }
+        .popover(isPresented: $showingColorPicker, arrowEdge: .trailing) {
+            colorPickerPanel
         }
     }
 
@@ -445,7 +450,7 @@ struct VaultRailView: View {
             Text("No author set")
         }
 
-        Text(entry.name)
+        Text(entry.displayName ?? entry.name)
             .foregroundStyle(.secondary)
 
         Divider()
@@ -458,18 +463,9 @@ struct VaultRailView: View {
             Label("Rename…", systemImage: "pencil")
         }
 
-        Menu {
-            ForEach(colorOptions, id: \.name) { option in
-                Button {
-                    appState.setVaultColor(name: entry.name, color: option.name)
-                } label: {
-                    Label(option.name.capitalized, systemImage: entry.color == option.name ? "checkmark.circle.fill" : "circle.fill")
-                }
-            }
-            Divider()
-            Button("Reset to Default") {
-                appState.setVaultColor(name: entry.name, color: "")
-            }
+        Button {
+            colorPickerTarget = entry
+            showingColorPicker = true
         } label: {
             Label("Change Color", systemImage: "paintpalette")
         }
@@ -483,6 +479,43 @@ struct VaultRailView: View {
         #endif
     }
 
+    // MARK: - Color Picker Panel
+
+    private var colorPickerPanel: some View {
+        VStack(spacing: 8) {
+            Text("Vault Color")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 6), count: 6), spacing: 6) {
+                ForEach(colorOptions, id: \.name) { option in
+                    Button {
+                        if let target = colorPickerTarget {
+                            appState.setVaultColor(name: target.name, color: option.name)
+                        }
+                        showingColorPicker = false
+                    } label: {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(option.color)
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+                            )
+                            .overlay {
+                                if colorPickerTarget?.color == option.name {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+    }
+
     // MARK: - Helpers
 
     private struct ColorOption {
@@ -492,16 +525,27 @@ struct VaultRailView: View {
 
     private var colorOptions: [ColorOption] {
         [
-            ColorOption(name: "blue", color: .blue),
-            ColorOption(name: "purple", color: .purple),
-            ColorOption(name: "pink", color: .pink),
+            // Row 1
             ColorOption(name: "red", color: .red),
             ColorOption(name: "orange", color: .orange),
             ColorOption(name: "yellow", color: .yellow),
             ColorOption(name: "green", color: .green),
+            ColorOption(name: "mint", color: .mint),
             ColorOption(name: "teal", color: .teal),
+            // Row 2
             ColorOption(name: "cyan", color: .cyan),
+            ColorOption(name: "blue", color: .blue),
             ColorOption(name: "indigo", color: .indigo),
+            ColorOption(name: "purple", color: .purple),
+            ColorOption(name: "pink", color: .pink),
+            ColorOption(name: "brown", color: .brown),
+            // Row 3
+            ColorOption(name: "coral", color: Color(red: 1.0, green: 0.45, blue: 0.35)),
+            ColorOption(name: "lavender", color: Color(red: 0.69, green: 0.56, blue: 0.87)),
+            ColorOption(name: "sage", color: Color(red: 0.52, green: 0.69, blue: 0.52)),
+            ColorOption(name: "sky", color: Color(red: 0.45, green: 0.72, blue: 0.95)),
+            ColorOption(name: "slate", color: Color(red: 0.44, green: 0.50, blue: 0.56)),
+            ColorOption(name: "charcoal", color: Color(red: 0.30, green: 0.30, blue: 0.35)),
         ]
     }
 
