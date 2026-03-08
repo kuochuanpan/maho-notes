@@ -312,7 +312,9 @@ public actor GitHubSyncManager {
 
     /// Push local changes to the remote repository.
     ///
-    /// Diffs local files against manifest, creates blobs → tree → commit → updates ref.
+    /// Uses **full tree mode** (no `baseTree`): builds a complete tree from local files.
+    /// This ensures deleted files don't persist via tree inheritance, and files excluded
+    /// from sync (e.g. `_site/`) don't leak into the tree.
     public func push() async throws -> SyncResult {
         guard SyncManifest.exists(vaultPath: vaultPath) else {
             throw GitHubSyncError.noManifest
@@ -323,53 +325,60 @@ public actor GitHubSyncManager {
         // 1. Scan local files
         let localFiles = try scanLocalFiles()
 
-        // 2. Diff against manifest
+        // 2. Build full tree: every local file becomes a tree entry
         var treeEntries: [CreateTreeEntry] = []
         var newBlobCount = 0
+        var deletedCount = 0
+        var newManifestFiles: [String: String] = [:]
 
-        // Changed or new files
         for (path, _) in localFiles {
             let localPath = (vaultPath as NSString).appendingPathComponent(path)
             let localSHA = try computeGitBlobSHA(filePath: localPath)
 
             if manifest.files[path] == localSHA {
-                continue // Unchanged
+                // Unchanged — reuse existing SHA (no upload needed)
+                treeEntries.append(.blob(path: path, sha: localSHA))
+                newManifestFiles[path] = localSHA
+            } else {
+                // New or changed — upload blob
+                let fileData = try Data(contentsOf: URL(fileURLWithPath: localPath))
+                let blob = try await client.blobs.create(
+                    owner: owner, repo: repo,
+                    request: .base64(fileData)
+                )
+
+                treeEntries.append(.blob(path: path, sha: blob.sha))
+                newManifestFiles[path] = blob.sha
+                newBlobCount += 1
             }
-
-            // Upload blob
-            let fileData = try Data(contentsOf: URL(fileURLWithPath: localPath))
-            let blob = try await client.blobs.create(
-                owner: owner, repo: repo,
-                request: .base64(fileData)
-            )
-
-            treeEntries.append(.blob(path: path, sha: blob.sha))
-            manifest.files[path] = blob.sha
-            newBlobCount += 1
         }
 
-        // Deleted files
+        // Count deleted files (in manifest but not on disk)
         for path in manifest.files.keys where localFiles[path] == nil {
-            treeEntries.append(.delete(path: path))
-            manifest.files.removeValue(forKey: path)
+            deletedCount += 1
         }
 
-        // Nothing to push?
-        if treeEntries.isEmpty {
+        // Nothing changed?
+        if newBlobCount == 0 && deletedCount == 0 {
             return SyncResult(pushed: true, message: "Nothing to push.")
         }
 
-        // 3. Create tree (based on current remote tree)
+        // 3. Create full tree (no baseTree — only what's in local scan)
         let newTree = try await client.trees.create(
             owner: owner, repo: repo,
-            request: CreateTreeRequest(baseTree: manifest.lastTreeSHA, tree: treeEntries)
+            request: CreateTreeRequest(tree: treeEntries)
         )
 
         // 4. Create commit
+        let changeDesc = [
+            newBlobCount > 0 ? "\(newBlobCount) changed" : nil,
+            deletedCount > 0 ? "\(deletedCount) deleted" : nil,
+        ].compactMap { $0 }.joined(separator: ", ")
+
         let newCommit = try await client.commits.create(
             owner: owner, repo: repo,
             request: CreateCommitRequest(
-                message: "sync: update \(newBlobCount) file\(newBlobCount == 1 ? "" : "s")",
+                message: "sync: \(changeDesc)",
                 tree: newTree.sha,
                 parents: [manifest.lastCommitSHA],
                 author: CommitPerson(name: committerName, email: committerEmail)
@@ -387,10 +396,15 @@ public actor GitHubSyncManager {
             if case .conflict = error {
                 throw GitHubSyncError.nonFastForward
             }
+            if case .validationFailed = error {
+                // GitHub returns 422 "Update is not a fast forward" in some cases
+                throw GitHubSyncError.nonFastForward
+            }
             throw error
         }
 
-        // 6. Update manifest
+        // 6. Update manifest with new file state
+        manifest.files = newManifestFiles
         manifest.lastCommitSHA = newCommit.sha
         manifest.lastTreeSHA = newTree.sha
         manifest.lastSyncDate = Date()
@@ -398,7 +412,7 @@ public actor GitHubSyncManager {
 
         return SyncResult(
             pushed: true,
-            message: "Pushed \(newBlobCount) file\(newBlobCount == 1 ? "" : "s")."
+            message: "Pushed: \(changeDesc)."
         )
     }
 
