@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import MahoNotesKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - DeviceInfo
 
