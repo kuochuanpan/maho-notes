@@ -33,7 +33,7 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
-                .toolbarRole(.editor) // Suppress system sidebar toggle
+                .toolbar(removing: .sidebarToggle) // Remove system sidebar toggle
                 .toolbar {
                     // Our own toggle in B column — left side
                     ToolbarItem(placement: .topBarLeading) {
@@ -50,6 +50,7 @@ struct iPadContentView: View {
             // C — Note Content (wrapped in NavigationStack for toolbar)
             NavigationStack {
                 NoteContentView()
+                    .toolbar(removing: .sidebarToggle) // Remove system sidebar toggle
                     .toolbar {
                         // Show toggle in C column only when B is not visible
                         if columnVisibility == .detailOnly {
