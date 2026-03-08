@@ -26,6 +26,7 @@ struct iPadContentView: View {
             // A — Vault Rail
             iPadVaultRail(showingSettings: $showingSettings)
                 .navigationBarHidden(true)
+                .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
         } content: {
             // B — Navigator
             navigatorContent
@@ -603,7 +604,20 @@ private struct iPadVaultRail: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingAddVault = false }
+                    if addVaultMode != nil {
+                        Button("Back") { addVaultMode = nil; errorMessage = nil }
+                    } else {
+                        Button("Cancel") { showingAddVault = false }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if addVaultMode == .create {
+                        Button("Create") { createVault() }
+                            .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                    } else if addVaultMode == .github {
+                        Button(isCreating ? "Cloning..." : "Import") { importFromGitHub() }
+                            .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                    }
                 }
             }
         }
@@ -698,14 +712,6 @@ private struct iPadVaultRail: View {
                         .font(.caption)
                 }
             }
-
-            Section {
-                Button("Create Vault") {
-                    createVault()
-                }
-                .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
-                .frame(maxWidth: .infinity)
-            }
         }
     }
 
@@ -729,14 +735,6 @@ private struct iPadVaultRail: View {
                         .foregroundStyle(.red)
                         .font(.caption)
                 }
-            }
-
-            Section {
-                Button(isCreating ? "Cloning..." : "Import") {
-                    importFromGitHub()
-                }
-                .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
-                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -774,11 +772,20 @@ private struct iPadVaultRail: View {
         Task { @MainActor in
             do {
                 if !appState.authManager.isAuthenticated {
+                    // Close the add vault sheet first so DeviceFlow sheet can present
+                    showingAddVault = false
+                    // Small delay to let sheet dismiss animation complete
+                    try await Task.sleep(for: .milliseconds(400))
                     try await appState.authManager.authenticate()
                     guard appState.authManager.isAuthenticated else {
                         isCreating = false
                         return
                     }
+                    // Re-open add vault sheet to continue the import
+                    showingAddVault = true
+                    addVaultMode = .github
+                    // Wait for sheet to present
+                    try await Task.sleep(for: .milliseconds(400))
                 }
                 let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
                 try await appState.importGitHubVault(
