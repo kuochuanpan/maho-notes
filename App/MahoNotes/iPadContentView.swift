@@ -33,16 +33,25 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withAnimation { cycleColumns() }
+                        } label: {
+                            Image(systemName: "sidebar.left")
+                        }
+                    }
+                }
         } detail: {
             // C — Note Content (wrapped in NavigationStack for toolbar)
             NavigationStack {
                 NoteContentView()
                     .toolbar {
-                        // Show restore toggle only when A+B are hidden
+                        // Show toggle in C only when B is hidden (detailOnly)
                         if columnVisibility == .detailOnly {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button {
-                                    withAnimation { columnVisibility = .all }
+                                    withAnimation { cycleColumns() }
                                 } label: {
                                     Image(systemName: "sidebar.left")
                                 }
@@ -94,17 +103,6 @@ struct iPadContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        // 3-state cycle via system toggle interception:
-        // .all → .doubleColumn (system hides A) → .detailOnly (we hide B) → .all (we restore)
-        .onChange(of: columnVisibility) { oldValue, newValue in
-            if oldValue == .doubleColumn && newValue == .all {
-                // System tries to restore A — redirect to hide B instead
-                Task { @MainActor in columnVisibility = .detailOnly }
-            } else if oldValue == .detailOnly && newValue == .doubleColumn {
-                // System restores B — redirect to restore all
-                Task { @MainActor in columnVisibility = .all }
-            }
-        }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
@@ -130,6 +128,17 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
+
+    // MARK: - Column Visibility Cycle
+    // A+B+C → B+C → C only → A+B+C
+    private func cycleColumns() {
+        switch columnVisibility {
+        case .all: columnVisibility = .doubleColumn
+        case .doubleColumn: columnVisibility = .detailOnly
+        case .detailOnly: columnVisibility = .all
+        default: columnVisibility = .all
+        }
+    }
 
     private var viewModeIcon: String {
         switch appState.viewMode {
