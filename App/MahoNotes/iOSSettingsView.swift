@@ -5,6 +5,7 @@ import MahoNotesKit
 /// Form-based settings for iOS (replaces macOS Settings window).
 struct iOSSettingsView: View {
     @Environment(AppState.self) private var appState
+    var onDismiss: (() -> Void)?
     @AppStorage("appTheme") private var appTheme: String = "system"
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @AppStorage("searchMode") private var searchMode: String = "text"
@@ -117,6 +118,13 @@ struct iOSSettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbar {
+                if let onDismiss {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: onDismiss)
+                    }
+                }
+            }
             .alert("Remove Vault", isPresented: Binding(
                 get: { vaultToRemove != nil },
                 set: { if !$0 { vaultToRemove = nil } }

@@ -10,13 +10,75 @@ struct iPadContentView: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var selectedNotePath: String?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var showingNewNote = false
+    @State private var newNoteTitle = ""
+    @State private var newNoteCollectionId = ""
+    @State private var noteError: String?
+    @State private var showingNewCollection = false
+    @State private var newCollectionName = ""
+    @State private var newCollectionIcon = "folder"
+    @State private var collectionError: String?
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebarContent
                 .navigationTitle("Maho Notes")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showingSettings = true
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                    }
+                }
         } detail: {
             NoteContentView()
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    presentNewNote()
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    appState.cycleViewMode()
+                } label: {
+                    Image(systemName: viewModeIcon)
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(appState.isReadOnly)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    appState.syncCoordinator.syncNow()
+                } label: {
+                    if appState.syncCoordinator.isSyncing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(appState.syncCoordinator.isSyncing)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingNewCollection = true
+                    newCollectionName = ""
+                    newCollectionIcon = "folder"
+                    collectionError = nil
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .disabled(appState.selectedVault == nil)
+            }
         }
         .searchable(text: $searchQuery, placement: .sidebar, prompt: "Search notes...")
         .onChange(of: searchQuery) { _, newValue in
@@ -25,6 +87,115 @@ struct iPadContentView: View {
         .onChange(of: selectedNotePath) { _, newValue in
             appState.selectNote(path: newValue)
         }
+        .sheet(isPresented: $showingSettings) {
+            iOSSettingsView(onDismiss: { showingSettings = false })
+        }
+        .sheet(isPresented: $showingNewNote) {
+            newNoteSheet
+        }
+        .sheet(isPresented: $showingNewCollection) {
+            newCollectionSheet
+        }
+    }
+
+    // MARK: - View Mode Icon
+
+    private var viewModeIcon: String {
+        switch appState.viewMode {
+        case .preview: return "eye"
+        case .editor: return "pencil"
+        case .split: return "rectangle.split.2x1"
+        }
+    }
+
+    // MARK: - New Note
+
+    private func presentNewNote() {
+        // Default to first collection
+        if let first = appState.collections.first {
+            newNoteCollectionId = first.id
+        }
+        newNoteTitle = ""
+        noteError = nil
+        showingNewNote = true
+    }
+
+    private var newNoteSheet: some View {
+        NavigationStack {
+            Form {
+                if appState.collections.count > 1 {
+                    Picker("Collection", selection: $newNoteCollectionId) {
+                        ForEach(appState.collections, id: \.id) { col in
+                            Text(col.name).tag(col.id)
+                        }
+                    }
+                }
+                TextField("Note Title", text: $newNoteTitle)
+                if let error = noteError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("New Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingNewNote = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        let title = newNoteTitle.trimmingCharacters(in: .whitespaces)
+                        guard !title.isEmpty else { return }
+                        do {
+                            let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
+                            selectedNotePath = path
+                            showingNewNote = false
+                        } catch {
+                            noteError = error.localizedDescription
+                        }
+                    }
+                    .disabled(newNoteTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - New Collection
+
+    private var newCollectionSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("Collection Name", text: $newCollectionName)
+                if let error = collectionError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("New Collection")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingNewCollection = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        let name = newCollectionName.trimmingCharacters(in: .whitespaces)
+                        guard !name.isEmpty else { return }
+                        do {
+                            try appState.createCollection(name: name, icon: newCollectionIcon)
+                            showingNewCollection = false
+                        } catch {
+                            collectionError = error.localizedDescription
+                        }
+                    }
+                    .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     // MARK: - Sidebar
