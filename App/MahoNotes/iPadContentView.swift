@@ -103,6 +103,7 @@ struct iPadContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
