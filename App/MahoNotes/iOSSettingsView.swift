@@ -182,6 +182,7 @@ struct iOSSettingsView: View {
         case .icloud: return "icloud"
         case .github: return "network"
         case .local: return "folder"
+        case .device: return "internaldrive"
         }
     }
 
