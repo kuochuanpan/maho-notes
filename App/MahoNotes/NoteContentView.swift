@@ -1,9 +1,34 @@
 import SwiftUI
 import MahoNotesKit
 
+// MARK: - Environment Keys for iPad inline controls
+
+private struct SidebarToggleActionKey: EnvironmentKey {
+    nonisolated(unsafe) static let defaultValue: (() -> Void)? = nil
+}
+
+private struct InlineActionButtonsKey: EnvironmentKey {
+    nonisolated(unsafe) static let defaultValue: AnyView? = nil
+}
+
+extension EnvironmentValues {
+    /// Optional sidebar toggle action injected by iPad layout.
+    var sidebarToggleAction: (() -> Void)? {
+        get { self[SidebarToggleActionKey.self] }
+        set { self[SidebarToggleActionKey.self] = newValue }
+    }
+    /// Optional inline action buttons injected by iPad layout (replaces nav bar).
+    var inlineActionButtons: AnyView? {
+        get { self[InlineActionButtonsKey.self] }
+        set { self[InlineActionButtonsKey.self] = newValue }
+    }
+}
+
 /// C -- Note content panel showing the selected note's title and body.
 struct NoteContentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.sidebarToggleAction) private var sidebarToggleAction
+    @Environment(\.inlineActionButtons) private var inlineActionButtons
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @FocusState private var editorFocused: Bool
 
@@ -26,17 +51,30 @@ struct NoteContentView: View {
                 githubConflictBanner(conflictFile)
             }
 
-            // Breadcrumb header
-            HStack(spacing: 4) {
-                breadcrumb(for: note)
-                if appState.hasUnsavedChanges {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: 6, height: 6)
+            // Breadcrumb header (+ optional iPad inline controls)
+            HStack(spacing: 8) {
+                if let toggleAction = sidebarToggleAction {
+                    Button(action: toggleAction) {
+                        Image(systemName: "sidebar.left")
+                            .font(.body)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
+                HStack(spacing: 4) {
+                    breadcrumb(for: note)
+                    if appState.hasUnsavedChanges {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .font(.subheadline)
                 Spacer()
+                if let actions = inlineActionButtons {
+                    actions
+                }
             }
-            .font(.subheadline)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(.bar)

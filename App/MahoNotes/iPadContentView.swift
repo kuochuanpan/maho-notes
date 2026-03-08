@@ -48,65 +48,13 @@ struct iPadContentView: View {
                     }
                 }
         } detail: {
-            // C — Note Content (no NavigationStack — avoids second nav bar / system toggle)
+            // C — Note Content (nav bar hidden; toggle + actions live in breadcrumb bar)
             NoteContentView()
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarHidden(true)
                 .toolbar(removing: .sidebarToggle)
-                .toolbar {
-                    // Show toggle in C only when B is hidden (detailOnly)
-                    if columnCycleState == 2 {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                withAnimation { cycleColumns() }
-                            } label: {
-                                Image(systemName: "sidebar.left")
-                            }
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            presentNewNote()
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                        }
-                        .keyboardShortcut("n", modifiers: .command)
-                        .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            appState.cycleViewMode()
-                        } label: {
-                            Image(systemName: viewModeIcon)
-                        }
-                        .keyboardShortcut("e", modifiers: .command)
-                        .disabled(appState.isReadOnly)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            appState.syncCoordinator.syncNow()
-                        } label: {
-                            if appState.syncCoordinator.isSyncing {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                        }
-                        .disabled(appState.syncCoordinator.isSyncing)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showingNewCollection = true
-                            newCollectionName = ""
-                            newCollectionIcon = "folder"
-                            collectionError = nil
-                        } label: {
-                            Image(systemName: "folder.badge.plus")
-                        }
-                        .disabled(appState.selectedVault == nil)
-                    }
-                }
+                .environment(\.sidebarToggleAction, columnCycleState == 2
+                    ? { withAnimation { cycleColumns() } } : nil)
+                .environment(\.inlineActionButtons, AnyView(detailInlineActions))
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)
@@ -135,6 +83,42 @@ struct iPadContentView: View {
     }
 
     // MARK: - View Mode Icon
+
+    // MARK: - Detail Inline Action Buttons (in breadcrumb bar)
+    private var detailInlineActions: some View {
+        HStack(spacing: 16) {
+            Button {
+                presentNewNote()
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+
+            Button {
+                appState.syncCoordinator.syncNow()
+            } label: {
+                if appState.syncCoordinator.isSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+            }
+            .disabled(appState.syncCoordinator.isSyncing)
+
+            Button {
+                showingNewCollection = true
+                newCollectionName = ""
+                newCollectionIcon = "folder"
+                collectionError = nil
+            } label: {
+                Image(systemName: "folder.badge.plus")
+            }
+            .disabled(appState.selectedVault == nil)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+    }
 
     // MARK: - Column Visibility Cycle
     // A+B+C → B+C → C only → A+B+C
