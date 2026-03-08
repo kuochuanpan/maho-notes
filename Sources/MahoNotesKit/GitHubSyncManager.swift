@@ -546,6 +546,10 @@ public actor GitHubSyncManager {
         let basePath = baseURL.path
 
         for case let fileURL as URL in enumerator {
+            // Skip directories — only include regular files
+            let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard resourceValues?.isRegularFile == true else { continue }
+
             let fullPath = fileURL.standardizedFileURL.path
             let relativePath = fullPath.hasPrefix(basePath + "/")
                 ? String(fullPath.dropFirst(basePath.count + 1))
