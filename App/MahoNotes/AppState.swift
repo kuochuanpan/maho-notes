@@ -842,6 +842,102 @@ import MahoNotesKit
         return name
     }
 
+    // MARK: - Note Clipboard
+
+    struct NoteClipboardEntry {
+        let relativePath: String
+        let vaultName: String
+    }
+
+    /// Copied notes waiting to be pasted.
+    var noteClipboard: [NoteClipboardEntry]?
+
+    /// Copy the currently selected note(s) to the clipboard.
+    func copySelectedNotes() {
+        guard let vaultName = selectedVaultName else { return }
+        let paths: [String]
+        if selectedNotePaths.count > 1 {
+            paths = Array(selectedNotePaths)
+        } else if let path = selectedNotePath {
+            paths = [path]
+        } else {
+            return
+        }
+        noteClipboard = paths.map { NoteClipboardEntry(relativePath: $0, vaultName: vaultName) }
+    }
+
+    /// Paste copied notes into a target collection in the current vault.
+    func pasteNotes(toCollection collectionId: String) {
+        guard let clipboard = noteClipboard, !clipboard.isEmpty else { return }
+        guard let targetEntry = selectedVault else { return }
+        let targetVaultPath = store.resolvedPath(for: targetEntry)
+        let fm = FileManager.default
+
+        let targetDir = (targetVaultPath as NSString).appendingPathComponent(collectionId)
+        try? fm.createDirectory(atPath: targetDir, withIntermediateDirectories: true)
+
+        var pastedFilenames: [String] = []
+
+        for item in clipboard {
+            // Resolve source vault path
+            let sourceEntry = vaults.first { $0.name == item.vaultName }
+            let sourceVaultPath: String
+            if let entry = sourceEntry {
+                sourceVaultPath = store.resolvedPath(for: entry)
+            } else {
+                continue
+            }
+
+            let sourceAbs = (sourceVaultPath as NSString).appendingPathComponent(item.relativePath)
+            guard fm.fileExists(atPath: sourceAbs) else { continue }
+
+            let originalFilename = (item.relativePath as NSString).lastPathComponent
+            let ext = (originalFilename as NSString).pathExtension
+            let baseName = (originalFilename as NSString).deletingPathExtension
+
+            // Determine target filename with _Copy suffix
+            var targetFilename: String
+            var targetAbs: String
+
+            let copyName = "\(baseName)_Copy.\(ext)"
+            targetAbs = (targetDir as NSString).appendingPathComponent(copyName)
+
+            if !fm.fileExists(atPath: targetAbs) {
+                targetFilename = copyName
+            } else {
+                var counter = 2
+                repeat {
+                    targetFilename = "\(baseName)_Copy_\(counter).\(ext)"
+                    targetAbs = (targetDir as NSString).appendingPathComponent(targetFilename)
+                    counter += 1
+                } while fm.fileExists(atPath: targetAbs)
+            }
+
+            // Copy file
+            do {
+                try fm.copyItem(atPath: sourceAbs, toPath: targetAbs)
+                pastedFilenames.append(targetFilename)
+            } catch {
+                // Skip failed copies
+            }
+        }
+
+        // Append pasted files to target _index.md order
+        if !pastedFilenames.isEmpty {
+            let (existingOrder, _) = readDirectoryOrder(at: targetDir)
+            var newOrder = existingOrder
+            newOrder.append(contentsOf: pastedFilenames)
+            try? writeDirectoryOrder(at: targetDir, notes: newOrder)
+        }
+
+        reloadCurrentVault()
+
+        // Trigger sync
+        if let entry = selectedVault {
+            syncCoordinator.notifyContentChanged(vault: entry)
+        }
+    }
+
     // MARK: - GitHub Auth
 
     let authManager = GitHubAuthManager()
