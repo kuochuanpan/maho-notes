@@ -369,7 +369,11 @@ public actor GitHubSyncManager {
             request: CreateTreeRequest(tree: treeEntries)
         )
 
-        // 4. Create commit
+        // 4. Get current remote HEAD as commit parent (not manifest — avoids stale parent race)
+        let currentRef = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
+        let parentSHA = currentRef.object.sha
+
+        // 5. Create commit
         let changeDesc = [
             newBlobCount > 0 ? "\(newBlobCount) changed" : nil,
             deletedCount > 0 ? "\(deletedCount) deleted" : nil,
@@ -380,12 +384,12 @@ public actor GitHubSyncManager {
             request: CreateCommitRequest(
                 message: "sync: \(changeDesc)",
                 tree: newTree.sha,
-                parents: [manifest.lastCommitSHA],
+                parents: [parentSHA],
                 author: CommitPerson(name: committerName, email: committerEmail)
             )
         )
 
-        // 5. Update ref (fast-forward)
+        // 6. Update ref (fast-forward)
         do {
             _ = try await client.refs.update(
                 owner: owner, repo: repo,
@@ -397,13 +401,12 @@ public actor GitHubSyncManager {
                 throw GitHubSyncError.nonFastForward
             }
             if case .validationFailed = error {
-                // GitHub returns 422 "Update is not a fast forward" in some cases
                 throw GitHubSyncError.nonFastForward
             }
             throw error
         }
 
-        // 6. Update manifest with new file state
+        // 7. Update manifest with new file state
         manifest.files = newManifestFiles
         manifest.lastCommitSHA = newCommit.sha
         manifest.lastTreeSHA = newTree.sha
