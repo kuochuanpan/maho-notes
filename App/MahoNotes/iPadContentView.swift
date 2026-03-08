@@ -202,21 +202,22 @@ struct iPadContentView: View {
 
     // MARK: - Collection Tree Row (Recursive)
 
-    @ViewBuilder
-    private func iPadCollectionRow(node: FileTreeNode, depth: Int) -> some View {
-        DisclosureGroup {
-            ForEach(node.children, id: \.id) { child in
-                if child.isDirectory {
-                    iPadCollectionRow(node: child, depth: depth + 1)
-                } else if let note = child.note {
-                    noteRow(note)
-                        .tag(note.relativePath)
+    private func iPadCollectionRow(node: FileTreeNode, depth: Int) -> AnyView {
+        AnyView(
+            DisclosureGroup {
+                ForEach(node.children, id: \.id) { child in
+                    if child.isDirectory {
+                        iPadCollectionRow(node: child, depth: depth + 1)
+                    } else if let note = child.note {
+                        noteRow(note)
+                            .tag(note.relativePath)
+                    }
                 }
+            } label: {
+                Label(node.name, systemImage: node.icon)
+                    .font(.body)
             }
-        } label: {
-            Label(node.name, systemImage: node.icon)
-                .font(.body)
-        }
+        )
     }
 
     // MARK: - Note Row
