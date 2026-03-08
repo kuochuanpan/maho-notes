@@ -26,6 +26,7 @@ struct iPadContentView: View {
             // A — Vault Rail
             iPadVaultRail(showingSettings: $showingSettings)
                 .navigationBarHidden(true)
+                .toolbar(removing: .sidebarToggle)
                 .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
         } content: {
             // B — Navigator
@@ -33,6 +34,7 @@ struct iPadContentView: View {
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                .toolbar(removing: .sidebarToggle)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -43,64 +45,63 @@ struct iPadContentView: View {
                     }
                 }
         } detail: {
-            // C — Note Content (wrapped in NavigationStack for toolbar)
-            NavigationStack {
-                NoteContentView()
-                    .toolbar {
-                        // Show toggle in C only when B is hidden (detailOnly)
-                        if columnVisibility == .detailOnly {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button {
-                                    withAnimation { cycleColumns() }
-                                } label: {
-                                    Image(systemName: "sidebar.left")
-                                }
-                            }
-                        }
-                        ToolbarItem(placement: .primaryAction) {
+            // C — Note Content (no NavigationStack — avoids second nav bar / system toggle)
+            NoteContentView()
+                .toolbar(removing: .sidebarToggle)
+                .toolbar {
+                    // Show toggle in C only when B is hidden (detailOnly)
+                    if columnVisibility == .detailOnly {
+                        ToolbarItem(placement: .topBarLeading) {
                             Button {
-                                presentNewNote()
+                                withAnimation { cycleColumns() }
                             } label: {
-                                Image(systemName: "square.and.pencil")
+                                Image(systemName: "sidebar.left")
                             }
-                            .keyboardShortcut("n", modifiers: .command)
-                            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                appState.cycleViewMode()
-                            } label: {
-                                Image(systemName: viewModeIcon)
-                            }
-                            .keyboardShortcut("e", modifiers: .command)
-                            .disabled(appState.isReadOnly)
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                appState.syncCoordinator.syncNow()
-                            } label: {
-                                if appState.syncCoordinator.isSyncing {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                }
-                            }
-                            .disabled(appState.syncCoordinator.isSyncing)
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                showingNewCollection = true
-                                newCollectionName = ""
-                                newCollectionIcon = "folder"
-                                collectionError = nil
-                            } label: {
-                                Image(systemName: "folder.badge.plus")
-                            }
-                            .disabled(appState.selectedVault == nil)
                         }
                     }
-            }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            presentNewNote()
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                        }
+                        .keyboardShortcut("n", modifiers: .command)
+                        .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            appState.cycleViewMode()
+                        } label: {
+                            Image(systemName: viewModeIcon)
+                        }
+                        .keyboardShortcut("e", modifiers: .command)
+                        .disabled(appState.isReadOnly)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            appState.syncCoordinator.syncNow()
+                        } label: {
+                            if appState.syncCoordinator.isSyncing {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        .disabled(appState.syncCoordinator.isSyncing)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showingNewCollection = true
+                            newCollectionName = ""
+                            newCollectionIcon = "folder"
+                            collectionError = nil
+                        } label: {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        .disabled(appState.selectedVault == nil)
+                    }
+                }
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)
