@@ -160,13 +160,7 @@ final class SyncCoordinator: @unchecked Sendable {
         // Cancel debounce tasks to avoid racing with manual sync
         for task in debounceTasks.values { task.cancel() }
         debounceTasks = [:]
-        Task { @MainActor in
-            // Wait for any in-progress sync to complete before starting fresh
-            while !syncInProgress.isEmpty {
-                try? await Task.sleep(for: .milliseconds(100))
-            }
-            await syncAll()
-        }
+        Task { @MainActor in await syncAll() }
     }
 
     /// Full sync on app foreground (replaces pull-only).
@@ -205,8 +199,10 @@ final class SyncCoordinator: @unchecked Sendable {
 
     @MainActor
     private func runSync(vaultName: String, manager: GitHubSyncManager) async {
-        // Per-vault lock: skip if another sync is already in-flight for this vault.
-        guard !syncInProgress.contains(vaultName) else { return }
+        // Per-vault lock: wait for any in-progress sync to finish (never skip).
+        while syncInProgress.contains(vaultName) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         syncInProgress.insert(vaultName)
         defer { syncInProgress.remove(vaultName) }
 
@@ -217,6 +213,7 @@ final class SyncCoordinator: @unchecked Sendable {
             vaultSyncStatus[vaultName]?.lastSyncDate = Date()
             vaultSyncStatus[vaultName]?.lastError = nil
             lastSyncDate = Date()
+            lastSyncError = nil  // Clear global error on success
             processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
         } catch {
             vaultSyncStatus[vaultName]?.isSyncing = false
