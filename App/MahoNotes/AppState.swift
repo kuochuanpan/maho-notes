@@ -895,27 +895,45 @@ import MahoNotesKit
             let ext = (originalFilename as NSString).pathExtension
             let baseName = (originalFilename as NSString).deletingPathExtension
 
-            // Determine target filename with _Copy suffix
+            // Determine target filename with (Copy) suffix
             var targetFilename: String
             var targetAbs: String
+            var copySuffix: String
 
-            let copyName = "\(baseName)_Copy.\(ext)"
+            let copyName = "\(baseName)(Copy).\(ext)"
             targetAbs = (targetDir as NSString).appendingPathComponent(copyName)
 
             if !fm.fileExists(atPath: targetAbs) {
                 targetFilename = copyName
+                copySuffix = "(Copy)"
             } else {
                 var counter = 2
                 repeat {
-                    targetFilename = "\(baseName)_Copy_\(counter).\(ext)"
+                    copySuffix = "(Copy \(counter))"
+                    targetFilename = "\(baseName)\(copySuffix).\(ext)"
                     targetAbs = (targetDir as NSString).appendingPathComponent(targetFilename)
                     counter += 1
                 } while fm.fileExists(atPath: targetAbs)
             }
 
-            // Copy file
+            // Copy file and update frontmatter title
             do {
                 try fm.copyItem(atPath: sourceAbs, toPath: targetAbs)
+
+                // Update title in frontmatter to include (Copy) suffix
+                if var content = try? String(contentsOfFile: targetAbs, encoding: .utf8) {
+                    let lines = content.components(separatedBy: "\n")
+                    if let titleIdx = lines.firstIndex(where: { $0.hasPrefix("title:") }) {
+                        var mutableLines = lines
+                        let originalTitle = mutableLines[titleIdx]
+                            .replacingOccurrences(of: "title:", with: "")
+                            .trimmingCharacters(in: .whitespaces)
+                        mutableLines[titleIdx] = "title: \(originalTitle) \(copySuffix)"
+                        content = mutableLines.joined(separator: "\n")
+                        try? content.write(toFile: targetAbs, atomically: true, encoding: .utf8)
+                    }
+                }
+
                 pastedFilenames.append(targetFilename)
             } catch {
                 // Skip failed copies
