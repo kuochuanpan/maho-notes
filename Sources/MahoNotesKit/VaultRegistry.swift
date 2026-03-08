@@ -1,5 +1,8 @@
 import Foundation
 import Yams
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public enum VaultType: String, Codable, Sendable {
     case icloud, github, local, device
@@ -237,7 +240,7 @@ public func currentDeviceName() -> String {
     // Make filesystem-safe: lowercase, replace spaces/special chars with hyphens
     let safe = name
         .lowercased()
-        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: String.CompareOptions.regularExpression)
         .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     return safe.isEmpty ? "device" : safe
 }
