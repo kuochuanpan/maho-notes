@@ -43,7 +43,8 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
 
 /// Default directory for cached embedding models (device-local, not synced to iCloud).
 public let defaultModelCacheDir: String = {
-    ("~/.maho/models" as NSString).expandingTildeInPath
+    let base = mahoConfigBase()
+    return (base as NSString).appendingPathComponent("models")
 }()
 
 /// Wraps swift-embeddings for text embedding using Bert or XLMRoberta models.

@@ -109,7 +109,7 @@ func resolvedPath(for entry: VaultEntry) -> String {
 func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
     let iCloudVaultsBase = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
-    let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
+    let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
 
     var updated = registry
 
@@ -152,7 +152,7 @@ func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
 /// Migrates vault data from iCloud back to local storage.
 func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
-    let localVaultsBase = ("~/.maho/vaults" as NSString).expandingTildeInPath
+    let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
 
     var updated = registry
 
