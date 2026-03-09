@@ -2,8 +2,8 @@
 import SwiftUI
 import MahoNotesKit
 
-/// iPhone layout: NavigationStack with B-column navigator as main screen,
-/// vault selection via sheet, note detail via push, bottom toolbar for actions.
+/// iPhone layout: NavigationSplitView (2-col) with IPadVaultRail sidebar,
+/// B-column navigator as main screen, note detail via NavigationStack push.
 struct iPhoneContentView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
@@ -11,7 +11,7 @@ struct iPhoneContentView: View {
     @State private var searchResults: [Note] = []
     @State private var debounceTask: Task<Void, Never>?
     @State private var navigationPath = NavigationPath()
-    @State private var showingVaultSheet = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var showingNewNote = false
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
@@ -23,32 +23,45 @@ struct iPhoneContentView: View {
     @State private var showingSettings = false
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
-            navigatorContent
-                .scrollContentBackground(.hidden)
-                .background(MahoTheme.navigatorBackground(for: colorScheme))
-                .navigationTitle(selectedVaultTitle)
-                .navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        vaultButton
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            // A — Vault Rail (reuse iPad component)
+            IPadVaultRail(showingSettings: $showingSettings)
+                .navigationBarHidden(true)
+                .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
+        } detail: {
+            // B — Navigator + C — Note Detail (via NavigationStack push)
+            NavigationStack(path: $navigationPath) {
+                navigatorContent
+                    .scrollContentBackground(.hidden)
+                    .background(MahoTheme.navigatorBackground(for: colorScheme))
+                    .navigationTitle(selectedVaultTitle)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                withAnimation {
+                                    columnVisibility = columnVisibility == .all
+                                        ? .detailOnly : .all
+                                }
+                            } label: {
+                                Image(systemName: "sidebar.left")
+                            }
+                        }
                     }
-                }
-                .toolbar {
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        bottomToolbarContent
+                    .toolbar {
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            bottomToolbarContent
+                        }
                     }
-                }
-                .navigationDestination(for: String.self) { notePath in
-                    noteDetail(for: notePath)
-                }
+                    .navigationDestination(for: String.self) { notePath in
+                        noteDetail(for: notePath)
+                    }
+            }
         }
+        .navigationSplitViewStyle(.balanced)
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
-        }
-        .sheet(isPresented: $showingVaultSheet) {
-            vaultSelectionSheet
         }
         .sheet(isPresented: $showingNewNote) {
             newNoteSheet
@@ -66,35 +79,6 @@ struct iPhoneContentView: View {
     private var selectedVaultTitle: String {
         guard let vault = appState.selectedVault else { return "Maho Notes" }
         return vault.displayName ?? vault.name
-    }
-
-    // MARK: - Vault Button (Leading)
-
-    private var vaultButton: some View {
-        Button {
-            showingVaultSheet = true
-        } label: {
-            if let entry = appState.selectedVault {
-                ZStack(alignment: .bottomTrailing) {
-                    Text(String((entry.displayName ?? entry.name).prefix(1)).uppercased())
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(MahoTheme.resolvedVaultColor(for: entry), in: RoundedRectangle(cornerRadius: 6))
-
-                    if entry.type == .icloud {
-                        Image(systemName: "icloud.fill")
-                            .font(.system(size: 6))
-                            .foregroundStyle(.white)
-                            .padding(1)
-                            .background(.black.opacity(0.5), in: Circle())
-                            .offset(x: 2, y: 2)
-                    }
-                }
-            } else {
-                Image(systemName: "books.vertical")
-            }
-        }
     }
 
     // MARK: - Bottom Toolbar
@@ -286,81 +270,6 @@ struct iPhoneContentView: View {
             guard !Task.isCancelled else { return }
             let vault = Vault(path: appState.store.resolvedPath(for: entry))
             searchResults = (try? Array(vault.searchNotes(query: trimmed).prefix(20))) ?? []
-        }
-    }
-
-    // MARK: - Vault Selection Sheet
-
-    private var vaultSelectionSheet: some View {
-        NavigationStack {
-            List {
-                if !appState.icloudVaults.isEmpty {
-                    Section("iCloud") {
-                        ForEach(appState.icloudVaults, id: \.name) { entry in
-                            vaultRow(entry)
-                        }
-                    }
-                }
-                if !appState.githubVaults.isEmpty {
-                    Section("GitHub") {
-                        ForEach(appState.githubVaults, id: \.name) { entry in
-                            vaultRow(entry)
-                        }
-                    }
-                }
-                if !appState.localVaults.isEmpty {
-                    Section("Local") {
-                        ForEach(appState.localVaults, id: \.name) { entry in
-                            vaultRow(entry)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Vaults")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { showingVaultSheet = false }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private func vaultRow(_ entry: VaultEntry) -> some View {
-        Button {
-            appState.selectedVaultName = entry.name
-            showingVaultSheet = false
-        } label: {
-            HStack {
-                Text(String((entry.displayName ?? entry.name).prefix(1)).uppercased())
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(MahoTheme.resolvedVaultColor(for: entry), in: RoundedRectangle(cornerRadius: 8))
-
-                Text(entry.displayName ?? entry.name)
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                if appState.primaryVaultName == entry.name {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                }
-                if entry.access == .readOnly {
-                    Text("read-only")
-                        .font(.caption2)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                }
-                if appState.selectedVaultName == entry.name {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color.accentColor)
-                }
-            }
         }
     }
 
