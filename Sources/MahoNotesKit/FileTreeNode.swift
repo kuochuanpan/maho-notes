@@ -2,7 +2,10 @@ import Foundation
 import Yams
 
 /// A node in the vault file tree — either a directory (collection/subcollection) or a note (leaf).
-public final class FileTreeNode: Identifiable, Sendable {
+///
+/// Value type (struct) so SwiftUI correctly detects tree mutations
+/// (e.g. new sub-collections) when the file tree is rebuilt.
+public struct FileTreeNode: Identifiable, Sendable, Equatable {
     public let id: String                     // relative path from vault root
     public let name: String                   // display name
     public let icon: String                   // SF Symbol name
