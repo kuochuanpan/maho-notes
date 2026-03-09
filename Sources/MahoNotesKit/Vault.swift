@@ -513,7 +513,11 @@ func updateFrontmatterField(filePath: String, field: String, value: String) {
         updatedLines.insert(fieldLine, at: endIdx)
     }
 
-    try? updatedLines.joined(separator: "\n").write(toFile: filePath, atomically: true, encoding: .utf8)
+    do {
+        try updatedLines.joined(separator: "\n").write(toFile: filePath, atomically: true, encoding: .utf8)
+    } catch {
+        print("[MahoNotesKit] updateFrontmatterField failed for \(filePath): \(error)")
+    }
 }
 
 public func makeSlug(from title: String) -> String {

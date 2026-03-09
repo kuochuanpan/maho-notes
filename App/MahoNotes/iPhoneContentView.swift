@@ -241,20 +241,48 @@ struct iPhoneContentView: View {
                 hasGitHubConflict: appState.githubConflictFile(for: note.relativePath) != nil
             )
         }
-        .noteRowActions(
-            notePath: note.relativePath,
-            noteTitle: note.title,
-            onRename: { path, title in
-                renameNotePath = path
-                renameNoteTitle = title
-                showingRenameNote = true
-            },
-            onDelete: { path, title in
-                deleteNotePath = path
-                deleteNoteTitle = title
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteNotePath = note.relativePath
+                deleteNoteTitle = note.title
                 showingDeleteNote = true
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
-        )
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                renameNotePath = note.relativePath
+                renameNoteTitle = note.title
+                showingRenameNote = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            .tint(.orange)
+        }
+        .contextMenu {
+            Button {
+                appState.selectedNotePath = note.relativePath
+                appState.copySelectedNotes()
+            } label: {
+                Label("Copy Note", systemImage: "doc.on.doc")
+            }
+            Button {
+                renameNotePath = note.relativePath
+                renameNoteTitle = note.title
+                showingRenameNote = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Divider()
+            Button(role: .destructive) {
+                deleteNotePath = note.relativePath
+                deleteNoteTitle = note.title
+                showingDeleteNote = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Note Detail (C Column via push)
