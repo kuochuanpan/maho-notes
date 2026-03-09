@@ -46,6 +46,12 @@ struct IPadContentView: View {
     @State private var changeIconCollectionId = ""
     @State private var changeIconValue = ""
 
+    // Sub-collection creation
+    @State private var showingNewSubCollection = false
+    @State private var newSubCollectionName = ""
+    @State private var newSubCollectionParentId = ""
+    @State private var subCollectionError: String?
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // A — Vault Rail
@@ -165,6 +171,9 @@ struct IPadContentView: View {
                 },
                 onCancel: { showingChangeIcon = false }
             )
+        }
+        .sheet(isPresented: $showingNewSubCollection) {
+            newSubCollectionSheet
         }
     }
 
@@ -323,6 +332,42 @@ struct IPadContentView: View {
         .presentationDetents([.medium])
     }
 
+    // MARK: - New Sub-Collection Sheet
+
+    private var newSubCollectionSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("Sub-Collection Name", text: $newSubCollectionName)
+                if let error = subCollectionError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("New Sub-Collection")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingNewSubCollection = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        let name = newSubCollectionName.trimmingCharacters(in: .whitespaces)
+                        guard !name.isEmpty else { return }
+                        do {
+                            try appState.createSubCollection(name: name, parentId: newSubCollectionParentId)
+                            showingNewSubCollection = false
+                        } catch {
+                            subCollectionError = error.localizedDescription
+                        }
+                    }
+                    .disabled(newSubCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
     // MARK: - B Column (Navigator)
 
     @ViewBuilder
@@ -415,10 +460,10 @@ struct IPadContentView: View {
                     Label("New Note", systemImage: "doc.badge.plus")
                 }
                 Button {
-                    showingNewCollection = true
-                    newCollectionName = ""
-                    newCollectionIcon = "folder"
-                    collectionError = nil
+                    newSubCollectionParentId = node.id
+                    newSubCollectionName = ""
+                    subCollectionError = nil
+                    showingNewSubCollection = true
                 } label: {
                     Label("New Sub-Collection", systemImage: "folder.badge.plus")
                 }
