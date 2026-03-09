@@ -85,6 +85,8 @@ extension Vault {
             }
         }
 
+        print("[MahoNotes] buildFileTree: allDirs = \(allDirs.sorted())")
+
         // Build tree recursively from top-level directories
         func buildNode(relativePath: String, depth: Int) -> FileTreeNode? {
             let dirName = (relativePath as NSString).lastPathComponent
