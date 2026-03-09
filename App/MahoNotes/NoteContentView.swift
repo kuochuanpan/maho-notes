@@ -142,7 +142,7 @@ struct NoteContentView: View {
         } else {
             switch appState.viewMode {
             case .preview:
-                MarkdownWebView(markdown: "# \(note.title)\n\n\(note.body)")
+                MarkdownWebView(markdown: note.body)
             case .editor:
                 editorView
                     .onAppear {
@@ -153,7 +153,7 @@ struct NoteContentView: View {
                 HStack(spacing: 0) {
                     editorView
                     Divider()
-                    MarkdownWebView(markdown: "# \(note.title)\n\n\(appState.editingBody)")
+                    MarkdownWebView(markdown: appState.editingBody)
                 }
                 .onAppear {
                     appState.startEditing()
