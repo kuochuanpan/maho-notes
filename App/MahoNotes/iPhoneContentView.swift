@@ -2,8 +2,8 @@
 import SwiftUI
 import MahoNotesKit
 
-/// iPhone layout: NavigationSplitView (2-col) with IPadVaultRail sidebar,
-/// B-column navigator as main screen, note detail via NavigationStack push.
+/// iPhone layout: ZStack with custom slide-over vault rail sidebar.
+/// B-column navigator is always full-width, A-column overlays from the left.
 struct iPhoneContentView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
@@ -11,7 +11,7 @@ struct iPhoneContentView: View {
     @State private var searchResults: [Note] = []
     @State private var debounceTask: Task<Void, Never>?
     @State private var navigationPath = NavigationPath()
-    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State private var showSidebar = false
     @State private var showingNewNote = false
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
@@ -23,13 +23,7 @@ struct iPhoneContentView: View {
     @State private var showingSettings = false
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            // A — Vault Rail (reuse iPad component)
-            IPadVaultRail(showingSettings: $showingSettings)
-                .navigationBarHidden(true)
-                .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
-                .toolbar(removing: .sidebarToggle)
-        } detail: {
+        ZStack(alignment: .leading) {
             // B — Navigator + C — Note Detail (via NavigationStack push)
             NavigationStack(path: $navigationPath) {
                 navigatorContent
@@ -38,13 +32,11 @@ struct iPhoneContentView: View {
                     .navigationTitle(selectedVaultTitle)
                     .navigationBarTitleDisplayMode(.inline)
                     .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
-                    .toolbar(removing: .sidebarToggle)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
-                                withAnimation {
-                                    columnVisibility = columnVisibility == .all
-                                        ? .detailOnly : .all
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    showSidebar.toggle()
                                 }
                             } label: {
                                 Image(systemName: "sidebar.left")
@@ -60,8 +52,32 @@ struct iPhoneContentView: View {
                         noteDetail(for: notePath)
                     }
             }
+
+            // A — Vault rail overlay (slides in from left)
+            if showSidebar {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) { showSidebar = false }
+                    }
+
+                IPadVaultRail(showingSettings: $showingSettings)
+                    .frame(width: 68)
+                    .background(MahoTheme.vaultRailBackground)
+                    .transition(.move(edge: .leading))
+            }
         }
-        .navigationSplitViewStyle(.balanced)
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    if value.startLocation.x < 30 && value.translation.width > 50 {
+                        withAnimation(.easeInOut(duration: 0.25)) { showSidebar = true }
+                    }
+                }
+        )
+        .onChange(of: appState.selectedVaultName) { _, _ in
+            withAnimation(.easeInOut(duration: 0.25)) { showSidebar = false }
+        }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
