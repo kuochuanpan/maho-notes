@@ -504,27 +504,28 @@ struct IPadContentView: View {
                         Label("Delete", systemImage: "trash")
                     }
                 }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    deleteCollectionId = node.id
-                    deleteCollectionName = node.name
-                    deleteCollectionIsTopLevel = isTopLevel
-                    deleteCollectionHasContents = !node.children.isEmpty
-                    showingDeleteCollection = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                // Swipe actions on the label only — prevents leaking to child note rows
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        deleteCollectionId = node.id
+                        deleteCollectionName = node.name
+                        deleteCollectionIsTopLevel = isTopLevel
+                        deleteCollectionHasContents = !node.children.isEmpty
+                        showingDeleteCollection = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
-            }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                Button {
-                    renameCollectionId = node.id
-                    renameCollectionName = node.name
-                    showingRenameCollection = true
-                } label: {
-                    Label("Rename", systemImage: "pencil")
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    Button {
+                        renameCollectionId = node.id
+                        renameCollectionName = node.name
+                        showingRenameCollection = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    .tint(.orange)
                 }
-                .tint(.orange)
             }
         )
     }
@@ -537,7 +538,7 @@ struct IPadContentView: View {
             hasConflict: appState.conflict(for: note.relativePath) != nil,
             hasGitHubConflict: appState.githubConflictFile(for: note.relativePath) != nil
         )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
                 deleteNotePath = note.relativePath
                 deleteNoteTitle = note.title

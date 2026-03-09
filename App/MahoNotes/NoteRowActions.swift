@@ -20,7 +20,7 @@ struct NoteRowActionsModifier: ViewModifier {
                 contextMenuContent
             }
             #if os(iOS)
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button(role: .destructive) {
                     onDelete?(notePath, noteTitle)
                 } label: {
