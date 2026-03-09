@@ -237,6 +237,7 @@ struct iOSSettingsView: View {
                 Button("Set Primary") {
                     appState.setPrimaryVault(name: entry.name)
                 }
+                .buttonStyle(.bordered)
                 .controlSize(.small)
             }
 
@@ -245,6 +246,7 @@ struct iOSSettingsView: View {
             } label: {
                 Image(systemName: "trash")
             }
+            .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(appState.vaults.count <= 1)
         }
