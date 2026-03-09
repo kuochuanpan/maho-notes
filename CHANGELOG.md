@@ -53,7 +53,7 @@
 - XcodeGen fully automated project generation
 - Bundle ID: `dev.pcca.mahonotes`, Team: K867NAPA93
 
-## [0.1.0] — 2026-02-11
+## [0.1.0] — 2026-03-03
 
 Initial release.
 - macOS native app with 3-panel layout
