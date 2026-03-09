@@ -40,6 +40,9 @@ struct iPhoneContentView: View {
     @State private var deleteCollectionName = ""
     @State private var deleteCollectionIsTopLevel = false
     @State private var deleteCollectionHasContents = false
+    @State private var showingChangeIcon = false
+    @State private var changeIconCollectionId = ""
+    @State private var changeIconValue = ""
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -161,6 +164,17 @@ struct iPhoneContentView: View {
             } else {
                 Text("This empty collection will be deleted.")
             }
+        }
+        .alert("Change Icon", isPresented: $showingChangeIcon) {
+            TextField("SF Symbol name", text: $changeIconValue)
+            Button("Cancel", role: .cancel) { }
+            Button("Change") {
+                let trimmed = changeIconValue.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { return }
+                try? appState.changeCollectionIcon(collectionId: changeIconCollectionId, newIcon: trimmed)
+            }
+        } message: {
+            Text("Enter an SF Symbol name (e.g. folder, star, book)")
         }
     }
 
@@ -302,13 +316,57 @@ struct iPhoneContentView: View {
             }
             .contextMenu {
                 Button {
+                    newNoteCollectionId = node.id
+                    newNoteTitle = ""
+                    noteError = nil
+                    showingNewNote = true
+                } label: {
+                    Label("New Note", systemImage: "doc.badge.plus")
+                }
+                Button {
+                    showingNewCollection = true
+                    newCollectionName = ""
+                    newCollectionIcon = "folder"
+                    collectionError = nil
+                } label: {
+                    Label("New Sub-Collection", systemImage: "folder.badge.plus")
+                }
+
+                Divider()
+
+                Button {
+                    appState.pasteNotes(toCollection: node.id)
+                } label: {
+                    if let clipboard = appState.noteClipboard, clipboard.count > 1 {
+                        Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
+                    } else {
+                        Label("Paste Note", systemImage: "doc.on.clipboard")
+                    }
+                }
+                .disabled(appState.noteClipboard == nil)
+
+                Divider()
+
+                Button {
                     renameCollectionId = node.id
                     renameCollectionName = node.name
                     showingRenameCollection = true
                 } label: {
                     Label("Rename", systemImage: "pencil")
                 }
+
+                if isTopLevel {
+                    Button {
+                        changeIconCollectionId = node.id
+                        changeIconValue = node.icon
+                        showingChangeIcon = true
+                    } label: {
+                        Label("Change Icon", systemImage: "photo")
+                    }
+                }
+
                 Divider()
+
                 Button(role: .destructive) {
                     deleteCollectionId = node.id
                     deleteCollectionName = node.name
