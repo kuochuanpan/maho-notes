@@ -165,16 +165,16 @@ struct iPhoneContentView: View {
                 Text("This empty collection will be deleted.")
             }
         }
-        .alert("Change Icon", isPresented: $showingChangeIcon) {
-            TextField("SF Symbol name", text: $changeIconValue)
-            Button("Cancel", role: .cancel) { }
-            Button("Change") {
-                let trimmed = changeIconValue.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { return }
-                try? appState.changeCollectionIcon(collectionId: changeIconCollectionId, newIcon: trimmed)
-            }
-        } message: {
-            Text("Enter an SF Symbol name (e.g. folder, star, book)")
+        .sheet(isPresented: $showingChangeIcon) {
+            IconPickerSheet(
+                title: "Change Icon",
+                selectedIcon: $changeIconValue,
+                onSave: {
+                    try? appState.changeCollectionIcon(collectionId: changeIconCollectionId, newIcon: changeIconValue)
+                    showingChangeIcon = false
+                },
+                onCancel: { showingChangeIcon = false }
+            )
         }
     }
 
