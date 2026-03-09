@@ -16,6 +16,7 @@ struct iPhoneContentView: View {
     @State private var showingNewNote = false
     @State private var newNoteTitle = ""
     @State private var newNoteCollectionId = ""
+    @State private var newNoteFromContextMenu = false
     @State private var noteError: String?
     @State private var showingNewCollection = false
     @State private var newCollectionName = ""
@@ -301,6 +302,70 @@ struct iPhoneContentView: View {
                     icon: node.icon,
                     noteCount: noteChildren.count
                 )
+                .contextMenu {
+                    Button {
+                        newNoteCollectionId = node.id
+                        newNoteTitle = ""
+                        noteError = nil
+                        newNoteFromContextMenu = true
+                        showingNewNote = true
+                    } label: {
+                        Label("New Note", systemImage: "doc.badge.plus")
+                    }
+                    Button {
+                        newSubCollectionParentId = node.id
+                        newSubCollectionName = ""
+                        subCollectionError = nil
+                        showingNewSubCollection = true
+                    } label: {
+                        Label("New Sub-Collection", systemImage: "folder.badge.plus")
+                    }
+
+                    Divider()
+
+                    Button {
+                        appState.pasteNotes(toCollection: node.id)
+                    } label: {
+                        if let clipboard = appState.noteClipboard, clipboard.count > 1 {
+                            Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
+                        } else {
+                            Label("Paste Note", systemImage: "doc.on.clipboard")
+                        }
+                    }
+                    .disabled(appState.noteClipboard == nil)
+
+                    Divider()
+
+                    Button {
+                        renameCollectionId = node.id
+                        renameCollectionName = node.name
+                        showingRenameCollection = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+
+                    if isTopLevel {
+                        Button {
+                            changeIconCollectionId = node.id
+                            changeIconValue = node.icon
+                            showingChangeIcon = true
+                        } label: {
+                            Label("Change Icon", systemImage: "photo")
+                        }
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        deleteCollectionId = node.id
+                        deleteCollectionName = node.name
+                        deleteCollectionIsTopLevel = isTopLevel
+                        deleteCollectionHasContents = !node.children.isEmpty
+                        showingDeleteCollection = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button(role: .destructive) {
@@ -322,69 +387,6 @@ struct iPhoneContentView: View {
                     Label("Rename", systemImage: "pencil")
                 }
                 .tint(.orange)
-            }
-            .contextMenu {
-                Button {
-                    newNoteCollectionId = node.id
-                    newNoteTitle = ""
-                    noteError = nil
-                    showingNewNote = true
-                } label: {
-                    Label("New Note", systemImage: "doc.badge.plus")
-                }
-                Button {
-                    newSubCollectionParentId = node.id
-                    newSubCollectionName = ""
-                    subCollectionError = nil
-                    showingNewSubCollection = true
-                } label: {
-                    Label("New Sub-Collection", systemImage: "folder.badge.plus")
-                }
-
-                Divider()
-
-                Button {
-                    appState.pasteNotes(toCollection: node.id)
-                } label: {
-                    if let clipboard = appState.noteClipboard, clipboard.count > 1 {
-                        Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
-                    } else {
-                        Label("Paste Note", systemImage: "doc.on.clipboard")
-                    }
-                }
-                .disabled(appState.noteClipboard == nil)
-
-                Divider()
-
-                Button {
-                    renameCollectionId = node.id
-                    renameCollectionName = node.name
-                    showingRenameCollection = true
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-
-                if isTopLevel {
-                    Button {
-                        changeIconCollectionId = node.id
-                        changeIconValue = node.icon
-                        showingChangeIcon = true
-                    } label: {
-                        Label("Change Icon", systemImage: "photo")
-                    }
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    deleteCollectionId = node.id
-                    deleteCollectionName = node.name
-                    deleteCollectionIsTopLevel = isTopLevel
-                    deleteCollectionHasContents = !node.children.isEmpty
-                    showingDeleteCollection = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
             }
         )
     }
@@ -521,15 +523,15 @@ struct iPhoneContentView: View {
         }
         newNoteTitle = ""
         noteError = nil
+        newNoteFromContextMenu = false
         showingNewNote = true
     }
 
     private var newNoteSheet: some View {
-        let isSubCollection = newNoteCollectionId.contains("/")
         return NavigationStack {
             Form {
-                if isSubCollection {
-                    // Sub-collection: show fixed location, don't allow changing
+                if newNoteFromContextMenu {
+                    // Triggered from collection context menu — fixed location
                     HStack {
                         Text("Location")
                         Spacer()
