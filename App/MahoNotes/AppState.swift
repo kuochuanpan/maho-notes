@@ -563,11 +563,19 @@ import MahoNotesKit
     }
 
     /// Cycle view mode: preview → editor → split → preview.
-    func cycleViewMode() {
+    /// When `compactWidth` is true (iPhone portrait), skip split: preview ↔ editor.
+    func cycleViewMode(compactWidth: Bool = false) {
         guard !isReadOnly else { return }
         switch viewMode {
         case .preview: viewMode = .editor; startEditing()
-        case .editor: viewMode = .split; startEditing()
+        case .editor:
+            if compactWidth {
+                // iPhone portrait: skip split, go back to preview
+                if hasUnsavedChanges { saveNote() }
+                viewMode = .preview
+            } else {
+                viewMode = .split; startEditing()
+            }
         case .split:
             // Save before switching to preview (saveNote guards viewMode != .preview)
             if hasUnsavedChanges { saveNote() }

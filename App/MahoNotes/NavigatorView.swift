@@ -607,6 +607,9 @@ struct NavigatorView: View {
         do {
             try appState.createNote(title: title, collectionId: newNoteCollectionId)
             showingNewNote = false
+            // Auto-enter edit mode for new note
+            appState.viewMode = .editor
+            appState.startEditing()
         } catch {
             noteError = error.localizedDescription
         }

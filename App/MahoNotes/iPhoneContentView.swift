@@ -7,6 +7,7 @@ import MahoNotesKit
 struct iPhoneContentView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var searchQuery = ""
     @State private var searchResults: [Note] = []
     @State private var debounceTask: Task<Void, Never>?
@@ -237,7 +238,7 @@ struct iPhoneContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        appState.cycleViewMode()
+                        appState.cycleViewMode(compactWidth: horizontalSizeClass == .compact)
                     } label: {
                         Image(systemName: viewModeIcon)
                     }
@@ -339,6 +340,9 @@ struct iPhoneContentView: View {
                             let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
                             showingNewNote = false
                             navigationPath.append(path)
+                            // Auto-enter edit mode for new note
+                            appState.viewMode = .editor
+                            appState.startEditing()
                         } catch {
                             noteError = error.localizedDescription
                         }
