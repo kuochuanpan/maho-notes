@@ -7,41 +7,61 @@ struct VaultColorPickerSheet: View {
     @Environment(AppState.self) private var appState
     let entry: VaultEntry?
     @Binding var isPresented: Bool
+    @State private var selectedColor: Color?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Text("Choose a color for this vault")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 10), count: 6), spacing: 10) {
-                    ForEach(MahoTheme.vaultColorOptions) { option in
-                        Button {
-                            if let entry {
-                                appState.setVaultColor(name: entry.name, color: option.name)
-                            }
-                            isPresented = false
-                        } label: {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(option.color)
-                                .frame(width: 44, height: 44)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Preview of current vault icon
+                    if let entry {
+                        ZStack {
+                            Text(String((entry.displayName ?? entry.name).prefix(1)).uppercased())
+                                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .frame(width: 56, height: 56)
+                                .background(
+                                    selectedColor ?? MahoTheme.resolvedVaultColor(for: entry),
+                                    in: RoundedRectangle(cornerRadius: 12)
                                 )
-                                .overlay {
-                                    if entry?.color == option.name {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(.white)
-                                    }
-                                }
                         }
-                        .buttonStyle(.plain)
+                        .padding(.top, 8)
                     }
+
+                    Text("Choose a color for this vault")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(48), spacing: 12), count: 6), spacing: 12) {
+                        ForEach(MahoTheme.vaultColorOptions) { option in
+                            Button {
+                                selectedColor = option.color
+                                if let entry {
+                                    appState.setVaultColor(name: entry.name, color: option.name)
+                                }
+                                isPresented = false
+                            } label: {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(option.color)
+                                    .frame(width: 48, height: 48)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .overlay {
+                                        if entry?.color == option.name {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
-                .padding()
+                .padding(.bottom, 20)
             }
             .navigationTitle("Vault Color")
             .navigationBarTitleDisplayMode(.inline)
@@ -51,7 +71,7 @@ struct VaultColorPickerSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 #endif

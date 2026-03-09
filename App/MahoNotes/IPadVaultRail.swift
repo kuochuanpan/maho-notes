@@ -68,7 +68,7 @@ struct IPadVaultRail: View {
                 showingSettings = true
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 15))
+                    .font(.system(size: 20))
                     .foregroundStyle(.white.opacity(0.7))
                     .frame(width: 44, height: 44)
             }
