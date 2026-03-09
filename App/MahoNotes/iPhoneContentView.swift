@@ -23,6 +23,14 @@ struct iPhoneContentView: View {
     @State private var collectionError: String?
     @State private var showingSettings = false
 
+    // Rename / Delete alerts
+    @State private var showingRenameNote = false
+    @State private var renameNotePath = ""
+    @State private var renameNoteTitle = ""
+    @State private var showingDeleteNote = false
+    @State private var deleteNotePath = ""
+    @State private var deleteNoteTitle = ""
+
     var body: some View {
         ZStack(alignment: .leading) {
             // B — Navigator + C — Note Detail (via NavigationStack push)
@@ -90,6 +98,23 @@ struct iPhoneContentView: View {
         }
         .sheet(isPresented: $showingSettings) {
             iOSSettingsView(onDismiss: { showingSettings = false })
+        }
+        .alert("Rename Note", isPresented: $showingRenameNote) {
+            TextField("Title", text: $renameNoteTitle)
+            Button("Cancel", role: .cancel) { }
+            Button("Rename") {
+                let trimmed = renameNoteTitle.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { return }
+                appState.renameNote(relativePath: renameNotePath, newTitle: trimmed)
+            }
+        }
+        .alert("Delete \"\(deleteNoteTitle)\"?", isPresented: $showingDeleteNote) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                try? appState.deleteNote(relativePath: deleteNotePath)
+            }
+        } message: {
+            Text("This note will be moved to Trash.")
         }
     }
 
@@ -210,22 +235,26 @@ struct iPhoneContentView: View {
 
     private func noteNavigationRow(_ note: Note) -> some View {
         NavigationLink(value: note.relativePath) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(note.title)
-                    .lineLimit(1)
-                Text(note.updated)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(minHeight: 44)
+            NoteRowContent(
+                note: note,
+                hasConflict: appState.conflict(for: note.relativePath) != nil,
+                hasGitHubConflict: appState.githubConflictFile(for: note.relativePath) != nil
+            )
         }
-        .contextMenu {
-            if let conflict = appState.conflict(for: note.relativePath) {
-                Button("Keep Current Version") {
-                    appState.iCloudManager.resolveConflict(conflict, keeping: .keepCurrent)
-                }
+        .noteRowActions(
+            notePath: note.relativePath,
+            noteTitle: note.title,
+            onRename: { path, title in
+                renameNotePath = path
+                renameNoteTitle = title
+                showingRenameNote = true
+            },
+            onDelete: { path, title in
+                deleteNotePath = path
+                deleteNoteTitle = title
+                showingDeleteNote = true
             }
-        }
+        )
     }
 
     // MARK: - Note Detail (C Column via push)
