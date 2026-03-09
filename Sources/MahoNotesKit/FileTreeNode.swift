@@ -66,6 +66,10 @@ extension Vault {
         }
 
         // 2. Directories from filesystem (catches dirs with only _index.md or empty subdirs)
+        // Resolve symlinks for reliable prefix stripping (iOS: /var → /private/var)
+        let resolvedVaultPath = vaultURL.resolvingSymlinksInPath().path
+        let vaultPrefix = resolvedVaultPath.hasSuffix("/") ? resolvedVaultPath : resolvedVaultPath + "/"
+
         if let enumerator = fm.enumerator(
             at: vaultURL,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -79,13 +83,13 @@ extension Vault {
                     enumerator.skipDescendants()
                     continue
                 }
-                let relativePath = dirURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
-                guard relativePath != dirURL.path else { continue } // safety
+                let resolvedDirPath = dirURL.resolvingSymlinksInPath().path
+                guard resolvedDirPath.hasPrefix(vaultPrefix) else { continue }
+                let relativePath = String(resolvedDirPath.dropFirst(vaultPrefix.count))
+                guard !relativePath.isEmpty else { continue }
                 allDirs.insert(relativePath)
             }
         }
-
-        print("[MahoNotes] buildFileTree: allDirs = \(allDirs.sorted())")
 
         // Build tree recursively from top-level directories
         func buildNode(relativePath: String, depth: Int) -> FileTreeNode? {
