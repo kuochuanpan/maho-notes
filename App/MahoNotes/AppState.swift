@@ -568,7 +568,10 @@ import MahoNotesKit
         switch viewMode {
         case .preview: viewMode = .editor; startEditing()
         case .editor: viewMode = .split; startEditing()
-        case .split: viewMode = .preview
+        case .split:
+            // Save before switching to preview (saveNote guards viewMode != .preview)
+            if hasUnsavedChanges { saveNote() }
+            viewMode = .preview
         }
     }
 

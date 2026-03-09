@@ -246,6 +246,12 @@ struct iPhoneContentView: View {
             .onAppear {
                 appState.selectNote(path: notePath)
             }
+            .onDisappear {
+                // Auto-save when navigating back to B column
+                if appState.hasUnsavedChanges {
+                    appState.saveNote()
+                }
+            }
     }
 
     private var viewModeIcon: String {

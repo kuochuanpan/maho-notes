@@ -65,7 +65,11 @@ struct IPadContentView: View {
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
-        .onChange(of: selectedNotePath) { _, newValue in
+        .onChange(of: selectedNotePath) { oldValue, newValue in
+            // Auto-save before switching to a different note
+            if oldValue != nil && oldValue != newValue && appState.hasUnsavedChanges {
+                appState.saveNote()
+            }
             appState.selectNote(path: newValue)
         }
         .sheet(isPresented: $showingSettings) {
