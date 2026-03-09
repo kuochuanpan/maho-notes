@@ -525,9 +525,18 @@ struct iPhoneContentView: View {
     }
 
     private var newNoteSheet: some View {
-        NavigationStack {
+        let isSubCollection = newNoteCollectionId.contains("/")
+        return NavigationStack {
             Form {
-                if appState.collections.count > 1 {
+                if isSubCollection {
+                    // Sub-collection: show fixed location, don't allow changing
+                    HStack {
+                        Text("Location")
+                        Spacer()
+                        Text(newNoteCollectionId.split(separator: "/").map(String.init).last ?? newNoteCollectionId)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if appState.collections.count > 1 {
                     Picker("Collection", selection: $newNoteCollectionId) {
                         ForEach(appState.collections, id: \.id) { col in
                             Text(col.name).tag(col.id)
@@ -627,7 +636,6 @@ struct iPhoneContentView: View {
                     Button("Create") {
                         let name = newSubCollectionName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }
-                        print("[MahoNotes] iPhone: creating sub-collection '\(name)' under '\(newSubCollectionParentId)'")
                         do {
                             try appState.createSubCollection(name: name, parentId: newSubCollectionParentId)
                             showingNewSubCollection = false

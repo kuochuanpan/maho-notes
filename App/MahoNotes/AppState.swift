@@ -1302,13 +1302,11 @@ import MahoNotesKit
     /// Create a sub-collection (subdirectory) under an existing collection.
     func createSubCollection(name: String, parentId: String) throws {
         guard let entry = selectedVault else {
-            print("[MahoNotes] createSubCollection: no selectedVault")
             return
         }
         let vaultPath = store.resolvedPath(for: entry)
         let slug = makeSlug(from: name)
         guard !slug.isEmpty else {
-            print("[MahoNotes] createSubCollection: slug is empty for name '\(name)'")
             throw CollectionError.invalidName
         }
 
@@ -1317,7 +1315,6 @@ import MahoNotesKit
             .appending("/\(slug)")
         let fm = FileManager.default
 
-        print("[MahoNotes] createSubCollection: parentId='\(parentId)' slug='\(slug)' subDir='\(subDir)'")
 
         if fm.fileExists(atPath: subDir) {
             throw CollectionError.alreadyExists(slug)
@@ -1333,7 +1330,6 @@ import MahoNotesKit
         ---
         """
         try content.write(toFile: indexPath, atomically: true, encoding: .utf8)
-        print("[MahoNotes] createSubCollection: created _index.md at '\(indexPath)'")
 
         reloadCurrentVault()
     }

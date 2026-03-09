@@ -252,9 +252,17 @@ struct IPadContentView: View {
     }
 
     private var newNoteSheet: some View {
-        NavigationStack {
+        let isSubCollection = newNoteCollectionId.contains("/")
+        return NavigationStack {
             Form {
-                if appState.collections.count > 1 {
+                if isSubCollection {
+                    HStack {
+                        Text("Location")
+                        Spacer()
+                        Text(newNoteCollectionId.split(separator: "/").map(String.init).last ?? newNoteCollectionId)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if appState.collections.count > 1 {
                     Picker("Collection", selection: $newNoteCollectionId) {
                         ForEach(appState.collections, id: \.id) { col in
                             Text(col.name).tag(col.id)
@@ -455,7 +463,10 @@ struct IPadContentView: View {
             }
             .contextMenu {
                 Button {
-                    presentNewNote()
+                    newNoteCollectionId = node.id
+                    newNoteTitle = ""
+                    noteError = nil
+                    showingNewNote = true
                 } label: {
                     Label("New Note", systemImage: "doc.badge.plus")
                 }
