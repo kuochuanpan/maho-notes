@@ -23,13 +23,23 @@ struct iPhoneContentView: View {
     @State private var collectionError: String?
     @State private var showingSettings = false
 
-    // Rename / Delete alerts
+    // Rename / Delete note alerts
     @State private var showingRenameNote = false
     @State private var renameNotePath = ""
     @State private var renameNoteTitle = ""
     @State private var showingDeleteNote = false
     @State private var deleteNotePath = ""
     @State private var deleteNoteTitle = ""
+
+    // Rename / Delete collection alerts
+    @State private var showingRenameCollection = false
+    @State private var renameCollectionId = ""
+    @State private var renameCollectionName = ""
+    @State private var showingDeleteCollection = false
+    @State private var deleteCollectionId = ""
+    @State private var deleteCollectionName = ""
+    @State private var deleteCollectionIsTopLevel = false
+    @State private var deleteCollectionHasContents = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -119,6 +129,38 @@ struct iPhoneContentView: View {
             }
         } message: {
             Text("This note will be moved to Trash.")
+        }
+        .alert("Rename Collection", isPresented: $showingRenameCollection) {
+            TextField("Name", text: $renameCollectionName)
+            Button("Cancel", role: .cancel) { }
+            Button("Rename") {
+                let trimmed = renameCollectionName.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { return }
+                try? appState.renameCollection(collectionId: renameCollectionId, newName: trimmed)
+            }
+        }
+        .alert(
+            "Delete \"\(deleteCollectionName)\"?",
+            isPresented: $showingDeleteCollection
+        ) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                do {
+                    if deleteCollectionIsTopLevel {
+                        try appState.deleteTopLevelCollection(collectionId: deleteCollectionId)
+                    } else {
+                        try appState.deleteSubCollection(collectionId: deleteCollectionId)
+                    }
+                } catch {
+                    print("[MahoNotes] deleteCollection failed: \(error)")
+                }
+            }
+        } message: {
+            if deleteCollectionHasContents {
+                Text("Notes inside will be moved to the parent collection.")
+            } else {
+                Text("This empty collection will be deleted.")
+            }
         }
     }
 
@@ -219,7 +261,9 @@ struct iPhoneContentView: View {
     // MARK: - Collection Tree Row (Recursive)
 
     private func collectionRow(node: FileTreeNode, depth: Int) -> AnyView {
-        AnyView(
+        let isTopLevel = depth == 0
+        let noteChildren = node.children.filter { !$0.isDirectory }
+        return AnyView(
             DisclosureGroup {
                 ForEach(node.children, id: \.id) { child in
                     if child.isDirectory {
@@ -229,8 +273,51 @@ struct iPhoneContentView: View {
                     }
                 }
             } label: {
-                Label(node.name, systemImage: node.icon)
-                    .font(.body)
+                CollectionRowContent(
+                    name: node.name,
+                    icon: node.icon,
+                    noteCount: noteChildren.count
+                )
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    deleteCollectionId = node.id
+                    deleteCollectionName = node.name
+                    deleteCollectionIsTopLevel = isTopLevel
+                    deleteCollectionHasContents = !node.children.isEmpty
+                    showingDeleteCollection = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                Button {
+                    renameCollectionId = node.id
+                    renameCollectionName = node.name
+                    showingRenameCollection = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                .tint(.orange)
+            }
+            .contextMenu {
+                Button {
+                    renameCollectionId = node.id
+                    renameCollectionName = node.name
+                    showingRenameCollection = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    deleteCollectionId = node.id
+                    deleteCollectionName = node.name
+                    deleteCollectionIsTopLevel = isTopLevel
+                    deleteCollectionHasContents = !node.children.isEmpty
+                    showingDeleteCollection = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         )
     }

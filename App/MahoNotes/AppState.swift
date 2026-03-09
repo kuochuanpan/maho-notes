@@ -1442,8 +1442,12 @@ import MahoNotesKit
         updatedOrder.append(contentsOf: movedFiles)
         try? writeDirectoryOrder(at: parentAbsPath, notes: updatedOrder, children: updatedChildren)
 
-        // Trash the (now mostly empty) directory
+        // Remove the (now mostly empty) directory
+        #if os(iOS)
+        try fm.removeItem(at: URL(fileURLWithPath: absPath))
+        #else
         try fm.trashItem(at: URL(fileURLWithPath: absPath), resultingItemURL: nil)
+        #endif
 
         reloadCurrentVault()
     }
@@ -1454,8 +1458,12 @@ import MahoNotesKit
         let vaultPath = store.resolvedPath(for: entry)
         let absPath = (vaultPath as NSString).appendingPathComponent(collectionId)
 
-        // Move to Trash (recoverable)
+        // Remove directory
+        #if os(iOS)
+        try FileManager.default.removeItem(at: URL(fileURLWithPath: absPath))
+        #else
         try FileManager.default.trashItem(at: URL(fileURLWithPath: absPath), resultingItemURL: nil)
+        #endif
 
         // Remove from maho.yaml
         try removeCollectionFromConfig(vaultPath: vaultPath, id: collectionId)
