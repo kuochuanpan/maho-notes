@@ -627,10 +627,12 @@ struct iPhoneContentView: View {
                     Button("Create") {
                         let name = newSubCollectionName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }
+                        print("[MahoNotes] iPhone: creating sub-collection '\(name)' under '\(newSubCollectionParentId)'")
                         do {
                             try appState.createSubCollection(name: name, parentId: newSubCollectionParentId)
                             showingNewSubCollection = false
                         } catch {
+                            print("[MahoNotes] iPhone: sub-collection error: \(error)")
                             subCollectionError = error.localizedDescription
                         }
                     }
