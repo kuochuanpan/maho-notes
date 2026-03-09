@@ -28,6 +28,7 @@ struct iPhoneContentView: View {
             IPadVaultRail(showingSettings: $showingSettings)
                 .navigationBarHidden(true)
                 .navigationSplitViewColumnWidth(min: 68, ideal: 68, max: 68)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             // B — Navigator + C — Note Detail (via NavigationStack push)
             NavigationStack(path: $navigationPath) {
@@ -37,6 +38,7 @@ struct iPhoneContentView: View {
                     .navigationTitle(selectedVaultTitle)
                     .navigationBarTitleDisplayMode(.inline)
                     .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                    .toolbar(removing: .sidebarToggle)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {

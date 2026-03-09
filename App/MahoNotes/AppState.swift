@@ -1188,7 +1188,7 @@ import MahoNotesKit
 
     /// Create a new vault. Storage location is determined by cloudSyncMode.
     func createNewVault(name: String, authorName: String) throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let globalConfigDir = mahoConfigBase()
         let storage: StorageOption = cloudSyncMode == .icloud ? .icloud : .local
         let vaultRoot = resolveVaultRoot(storage: storage)
 
@@ -1224,10 +1224,10 @@ import MahoNotesKit
 
     /// Import a vault from GitHub using the REST API (no git binary required).
     func importGitHubVault(repo: String, name: String?) async throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
-        // GitHub vaults always stored in ~/.maho/vaults/ (not iCloud) —
+        let globalConfigDir = mahoConfigBase()
+        // GitHub vaults always stored in .maho/vaults/ (not iCloud) —
         // they have their own sync via GitHub REST API.
-        // resolvedPath(for:) hardcodes this path for .github type.
+        // resolvedPath(for:) uses mahoConfigBase() for .github type.
         let vaultRoot = resolveVaultRoot(storage: .local)
 
         let token = try Auth().resolveToken()

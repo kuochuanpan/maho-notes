@@ -17,17 +17,27 @@ public func iCloudContainerExists() -> Bool {
 // MARK: - Vault root resolution
 
 /// Returns the directory where vault folders are stored.
+/// Base path for `.maho` config directory, platform-aware.
+public func mahoConfigBase() -> String {
+    #if os(iOS)
+    return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        .appendingPathComponent(".maho").path
+    #else
+    return ("~/.maho" as NSString).expandingTildeInPath
+    #endif
+}
+
 public func resolveVaultRoot(storage: StorageOption?) -> String {
     switch storage {
     case .icloud:
         return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
     case .local:
-        return ("~/.maho/vaults" as NSString).expandingTildeInPath
+        return mahoConfigBase() + "/vaults"
     case nil:
         if iCloudContainerExists() {
             return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
         }
-        return ("~/.maho/vaults" as NSString).expandingTildeInPath
+        return mahoConfigBase() + "/vaults"
     }
 }
 

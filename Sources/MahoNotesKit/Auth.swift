@@ -79,9 +79,9 @@ public enum AuthError: Error, CustomStringConvertible {
 public struct Auth: Sendable {
     private let vaultPath: String?
 
-    /// Global config directory (~/.maho/) for device-level settings like auth tokens
+    /// Global config directory for device-level settings like auth tokens
     public static var globalConfigDir: String {
-        ("~/.maho" as NSString).expandingTildeInPath
+        mahoConfigBase()
     }
 
     /// Initialize with a vault path (optional — auth works without a vault)

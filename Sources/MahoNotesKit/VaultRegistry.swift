@@ -92,11 +92,8 @@ func resolvedPath(for entry: VaultEntry) -> String {
     case .icloud:
         let base = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
         return (base as NSString).appendingPathComponent(entry.name) + "/"
-    case .github:
-        let base = ("~/.maho/vaults" as NSString).expandingTildeInPath
-        return (base as NSString).appendingPathComponent(entry.name) + "/"
-    case .device:
-        let base = ("~/.maho/vaults" as NSString).expandingTildeInPath
+    case .github, .device:
+        let base = mahoConfigBase() + "/vaults"
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .local:
         return (entry.path! as NSString).expandingTildeInPath
