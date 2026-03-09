@@ -90,7 +90,7 @@ public enum VaultRegistryError: Error, CustomStringConvertible {
 func resolvedPath(for entry: VaultEntry) -> String {
     switch entry.type {
     case .icloud:
-        let base = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        let base = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .github, .device:
         let base = mahoConfigBase() + "/vaults"
@@ -108,7 +108,7 @@ func resolvedPath(for entry: VaultEntry) -> String {
 /// - Returns the updated registry
 func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
-    let iCloudVaultsBase = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+    let iCloudVaultsBase = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
     let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
 
     var updated = registry
@@ -391,15 +391,35 @@ private func coordinatedWrite(_ content: String, to path: String) throws {
     if let e = writeError { throw e }
 }
 
+// MARK: - iCloud Container Path
+
+/// The iCloud container identifier for Maho Notes.
+private let iCloudContainerID = "iCloud.dev.pcca.mahonotes"
+
+/// Cached iCloud Documents directory path.
+/// Uses `FileManager.url(forUbiquityContainerIdentifier:)` which works on both macOS and iOS,
+/// returning the correct system-managed path on each platform.
+/// Falls back to the hardcoded macOS path for CLI/non-iCloud environments.
+private let _iCloudDocumentsBase: String = {
+    if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: iCloudContainerID) {
+        return containerURL.appendingPathComponent("Documents").path
+    }
+    // Fallback: macOS hardcoded path (CLI or when iCloud is unavailable)
+    return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents" as NSString).expandingTildeInPath
+}()
+
+/// Returns the iCloud Documents base path, resolved for the current platform.
+public func iCloudDocumentsBasePath() -> String {
+    _iCloudDocumentsBase
+}
+
 // MARK: - Load / Save
 
-private let iCloudDocumentsPath = "~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents"
 private let registryFileName = "vaults.yaml"
 private let cacheFileName = "vaults-cache.yaml"
 
 private func iCloudConfigPath() -> String {
-    let docs = (iCloudDocumentsPath as NSString).expandingTildeInPath
-    return (docs as NSString).appendingPathComponent("config")
+    return (iCloudDocumentsBasePath() as NSString).appendingPathComponent("config")
 }
 
 /// Loads the vault registry.

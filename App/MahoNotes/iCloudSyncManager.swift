@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import MahoNotesKit
 
 /// Monitors iCloud Drive changes for vaults stored in iCloud containers.
 /// Uses NSMetadataQuery to detect file updates, downloads, and conflicts.
@@ -37,7 +38,8 @@ final class iCloudSyncManager: @unchecked Sendable {
     }
 
     static func iCloudDocumentsURL() -> URL? {
-        iCloudContainerURL()?.appendingPathComponent("Documents")
+        // Use the same resolved path as VaultRegistry for consistency across platforms
+        URL(fileURLWithPath: iCloudDocumentsBasePath())
     }
 
     // MARK: - Monitoring
