@@ -1392,7 +1392,12 @@ import MahoNotesKit
             try? writeDirectoryOrder(at: parentDirAbs, notes: updated)
         }
 
+        #if os(iOS)
+        // iOS: trashItem may fail for iCloud/sandboxed paths; use removeItem directly
+        try FileManager.default.removeItem(at: fileURL)
+        #else
         try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
+        #endif
 
         // Clear selection if the deleted note was selected
         if selectedNotePath == relativePath {

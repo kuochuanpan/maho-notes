@@ -3,7 +3,7 @@ import Foundation
 /// A parsed note with frontmatter metadata and content
 public struct Note: Sendable, Codable, Hashable {
     public static func == (lhs: Note, rhs: Note) -> Bool {
-        lhs.relativePath == rhs.relativePath
+        lhs.relativePath == rhs.relativePath && lhs.title == rhs.title && lhs.updated == rhs.updated
     }
 
     public func hash(into hasher: inout Hasher) {

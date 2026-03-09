@@ -101,7 +101,11 @@ struct IPadContentView: View {
         .alert("Delete \"\(deleteNoteTitle)\"?", isPresented: $showingDeleteNote) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                try? appState.deleteNote(relativePath: deleteNotePath)
+                do {
+                    try appState.deleteNote(relativePath: deleteNotePath)
+                } catch {
+                    print("[MahoNotes] deleteNote failed: \(error)")
+                }
             }
         } message: {
             Text("This note will be moved to Trash.")
