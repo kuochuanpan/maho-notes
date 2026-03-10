@@ -13,7 +13,8 @@ public enum VaultAccess: String, Codable, Sendable {
     case readOnly = "read-only"
 }
 
-public struct VaultEntry: Codable, Sendable {
+public struct VaultEntry: Codable, Sendable, Identifiable {
+    public var id: String { name }
     public let name: String
     public let type: VaultType
     public var github: String?

@@ -5,8 +5,9 @@ import MahoNotesKit
 /// Sheet for choosing a vault's color badge.
 struct VaultColorPickerSheet: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     let entry: VaultEntry?
-    @Binding var isPresented: Bool
+    var onDismiss: (() -> Void)?
     @State private var selectedColor: Color?
 
     var body: some View {
@@ -39,7 +40,7 @@ struct VaultColorPickerSheet: View {
                                 if let entry {
                                     appState.setVaultColor(name: entry.name, color: option.name)
                                 }
-                                isPresented = false
+                                dismiss()
                             } label: {
                                 RoundedRectangle(cornerRadius: 10)
                                     .fill(option.color)
@@ -67,7 +68,7 @@ struct VaultColorPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
+                    Button("Cancel") { dismiss() }
                 }
             }
         }

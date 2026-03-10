@@ -12,7 +12,6 @@ struct IPadVaultRail: View {
     @State private var showingRenameDialog = false
     @State private var renameTarget: VaultEntry?
     @State private var renameText = ""
-    @State private var showingColorPicker = false
     @State private var colorPickerTarget: VaultEntry?
 
     var body: some View {
@@ -104,10 +103,10 @@ struct IPadVaultRail: View {
         } message: {
             Text("Enter a display name for this vault.")
         }
-        .sheet(isPresented: $showingColorPicker) {
+        .sheet(item: $colorPickerTarget) { target in
             VaultColorPickerSheet(
-                entry: colorPickerTarget,
-                isPresented: $showingColorPicker
+                entry: target,
+                onDismiss: { colorPickerTarget = nil }
             )
         }
     }
@@ -192,7 +191,6 @@ struct IPadVaultRail: View {
 
         Button {
             colorPickerTarget = entry
-            showingColorPicker = true
         } label: {
             Label("Change Color", systemImage: "paintpalette")
         }
