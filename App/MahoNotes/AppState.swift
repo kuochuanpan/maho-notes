@@ -1227,8 +1227,28 @@ import MahoNotesKit
     /// Set a custom color for a vault icon.
     func setVaultColor(name: String, color: String) {
         let existing = vaults.first { $0.name == name }
+
+        // Optimistic update: immediately reflect in UI
+        if let index = vaults.firstIndex(where: { $0.name == name }) {
+            let old = vaults[index]
+            vaults[index] = VaultEntry(
+                name: old.name,
+                type: old.type,
+                github: old.github,
+                path: old.path,
+                access: old.access,
+                displayName: old.displayName,
+                color: color.isEmpty ? nil : color
+            )
+        }
+
+        // Persist to disk asynchronously
         Task {
-            try? await store.updateVaultEntry(named: name, displayName: existing?.displayName, color: color.isEmpty ? nil : color)
+            do {
+                try await store.updateVaultEntry(named: name, displayName: existing?.displayName, color: color.isEmpty ? nil : color)
+            } catch {
+                print("[MahoNotes] setVaultColor failed: \(error)")
+            }
             await loadRegistryAsync()
         }
     }

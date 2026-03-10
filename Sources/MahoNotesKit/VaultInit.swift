@@ -30,7 +30,7 @@ public func mahoConfigBase() -> String {
 public func resolveVaultRoot(storage: StorageOption?) -> String {
     switch storage {
     case .icloud:
-        return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        return (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
     case .local:
         return mahoConfigBase() + "/vaults"
     case nil:
