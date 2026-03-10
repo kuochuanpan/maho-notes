@@ -118,6 +118,7 @@ struct IPadVaultRail: View {
     private func vaultGroup(_ entries: [VaultEntry]) -> some View {
         ForEach(entries, id: \.name) { entry in
             vaultIcon(entry)
+                .id("\(entry.name):\(entry.color ?? "")")
         }
     }
 

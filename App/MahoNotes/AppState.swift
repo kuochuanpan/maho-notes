@@ -1227,6 +1227,7 @@ import MahoNotesKit
     /// Set a custom color for a vault icon.
     func setVaultColor(name: String, color: String) {
         let existing = vaults.first { $0.name == name }
+        print("[MahoNotes] setVaultColor: name=\(name) color=\(color) existing.color=\(existing?.color ?? "nil")")
 
         // Optimistic update: immediately reflect in UI
         if let index = vaults.firstIndex(where: { $0.name == name }) {
@@ -1240,16 +1241,24 @@ import MahoNotesKit
                 displayName: old.displayName,
                 color: color.isEmpty ? nil : color
             )
+            print("[MahoNotes] setVaultColor: optimistic update done, new color=\(vaults[index].color ?? "nil")")
+        } else {
+            print("[MahoNotes] setVaultColor: vault '\(name)' NOT FOUND in vaults array (\(vaults.map(\.name)))")
         }
 
         // Persist to disk asynchronously
         Task {
             do {
                 try await store.updateVaultEntry(named: name, displayName: existing?.displayName, color: color.isEmpty ? nil : color)
+                print("[MahoNotes] setVaultColor: persisted successfully")
             } catch {
-                print("[MahoNotes] setVaultColor failed: \(error)")
+                print("[MahoNotes] setVaultColor: persist FAILED: \(error)")
             }
             await loadRegistryAsync()
+            // Verify after reload
+            if let reloaded = vaults.first(where: { $0.name == name }) {
+                print("[MahoNotes] setVaultColor: after reload, color=\(reloaded.color ?? "nil")")
+            }
         }
     }
 
