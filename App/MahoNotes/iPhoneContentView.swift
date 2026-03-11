@@ -72,10 +72,9 @@ struct iPhoneContentView: View {
                             }
                         }
                     }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .bottomBar) {
-                            bottomToolbarContent
-                        }
+                    .overlay(alignment: .bottom) {
+                        floatingToolbar
+                            .padding(.bottom, 24)
                     }
                     .navigationDestination(for: String.self) { notePath in
                         noteDetail(for: notePath)
@@ -195,49 +194,72 @@ struct iPhoneContentView: View {
         return vault.displayName ?? vault.name
     }
 
-    // MARK: - Bottom Toolbar
+    // MARK: - Floating Toolbar (Liquid Glass)
 
-    @ViewBuilder
-    private var bottomToolbarContent: some View {
-        Button {
-            presentNewNote()
-        } label: {
-            Label("New Note", systemImage: "square.and.pencil")
-        }
-        .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+    private var floatingToolbar: some View {
+        HStack(spacing: 20) {
+            floatingButton(icon: "square.and.pencil",
+                           disabled: appState.selectedVault == nil || appState.collections.isEmpty) {
+                presentNewNote()
+            }
 
-        Spacer()
+            floatingButton(icon: "folder.badge.plus",
+                           disabled: appState.selectedVault == nil) {
+                showingNewCollection = true
+                newCollectionName = ""
+                newCollectionIcon = "folder"
+                collectionError = nil
+            }
 
-        Button {
-            showingNewCollection = true
-            newCollectionName = ""
-            newCollectionIcon = "folder"
-            collectionError = nil
-        } label: {
-            Label("New Collection", systemImage: "folder.badge.plus")
-        }
-        .disabled(appState.selectedVault == nil)
+            // Sync with spinner
+            Button {
+                appState.syncCoordinator.syncNow()
+            } label: {
+                Group {
+                    if appState.syncCoordinator.isSyncing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 17, weight: .medium))
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.syncCoordinator.isSyncing)
 
-        Spacer()
-
-        Button {
-            appState.syncCoordinator.syncNow()
-        } label: {
-            if appState.syncCoordinator.isSyncing {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+            floatingButton(icon: "gearshape", disabled: false) {
+                showingSettings = true
             }
         }
-        .disabled(appState.syncCoordinator.isSyncing)
+        .padding(.horizontal, 8)
+        .modifier(LiquidGlassModifier())
+    }
 
-        Spacer()
+    private func floatingButton(icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
 
-        Button {
-            showingSettings = true
-        } label: {
-            Label("Settings", systemImage: "gearshape")
+    /// Applies iOS 26 Liquid Glass when available, falls back to ultraThinMaterial.
+    private struct LiquidGlassModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            if #available(iOS 26, *) {
+                content.glassEffect(.regular, in: .capsule)
+            } else {
+                content
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            }
         }
     }
 
