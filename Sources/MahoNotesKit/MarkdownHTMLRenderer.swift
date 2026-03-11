@@ -201,9 +201,33 @@ private struct HTMLVisitor: MarkupVisitor {
     }
 
     mutating func visitImage(_ image: Markdown.Image) -> String {
-        let alt = image.children.map { visit($0) }.joined()
+        let rawAlt = image.children.map { visit($0) }.joined()
         let src = image.source ?? ""
-        return "<img src=\"\(escapeHTML(src))\" alt=\"\(alt)\">"
+
+        // Parse custom attributes: ![alt|alignment|width](url)
+        let parts = rawAlt.split(separator: "|", maxSplits: 3).map { $0.trimmingCharacters(in: .whitespaces) }
+        let alt = parts.first ?? rawAlt
+        var alignment: String? = nil
+        var width: String? = nil
+
+        for part in parts.dropFirst() {
+            let lower = part.lowercased()
+            if lower == "left" || lower == "right" || lower == "center" {
+                alignment = lower
+            } else if lower.hasSuffix("%") || lower.hasSuffix("px") {
+                width = part
+            }
+        }
+
+        // No custom attributes → simple img tag (backward compatible)
+        guard alignment != nil || width != nil else {
+            return "<img src=\"\(escapeHTML(src))\" alt=\"\(escapeHTML(alt))\">"
+        }
+
+        let align = alignment ?? "center"
+        let cssClass = "img-\(align)"
+        let styleAttr = width.map { " style=\"width:\($0)\"" } ?? ""
+        return "<figure class=\"\(cssClass)\"\(styleAttr)><img src=\"\(escapeHTML(src))\" alt=\"\(escapeHTML(alt))\"></figure>"
     }
 
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) -> String {

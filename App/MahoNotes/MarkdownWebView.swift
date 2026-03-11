@@ -220,6 +220,49 @@ extension MarkdownWebView {
             margin: 2em 0;
         }
         img { max-width: 100%; height: auto; border-radius: 6px; }
+        /* Image layout: figure wrapper for alignment */
+        figure.img-left,
+        figure.img-right,
+        figure.img-center {
+            margin: 12px 0;
+            padding: 0;
+            max-width: 100%;
+        }
+        figure.img-left img,
+        figure.img-right img,
+        figure.img-center img {
+            width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+        figure.img-left {
+            float: left;
+            margin: 4px 16px 12px 0;
+        }
+        figure.img-right {
+            float: right;
+            margin: 4px 0 12px 16px;
+        }
+        figure.img-center {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        /* Clear float after floated images */
+        p:has(+ figure.img-left),
+        p:has(+ figure.img-right),
+        figure.img-left + *:not(p),
+        figure.img-right + *:not(p) {
+            clear: both;
+        }
+        /* Phone: cancel float, force full width */
+        @media (max-width: 480px) {
+            figure.img-left,
+            figure.img-right {
+                float: none;
+                width: 100% !important;
+                margin: 12px 0;
+            }
+        }
         ul, ol { padding-left: 1.5em; margin: 0.8em 0; }
         li { margin: 0.3em 0; }
         li > p { margin: 0.2em 0; }
