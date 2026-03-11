@@ -47,14 +47,11 @@ struct iOSSettingsView: View {
                     }
                 }
 
-                // GitHub Account
-                Section("GitHub Account") {
+                // GitHub
+                Section("GitHub") {
                     GitHubAccountGroupBox(authManager: appState.authManager)
-                }
 
-                // GitHub Sync
-                if !appState.vaults.filter({ $0.github != nil }).isEmpty {
-                    Section("GitHub Sync") {
+                    if !appState.vaults.filter({ $0.github != nil }).isEmpty {
                         GitHubSyncGroupBox(coordinator: appState.syncCoordinator)
                     }
                 }
