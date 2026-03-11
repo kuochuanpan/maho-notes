@@ -13,6 +13,7 @@ struct iOSSettingsView: View {
     @State private var vaultToRemove: String?
     @State private var isBuilding = false
     @State private var buildStatus: String?
+    @State private var showingDeviceFlow = false
 
     var body: some View {
         NavigationStack {
@@ -49,10 +50,9 @@ struct iOSSettingsView: View {
 
                 // GitHub
                 Section("GitHub") {
-                    GitHubAccountGroupBox(authManager: appState.authManager)
-
+                    gitHubAccountRow
                     if !appState.vaults.filter({ $0.github != nil }).isEmpty {
-                        GitHubSyncGroupBox(coordinator: appState.syncCoordinator)
+                        gitHubSyncRow
                     }
                 }
 
@@ -246,6 +246,101 @@ struct iOSSettingsView: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(appState.vaults.count <= 1)
+        }
+    }
+
+    // MARK: - GitHub Account Row (compact, vault-row style)
+
+    private var gitHubAccountRow: some View {
+        HStack {
+            Image(systemName: "person.badge.key")
+                .foregroundStyle(.purple)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Account")
+                    .fontWeight(.medium)
+                if appState.authManager.isAuthenticated, let username = appState.authManager.username {
+                    Text("@\(username)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if appState.authManager.isAuthenticating {
+                    Text("Authorizing…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Not connected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if appState.authManager.isAuthenticating && appState.authManager.userCode == nil {
+                ProgressView()
+                    .controlSize(.small)
+            } else if appState.authManager.isAuthenticated {
+                Button("Disconnect") {
+                    appState.authManager.disconnect()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else if !appState.authManager.isAuthenticating {
+                Button("Connect") {
+                    Task { try? await appState.authManager.authenticate() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .onChange(of: appState.authManager.userCode) { _, newValue in
+            showingDeviceFlow = newValue != nil
+        }
+        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
+            if authenticated { showingDeviceFlow = false }
+        }
+        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            if !appState.authManager.isAuthenticated {
+                appState.authManager.cancelAuth()
+            }
+        }) {
+            DeviceFlowSheet(authManager: appState.authManager)
+        }
+    }
+
+    // MARK: - GitHub Sync Row (compact, vault-row style)
+
+    private var gitHubSyncRow: some View {
+        HStack {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.green)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sync")
+                    .fontWeight(.medium)
+                if let lastSync = appState.syncCoordinator.lastSyncDate {
+                    Text("Last synced \(lastSync, style: .relative) ago")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Not yet synced")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if appState.syncCoordinator.isSyncing {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button("Sync Now") {
+                    appState.syncCoordinator.syncNow()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
     }
 
