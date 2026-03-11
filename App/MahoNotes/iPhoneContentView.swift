@@ -72,10 +72,8 @@ struct iPhoneContentView: View {
                             }
                         }
                     }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .bottomBar) {
-                            bottomToolbarContent
-                        }
+                    .safeAreaInset(edge: .bottom) {
+                        iPhoneTabBar
                     }
                     .navigationDestination(for: String.self) { notePath in
                         noteDetail(for: notePath)
@@ -195,50 +193,79 @@ struct iPhoneContentView: View {
         return vault.displayName ?? vault.name
     }
 
-    // MARK: - Bottom Toolbar
+    // MARK: - Custom Tab Bar
 
-    @ViewBuilder
-    private var bottomToolbarContent: some View {
-        Button {
-            presentNewNote()
-        } label: {
-            Label("New Note", systemImage: "square.and.pencil")
-        }
-        .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+    private var iPhoneTabBar: some View {
+        HStack(spacing: 0) {
+            tabBarButton(
+                icon: "square.and.pencil",
+                label: "Note",
+                disabled: appState.selectedVault == nil || appState.collections.isEmpty
+            ) {
+                presentNewNote()
+            }
 
-        Spacer()
+            tabBarButton(
+                icon: "folder.badge.plus",
+                label: "Collection",
+                disabled: appState.selectedVault == nil
+            ) {
+                showingNewCollection = true
+                newCollectionName = ""
+                newCollectionIcon = "folder"
+                collectionError = nil
+            }
 
-        Button {
-            showingNewCollection = true
-            newCollectionName = ""
-            newCollectionIcon = "folder"
-            collectionError = nil
-        } label: {
-            Label("New Collection", systemImage: "folder.badge.plus")
-        }
-        .disabled(appState.selectedVault == nil)
+            // Sync button with spinner
+            Button {
+                appState.syncCoordinator.syncNow()
+            } label: {
+                VStack(spacing: 4) {
+                    Group {
+                        if appState.syncCoordinator.isSyncing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 20))
+                        }
+                    }
+                    .frame(height: 22)
+                    Text("Sync")
+                        .font(.caption2)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .disabled(appState.syncCoordinator.isSyncing)
 
-        Spacer()
-
-        Button {
-            appState.syncCoordinator.syncNow()
-        } label: {
-            if appState.syncCoordinator.isSyncing {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+            tabBarButton(
+                icon: "gearshape",
+                label: "Settings",
+                disabled: false
+            ) {
+                showingSettings = true
             }
         }
-        .disabled(appState.syncCoordinator.isSyncing)
-
-        Spacer()
-
-        Button {
-            showingSettings = true
-        } label: {
-            Label("Settings", systemImage: "gearshape")
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider()
         }
+    }
+
+    private func tabBarButton(icon: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                    .frame(height: 22)
+                Text(label)
+                    .font(.caption2)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .disabled(disabled)
     }
 
     // MARK: - Navigator (B Column)
