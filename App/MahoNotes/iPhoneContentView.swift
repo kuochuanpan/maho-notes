@@ -60,7 +60,7 @@ struct iPhoneContentView: View {
                     .background(MahoTheme.navigatorBackground(for: colorScheme))
                     .navigationTitle(selectedVaultTitle)
                     .navigationBarTitleDisplayMode(.inline)
-                    .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                    .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search notes...")
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
