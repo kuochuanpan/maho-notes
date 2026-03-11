@@ -72,8 +72,10 @@ struct iPhoneContentView: View {
                             }
                         }
                     }
-                    .safeAreaInset(edge: .bottom) {
-                        iPhoneTabBar
+                    .toolbar {
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            bottomToolbarContent
+                        }
                     }
                     .navigationDestination(for: String.self) { notePath in
                         noteDetail(for: notePath)
@@ -193,79 +195,50 @@ struct iPhoneContentView: View {
         return vault.displayName ?? vault.name
     }
 
-    // MARK: - Custom Tab Bar
+    // MARK: - Bottom Toolbar
 
-    private var iPhoneTabBar: some View {
-        HStack(spacing: 0) {
-            tabBarButton(
-                icon: "square.and.pencil",
-                label: "Note",
-                disabled: appState.selectedVault == nil || appState.collections.isEmpty
-            ) {
-                presentNewNote()
-            }
+    @ViewBuilder
+    private var bottomToolbarContent: some View {
+        Button {
+            presentNewNote()
+        } label: {
+            Label("New Note", systemImage: "square.and.pencil")
+        }
+        .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
 
-            tabBarButton(
-                icon: "folder.badge.plus",
-                label: "Collection",
-                disabled: appState.selectedVault == nil
-            ) {
-                showingNewCollection = true
-                newCollectionName = ""
-                newCollectionIcon = "folder"
-                collectionError = nil
-            }
+        Spacer()
 
-            // Sync button with spinner
-            Button {
-                appState.syncCoordinator.syncNow()
-            } label: {
-                VStack(spacing: 4) {
-                    Group {
-                        if appState.syncCoordinator.isSyncing {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 20))
-                        }
-                    }
-                    .frame(height: 22)
-                    Text("Sync")
-                        .font(.caption2)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .disabled(appState.syncCoordinator.isSyncing)
+        Button {
+            showingNewCollection = true
+            newCollectionName = ""
+            newCollectionIcon = "folder"
+            collectionError = nil
+        } label: {
+            Label("New Collection", systemImage: "folder.badge.plus")
+        }
+        .disabled(appState.selectedVault == nil)
 
-            tabBarButton(
-                icon: "gearshape",
-                label: "Settings",
-                disabled: false
-            ) {
-                showingSettings = true
+        Spacer()
+
+        Button {
+            appState.syncCoordinator.syncNow()
+        } label: {
+            if appState.syncCoordinator.isSyncing {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
             }
         }
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Divider()
-        }
-    }
+        .disabled(appState.syncCoordinator.isSyncing)
 
-    private func tabBarButton(icon: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .frame(height: 22)
-                Text(label)
-                    .font(.caption2)
-            }
-            .frame(maxWidth: .infinity)
+        Spacer()
+
+        Button {
+            showingSettings = true
+        } label: {
+            Label("Settings", systemImage: "gearshape")
         }
-        .disabled(disabled)
     }
 
     // MARK: - Navigator (B Column)
