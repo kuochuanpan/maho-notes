@@ -27,7 +27,7 @@ struct InitCommand: AsyncParsableCommand {
     var nonInteractive: Bool = false
 
     func run() async throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let globalConfigDir = mahoConfigBase()
         let globalConfigPath = (globalConfigDir as NSString).appendingPathComponent("config.yaml")
         let isFirstTime = !FileManager.default.fileExists(atPath: globalConfigPath)
         let store = VaultStore.shared

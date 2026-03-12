@@ -328,6 +328,66 @@ public actor VaultStore {
         (globalConfigDir as NSString).appendingPathComponent("vaults.yaml")
     }
 
+    // ══════════════════════════════════════════
+    // MARK: - Security-Scoped Bookmarks (macOS)
+    // ══════════════════════════════════════════
+
+    #if os(macOS)
+    /// Creates a security-scoped bookmark for a vault URL and saves it to disk.
+    ///
+    /// The bookmark allows the sandboxed app to re-access a user-selected directory
+    /// across launches without requiring a new file-picker interaction.
+    public func saveBookmark(for url: URL, vaultName: String) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let bookmarkDir = (globalConfigDir as NSString).appendingPathComponent("bookmarks")
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: bookmarkDir) {
+            try fm.createDirectory(atPath: bookmarkDir, withIntermediateDirectories: true)
+        }
+        let bookmarkPath = (bookmarkDir as NSString).appendingPathComponent("\(vaultName).bookmark")
+        try bookmarkData.write(to: URL(fileURLWithPath: bookmarkPath))
+    }
+
+    /// Loads and resolves a saved security-scoped bookmark for a vault.
+    ///
+    /// Returns the resolved URL if the bookmark exists and is valid, nil otherwise.
+    public func loadBookmark(for vaultName: String) -> URL? {
+        let bookmarkDir = (globalConfigDir as NSString).appendingPathComponent("bookmarks")
+        let bookmarkPath = (bookmarkDir as NSString).appendingPathComponent("\(vaultName).bookmark")
+        guard FileManager.default.fileExists(atPath: bookmarkPath) else { return nil }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: bookmarkPath))
+            var isStale = false
+            let url = try URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+            if isStale {
+                // Re-save the bookmark to refresh it
+                try? saveBookmark(for: url, vaultName: vaultName)
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    /// Loads a bookmark and starts accessing the security-scoped resource.
+    ///
+    /// The caller must call `stopAccessingVault(url:)` when done.
+    public func startAccessingVault(named vaultName: String) -> URL? {
+        guard let url = loadBookmark(for: vaultName) else { return nil }
+        guard url.startAccessingSecurityScopedResource() else { return nil }
+        return url
+    }
+
+    /// Stops accessing a security-scoped resource.
+    nonisolated public func stopAccessingVault(url: URL) {
+        url.stopAccessingSecurityScopedResource()
+    }
+    #endif
+
     // MARK: - Coordinated I/O
 
     /// Read file content using NSFileCoordinator for cross-process safety.

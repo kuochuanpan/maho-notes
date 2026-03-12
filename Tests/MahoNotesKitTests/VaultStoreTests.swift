@@ -449,8 +449,7 @@ struct VaultStoreTests {
         let store = VaultStore(globalConfigDir: tmpDir)
         let entry = VaultEntry(name: "test-vault", type: .device, access: .readWrite)
         let path = await store.resolvedPath(for: entry)
-        let expected = ("~/.maho/vaults" as NSString).expandingTildeInPath + "/test-vault/"
-        #expect(path == expected)
+        #expect(path.contains("group.dev.pcca.mahonotes/vaults/test-vault/"))
     }
 
     @Test("VaultStore resolvedPath — github type")
@@ -461,6 +460,6 @@ struct VaultStoreTests {
         let store = VaultStore(globalConfigDir: tmpDir)
         let entry = VaultEntry(name: "my-repo", type: .github, github: "user/repo", access: .readOnly)
         let path = await store.resolvedPath(for: entry)
-        #expect(path.contains("/.maho/vaults/my-repo/"))
+        #expect(path.contains("group.dev.pcca.mahonotes/vaults/my-repo/"))
     }
 }

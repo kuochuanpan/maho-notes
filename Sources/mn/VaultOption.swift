@@ -7,8 +7,8 @@ struct VaultOption: ParsableArguments {
     @Option(name: .long, help: "Vault name (from registry) or path to the vault directory")
     var vault: String?
 
-    /// Override for tests — set to a temp dir to avoid touching ~/.maho
-    nonisolated(unsafe) static var globalConfigDir: String = "~/.maho"
+    /// Override for tests — set to a temp dir to avoid touching the config directory
+    nonisolated(unsafe) static var globalConfigDir: String = mahoConfigBase()
 
     /// Returns the registry entry for the resolved vault, if found in registry.
     func resolveVaultEntry() -> VaultEntry? {
@@ -55,7 +55,7 @@ struct VaultOption: ParsableArguments {
         // Keep ~/maho-vault for backward compat; default to ~/.maho/vaults/ for new installs
         let legacyPath = ("~/maho-vault" as NSString).expandingTildeInPath
         if FileManager.default.fileExists(atPath: legacyPath) { return legacyPath }
-        return ("~/.maho/vaults" as NSString).expandingTildeInPath
+        return (mahoConfigBase() as NSString).appendingPathComponent("vaults")
     }
 
     private func findEntry(_ identifier: String) -> VaultEntry? {

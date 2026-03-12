@@ -20,7 +20,8 @@ struct InitCommandTests {
 
     @Test func resolveVaultRootLocal() {
         let path = resolveVaultRoot(storage: .local)
-        #expect(path.hasSuffix("/.maho/vaults"))
+        #expect(path.hasSuffix("/vaults"))
+        #expect(path.contains("group.dev.pcca.mahonotes"))
     }
 
     @Test func resolveVaultRootICloud() {
@@ -33,7 +34,8 @@ struct InitCommandTests {
         // In CI / test environment iCloud container doesn't exist -> local
         if !iCloudContainerExists() {
             let path = resolveVaultRoot(storage: nil)
-            #expect(path.hasSuffix("/.maho/vaults"))
+            #expect(path.hasSuffix("/vaults"))
+            #expect(path.contains("group.dev.pcca.mahonotes"))
         }
     }
 

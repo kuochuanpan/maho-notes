@@ -212,7 +212,7 @@ struct VaultCommandTests {
     @Test func resolvedPathGitHubUsesGlobalVaultsDir() {
         let entry = VaultEntry(name: "cheatsheets", type: .github, github: "owner/repo", access: .readOnly)
         let path = resolvedPath(for: entry)
-        #expect(path.contains("/.maho/vaults/cheatsheets"))
+        #expect(path.contains("group.dev.pcca.mahonotes/vaults/cheatsheets"))
     }
 
     // MARK: - First vault becomes primary

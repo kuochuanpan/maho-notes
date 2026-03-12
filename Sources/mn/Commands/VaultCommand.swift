@@ -158,7 +158,7 @@ struct VaultAddSubcommand: AsyncParsableCommand {
     // MARK: iCloud
 
     private func addICloud(store: VaultStore) async throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let globalConfigDir = mahoConfigBase()
         let cloudSync = await store.cloudSyncMode()
         guard cloudSync == .icloud else {
             throw ValidationError("Cannot create an iCloud vault: Cloud Sync is OFF. Use --device instead, or enable Cloud Sync with: mn config set --global sync.cloud icloud")
@@ -188,7 +188,7 @@ struct VaultAddSubcommand: AsyncParsableCommand {
     // MARK: Device
 
     private func addDevice(store: VaultStore) async throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let globalConfigDir = mahoConfigBase()
         let base = (globalConfigDir as NSString).appendingPathComponent("vaults")
         let vaultPath = (base as NSString).appendingPathComponent(name)
 
@@ -213,7 +213,7 @@ struct VaultAddSubcommand: AsyncParsableCommand {
     // MARK: GitHub
 
     private func addGitHub(repo: String, store: VaultStore) async throws {
-        let globalConfigDir = ("~/.maho" as NSString).expandingTildeInPath
+        let globalConfigDir = mahoConfigBase()
         let vaultsDir = (globalConfigDir as NSString).appendingPathComponent("vaults")
         let vaultPath = (vaultsDir as NSString).appendingPathComponent(name)
         let fm = FileManager.default

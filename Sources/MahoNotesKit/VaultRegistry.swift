@@ -97,6 +97,12 @@ func resolvedPath(for entry: VaultEntry) -> String {
         let base = mahoConfigBase() + "/vaults"
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .local:
+        #if os(macOS)
+        // Try loading a security-scoped bookmark first (for sandboxed app)
+        if let bookmarkURL = loadBookmarkURL(for: entry.name) {
+            return bookmarkURL.path
+        }
+        #endif
         return (entry.path! as NSString).expandingTildeInPath
     }
 }
@@ -193,7 +199,7 @@ public enum CloudSyncMode: String, Codable, Sendable {
 }
 
 /// Reads `sync.cloud` from `globalConfigDir/config.yaml`. Defaults to `.icloud` if absent or unreadable.
-func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncMode {
+func loadCloudSyncMode(globalConfigDir: String = mahoConfigBase()) -> CloudSyncMode {
     let expanded = (globalConfigDir as NSString).expandingTildeInPath
     let configPath = (expanded as NSString).appendingPathComponent("config.yaml")
     guard FileManager.default.fileExists(atPath: configPath),
@@ -207,7 +213,7 @@ func loadCloudSyncMode(globalConfigDir: String = "~/.maho") -> CloudSyncMode {
 }
 
 /// Writes `sync.cloud` to `globalConfigDir/config.yaml`, preserving other keys.
-func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = "~/.maho") throws {
+func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = mahoConfigBase()) throws {
     let expanded = (globalConfigDir as NSString).expandingTildeInPath
     let configPath = (expanded as NSString).appendingPathComponent("config.yaml")
 
@@ -254,7 +260,7 @@ public enum CloudSyncActivationCheck: Sendable {
 }
 
 /// Checks whether iCloud already has a vault registry.
-func checkCloudRegistryExists(globalConfigDir: String = "~/.maho") -> CloudSyncActivationCheck {
+func checkCloudRegistryExists(globalConfigDir: String = mahoConfigBase()) -> CloudSyncActivationCheck {
     let fm = FileManager.default
     let iCloudConfig = iCloudConfigPath()
     let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
@@ -356,6 +362,28 @@ func mergeRegistries(
     return (VaultRegistry(primary: primary, vaults: merged), conflicts)
 }
 
+// MARK: - Bookmark Resolution (macOS only)
+
+#if os(macOS)
+/// Attempts to resolve a saved security-scoped bookmark for a vault.
+/// Returns the resolved URL if the bookmark exists and is still valid, nil otherwise.
+/// Used by `resolvedPath(for:)` to support sandboxed app access to local vaults.
+private func loadBookmarkURL(for vaultName: String) -> URL? {
+    let bookmarkDir = (mahoConfigBase() as NSString).appendingPathComponent("bookmarks")
+    let bookmarkPath = (bookmarkDir as NSString).appendingPathComponent("\(vaultName).bookmark")
+    guard FileManager.default.fileExists(atPath: bookmarkPath) else { return nil }
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: bookmarkPath))
+        var isStale = false
+        let url = try URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+        if isStale { return nil }
+        return url
+    } catch {
+        return nil
+    }
+}
+#endif
+
 // MARK: - Coordinated I/O Helpers
 
 private func coordinatedRead(at path: String) throws -> String {
@@ -426,8 +454,8 @@ private func iCloudConfigPath() -> String {
 /// Loads the vault registry.
 /// - Cloud Sync ON (default): tries iCloud config path first, falls back to `globalConfigDir/vaults.yaml`
 /// - Cloud Sync OFF: only reads from `globalConfigDir/vaults.yaml`
-/// - Parameter globalConfigDir: defaults to `~/.maho`
-func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultRegistry? {
+/// - Parameter globalConfigDir: defaults to `mahoConfigBase()`
+func loadRegistry(globalConfigDir: String = mahoConfigBase()) throws -> VaultRegistry? {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let globalPath = (expandedGlobal as NSString).appendingPathComponent(registryFileName)
@@ -451,8 +479,8 @@ func loadRegistry(globalConfigDir: String = "~/.maho") throws -> VaultRegistry? 
 /// - Cloud Sync ON (default): writes to iCloud config path if available, else `globalConfigDir/vaults.yaml`;
 ///   always writes cache to `globalConfigDir/vaults-cache.yaml`
 /// - Cloud Sync OFF: writes only to `globalConfigDir/vaults.yaml`; no cache file written
-/// - Parameter globalConfigDir: defaults to `~/.maho`
-func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = "~/.maho") throws {
+/// - Parameter globalConfigDir: defaults to `mahoConfigBase()`
+func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = mahoConfigBase()) throws {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let encoder = YAMLEncoder()

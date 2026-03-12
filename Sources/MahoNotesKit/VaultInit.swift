@@ -16,14 +16,56 @@ public func iCloudContainerExists() -> Bool {
 
 // MARK: - Vault root resolution
 
-/// Returns the directory where vault folders are stored.
 /// Base path for `.maho` config directory, platform-aware.
+///
+/// - macOS: `~/Library/Group Containers/group.dev.pcca.mahonotes/`
+///   (accessible by both the sandboxed app and the CLI without entitlements)
+/// - iOS: `<Documents>/.maho/`
 public func mahoConfigBase() -> String {
     #if os(iOS)
     return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         .appendingPathComponent(".maho").path
     #else
-    return ("~/.maho" as NSString).expandingTildeInPath
+    let groupContainer = ("~/Library/Group Containers/group.dev.pcca.mahonotes" as NSString).expandingTildeInPath
+    migrateFromLegacyConfigIfNeeded(to: groupContainer)
+    return groupContainer
+    #endif
+}
+
+/// App Group container identifier used on macOS for shared config between the sandboxed app and CLI.
+public let mahoAppGroupIdentifier = "group.dev.pcca.mahonotes"
+
+/// Migrates config files from the legacy `~/.maho/` directory to the App Group container.
+///
+/// Copies all files without deleting the original. Only runs once — skips if
+/// the destination already has a `config.yaml`.
+public func migrateFromLegacyConfigIfNeeded(to groupContainer: String? = nil) {
+    #if os(macOS)
+    let destination = groupContainer ?? ("~/Library/Group Containers/group.dev.pcca.mahonotes" as NSString).expandingTildeInPath
+    let legacyDir = ("~/.maho" as NSString).expandingTildeInPath
+    let fm = FileManager.default
+
+    // Only migrate if legacy config exists and destination doesn't have config yet
+    let legacyConfig = (legacyDir as NSString).appendingPathComponent("config.yaml")
+    let destConfig = (destination as NSString).appendingPathComponent("config.yaml")
+    guard fm.fileExists(atPath: legacyConfig), !fm.fileExists(atPath: destConfig) else { return }
+
+    do {
+        if !fm.fileExists(atPath: destination) {
+            try fm.createDirectory(atPath: destination, withIntermediateDirectories: true)
+        }
+        let contents = try fm.contentsOfDirectory(atPath: legacyDir)
+        for item in contents {
+            let src = (legacyDir as NSString).appendingPathComponent(item)
+            let dst = (destination as NSString).appendingPathComponent(item)
+            if !fm.fileExists(atPath: dst) {
+                try fm.copyItem(atPath: src, toPath: dst)
+            }
+        }
+        print("Migrated config from ~/.maho/ to App Group container")
+    } catch {
+        print("Warning: could not migrate config from ~/.maho/: \(error.localizedDescription)")
+    }
     #endif
 }
 

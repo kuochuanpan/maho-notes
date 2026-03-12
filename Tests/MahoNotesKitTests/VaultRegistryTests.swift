@@ -150,7 +150,7 @@ struct VaultRegistryTests {
     @Test func resolvedPathGitHub() {
         let entry = VaultEntry(name: "cheatsheets", type: .github, github: "detailyang/awesome-cheatsheet", access: .readOnly)
         let path = resolvedPath(for: entry)
-        #expect(path.contains("/.maho/vaults/cheatsheets/"))
+        #expect(path.contains("group.dev.pcca.mahonotes/vaults/cheatsheets/"))
         #expect(!path.hasPrefix("~"))
     }
 
@@ -216,7 +216,7 @@ struct VaultRegistryTests {
     @Test func resolvedPathDevice() {
         let entry = VaultEntry(name: "offline", type: .device, access: .readWrite)
         let path = resolvedPath(for: entry)
-        #expect(path.contains("/.maho/vaults/offline/"))
+        #expect(path.contains("group.dev.pcca.mahonotes/vaults/offline/"))
         #expect(!path.hasPrefix("~"))
     }
 
