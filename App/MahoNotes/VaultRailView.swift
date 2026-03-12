@@ -29,7 +29,8 @@ struct VaultRailView: View {
             // Add button
             Button {
                 showingAddPopover = true
-                addVaultMode = nil
+                // Skip mode picker if GitHub not authenticated — go straight to create
+                addVaultMode = appState.authManager.isAuthenticated ? nil : .create
                 resetForm()
             } label: {
                 Image(systemName: "plus")
@@ -205,13 +206,15 @@ struct VaultRailView: View {
                 // Create new vault form
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Button {
-                            addVaultMode = nil
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.caption)
+                        if appState.authManager.isAuthenticated {
+                            Button {
+                                addVaultMode = nil
+                            } label: {
+                                Image(systemName: "chevron.left")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
 
                         Text("Create New Vault")
                             .font(.headline)

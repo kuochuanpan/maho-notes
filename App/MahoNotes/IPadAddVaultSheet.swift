@@ -6,7 +6,9 @@ import MahoNotesKit
 struct IPadAddVaultSheet: View {
     @Environment(AppState.self) private var appState
     @Binding var isPresented: Bool
+    /// When GitHub is not authenticated, skip the mode picker and go straight to create.
     @State private var mode: Mode?
+    private var hasGitHub: Bool { appState.authManager.isAuthenticated }
     @State private var newVaultName = ""
     @State private var newVaultAuthor = ""
     @State private var githubRepo = ""
@@ -22,9 +24,9 @@ struct IPadAddVaultSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if mode == nil {
+                if mode == nil && hasGitHub {
                     modePicker
-                } else if mode == .create {
+                } else if mode == .create || (mode == nil && !hasGitHub) {
                     createVaultForm
                 } else {
                     githubImportForm
@@ -34,14 +36,14 @@ struct IPadAddVaultSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if mode != nil {
+                    if mode != nil && hasGitHub {
                         Button("Back") { mode = nil; errorMessage = nil }
                     } else {
                         Button("Cancel") { isPresented = false }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if mode == .create {
+                    if mode == .create || (mode == nil && !hasGitHub) {
                         Button("Create") { createVault() }
                             .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                     } else if mode == .github {
@@ -58,7 +60,7 @@ struct IPadAddVaultSheet: View {
 
     private var navigationTitle: String {
         switch mode {
-        case .none: return "Add Vault"
+        case .none: return hasGitHub ? "Add Vault" : "Create New Vault"
         case .create: return "Create New Vault"
         case .github: return "Import from GitHub"
         }
