@@ -286,7 +286,7 @@ struct iPhoneContentView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.title3)
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(MahoTheme.accent(for: colorScheme))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Add a Vault")
                                         .fontWeight(.medium)
