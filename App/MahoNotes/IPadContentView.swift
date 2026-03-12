@@ -77,6 +77,29 @@ struct IPadContentView: View {
                             Image(systemName: "sidebar.left")
                         }
                     }
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Button {
+                                presentNewNote()
+                            } label: {
+                                Label("New Note", systemImage: "square.and.pencil")
+                            }
+                            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+
+                            Button {
+                                showingNewCollection = true
+                                newCollectionName = ""
+                                newCollectionIcon = "folder"
+                                collectionError = nil
+                            } label: {
+                                Label("New Collection", systemImage: "folder.badge.plus")
+                            }
+                            .disabled(appState.selectedVault == nil)
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .disabled(appState.selectedVault == nil)
+                    }
                 }
         } detail: {
             // C — Note Content (nav bar hidden; toggle + actions live in breadcrumb bar)
@@ -87,6 +110,17 @@ struct IPadContentView: View {
                 .environment(\.sidebarToggleAction, columnCycleState == 2
                     ? { withAnimation { cycleColumns() } } : nil)
                 .environment(\.inlineActionButtons, AnyView(detailInlineActions))
+                .environment(\.emptyStateActions, EmptyStateActions(
+                    onCreateCollection: {
+                        showingNewCollection = true
+                        newCollectionName = ""
+                        newCollectionIcon = "folder"
+                        collectionError = nil
+                    },
+                    onCreateNote: {
+                        presentNewNote()
+                    }
+                ))
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)

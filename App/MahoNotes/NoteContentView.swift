@@ -242,14 +242,6 @@ struct NoteContentView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "text.page")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("Select a note")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        DetailEmptyStateView()
     }
 }

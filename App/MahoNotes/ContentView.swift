@@ -122,6 +122,15 @@ struct MacContentView: View {
     @Environment(AppState.self) private var appState
     @State private var debounceTask: Task<Void, Never>?
     @State private var dragStartWidth: CGFloat?
+    // Empty state action sheets
+    @State private var showingNewCollection = false
+    @State private var newCollectionName = ""
+    @State private var newCollectionIcon = "folder"
+    @State private var collectionError: String?
+    @State private var showingNewNote = false
+    @State private var newNoteTitle = ""
+    @State private var newNoteCollectionId = ""
+    @State private var noteError: String?
 
     var body: some View {
         @Bindable var state = appState
@@ -152,6 +161,22 @@ struct MacContentView: View {
 
                     // C — Content
                     NoteContentView()
+                        .environment(\.emptyStateActions, EmptyStateActions(
+                            onCreateCollection: {
+                                newCollectionName = ""
+                                newCollectionIcon = "folder"
+                                collectionError = nil
+                                showingNewCollection = true
+                            },
+                            onCreateNote: {
+                                if let first = appState.collections.first {
+                                    newNoteCollectionId = first.id
+                                }
+                                newNoteTitle = ""
+                                noteError = nil
+                                showingNewNote = true
+                            }
+                        ))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .animation(.easeInOut(duration: 0.2), value: appState.showNavigator)
@@ -210,6 +235,94 @@ struct MacContentView: View {
             }
             scheduleSearch()
         }
+        .sheet(isPresented: $showingNewCollection) {
+            macNewCollectionSheet
+        }
+        .sheet(isPresented: $showingNewNote) {
+            macNewNoteSheet
+        }
+    }
+
+    // MARK: - New Collection Sheet (from empty state)
+
+    private var macNewCollectionSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Collection")
+                .font(.headline)
+
+            TextField("Collection Name", text: $newCollectionName)
+                .textFieldStyle(.roundedBorder)
+
+            if let error = collectionError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Cancel") { showingNewCollection = false }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Create") {
+                    let name = newCollectionName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    do {
+                        try appState.createCollection(name: name, icon: newCollectionIcon)
+                        showingNewCollection = false
+                    } catch {
+                        collectionError = error.localizedDescription
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
+
+    // MARK: - New Note Sheet (from empty state)
+
+    private var macNewNoteSheet: some View {
+        VStack(spacing: 16) {
+            Text("New Note")
+                .font(.headline)
+
+            if appState.collections.count > 1 {
+                Picker("Collection", selection: $newNoteCollectionId) {
+                    ForEach(appState.collections, id: \.id) { col in
+                        Text(col.name).tag(col.id)
+                    }
+                }
+            }
+
+            TextField("Note Title", text: $newNoteTitle)
+                .textFieldStyle(.roundedBorder)
+
+            if let error = noteError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Cancel") { showingNewNote = false }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Create") {
+                    let title = newNoteTitle.trimmingCharacters(in: .whitespaces)
+                    guard !title.isEmpty else { return }
+                    do {
+                        let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
+                        showingNewNote = false
+                        appState.viewMode = .editor
+                        appState.startEditing()
+                    } catch {
+                        noteError = error.localizedDescription
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newNoteTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
     }
 
     // MARK: - Search Overlay
