@@ -112,6 +112,21 @@ private func decodeMathContent(_ encoded: String) -> String {
     return text
 }
 
+/// Process highlight markup: ==text== -> <mark>text</mark>
+func processHighlight(_ text: String) -> String {
+    let pattern = try! NSRegularExpression(pattern: "==(.+?)==", options: [])
+    let nsRange = NSRange(text.startIndex..., in: text)
+    var result = text
+    let matches = pattern.matches(in: text, range: nsRange)
+    for match in matches.reversed() {
+        guard let range = Range(match.range, in: result),
+              let contentRange = Range(match.range(at: 1), in: result) else { continue }
+        let content = String(result[contentRange])
+        result.replaceSubrange(range, with: "<mark>\(content)</mark>")
+    }
+    return result
+}
+
 /// Process ruby annotations: {base|annotation} -> <ruby> HTML
 func processRubyAnnotations(_ text: String) -> String {
     let pattern = try! NSRegularExpression(pattern: "\\{([^|\\}]+)\\|([^\\}]+)\\}", options: [])
@@ -160,7 +175,8 @@ private struct HTMLVisitor: MarkupVisitor {
 
     mutating func visitText(_ text: Markdown.Text) -> String {
         let escaped = escapeHTML(text.string)
-        return processRubyAnnotations(escaped)
+        let withRuby = processRubyAnnotations(escaped)
+        return processHighlight(withRuby)
     }
 
     mutating func visitStrong(_ strong: Strong) -> String {

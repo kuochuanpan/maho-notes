@@ -288,6 +288,15 @@ extension MarkdownWebView {
         }
         tbody tr:nth-child(even) { background: var(--table-stripe); }
         del { color: var(--fg-secondary); }
+        mark {
+            background: rgba(255, 230, 0, 0.35);
+            color: inherit;
+            padding: 0.1em 0.2em;
+            border-radius: 3px;
+        }
+        @media (prefers-color-scheme: dark) {
+            mark { background: rgba(255, 210, 0, 0.25); }
+        }
         .admonition {
             border-left: 3px solid var(--admonition-note);
             border-radius: 4px;
