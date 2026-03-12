@@ -290,6 +290,7 @@ struct iPhoneContentView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Add a Vault")
                                         .fontWeight(.medium)
+                                        .foregroundStyle(.primary)
                                     Text("Create a vault to start taking notes")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
