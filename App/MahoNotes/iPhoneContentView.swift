@@ -298,6 +298,7 @@ struct iPhoneContentView: View {
                             }
                             .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
                     }
                 } else {
                     Section {
