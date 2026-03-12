@@ -298,7 +298,7 @@ private struct HTMLVisitor: MarkupVisitor {
         let content = listItem.children.map { visit($0) }.joined()
         if let checkbox = listItem.checkbox {
             let checked = checkbox == .checked ? " checked disabled" : " disabled"
-            return "<li><input type=\"checkbox\"\(checked)> \(content)</li>\n"
+            return "<li class=\"task-item\"><input type=\"checkbox\"\(checked)> \(content)</li>\n"
         }
         return "<li>\(content)</li>\n"
     }

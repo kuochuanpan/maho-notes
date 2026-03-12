@@ -271,6 +271,14 @@ extension MarkdownWebView {
             transform: scale(1.1);
             vertical-align: middle;
         }
+        li.task-item {
+            list-style: none;
+            margin-left: -1.5em;
+        }
+        li.task-item > p {
+            display: inline;
+            margin: 0;
+        }
         table {
             border-collapse: collapse;
             width: 100%;
