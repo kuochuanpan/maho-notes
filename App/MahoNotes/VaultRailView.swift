@@ -38,7 +38,7 @@ struct VaultRailView: View {
                     .frame(width: 36, height: 36)
                     .background(
                         appState.vaults.isEmpty
-                            ? AnyShapeStyle(MahoTheme.vaultRailBackground.opacity(0.8))
+                            ? AnyShapeStyle(MahoTheme.vaultRailBackground.mix(with: .white, by: 0.3))
                             : AnyShapeStyle(.quaternary),
                         in: RoundedRectangle(cornerRadius: 8)
                     )
@@ -48,7 +48,7 @@ struct VaultRailView: View {
             .padding(.top, 8)
             .padding(.bottom, 4)
             .shadow(
-                color: appState.vaults.isEmpty ? MahoTheme.vaultRailBackground.opacity(0.6) : .clear,
+                color: appState.vaults.isEmpty ? MahoTheme.vaultRailBackground.mix(with: .white, by: 0.3).opacity(0.6) : .clear,
                 radius: appState.vaults.isEmpty ? 8 : 0
             )
             .popover(isPresented: $showingAddPopover, arrowEdge: .trailing) {

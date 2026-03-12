@@ -25,7 +25,7 @@ struct IPadVaultRail: View {
                     .frame(width: 44, height: 44)
                     .background(
                         appState.vaults.isEmpty
-                            ? AnyShapeStyle(MahoTheme.vaultRailBackground.opacity(0.8))
+                            ? AnyShapeStyle(MahoTheme.vaultRailBackground.mix(with: .white, by: 0.3))
                             : AnyShapeStyle(.quaternary),
                         in: RoundedRectangle(cornerRadius: 10)
                     )
