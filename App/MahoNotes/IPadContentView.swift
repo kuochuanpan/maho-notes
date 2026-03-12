@@ -25,6 +25,7 @@ struct IPadContentView: View {
     @State private var newCollectionIcon = "folder"
     @State private var collectionError: String?
     @State private var showingSettings = false
+    @State private var showingAddVault = false
 
     // Rename / Delete note alerts
     @State private var showingRenameNote = false
@@ -111,6 +112,9 @@ struct IPadContentView: View {
                     ? { withAnimation { cycleColumns() } } : nil)
                 .environment(\.inlineActionButtons, AnyView(detailInlineActions))
                 .environment(\.emptyStateActions, EmptyStateActions(
+                    onCreateVault: {
+                        showingAddVault = true
+                    },
                     onCreateCollection: {
                         showingNewCollection = true
                         newCollectionName = ""
@@ -136,6 +140,9 @@ struct IPadContentView: View {
         }
         .sheet(isPresented: $showingSettings) {
             iOSSettingsView(onDismiss: { showingSettings = false })
+        }
+        .sheet(isPresented: $showingAddVault) {
+            IPadAddVaultSheet(isPresented: $showingAddVault)
         }
         .sheet(isPresented: $showingNewNote) {
             newNoteSheet
@@ -421,6 +428,27 @@ struct IPadContentView: View {
             } else {
                 if appState.selectedVault != nil {
                     collectionsSection
+                } else if appState.vaults.isEmpty {
+                    // No vaults at all — guide user to create one
+                    Section {
+                        Button {
+                            showingAddVault = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(MahoTheme.accent(for: colorScheme))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Add a Vault")
+                                        .fontWeight(.medium)
+                                    Text("Create a vault to start taking notes")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
                 } else {
                     Section {
                         Text("Select a vault")
