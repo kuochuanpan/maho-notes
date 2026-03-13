@@ -89,6 +89,18 @@ public struct Auth: Sendable {
         self.vaultPath = vaultPath.map { ($0 as NSString).expandingTildeInPath }
     }
 
+    /// Resolve token from stored config only (no CLI fallback).
+    /// Use this in the App where running `gh` CLI is not appropriate (sandboxed, or to require explicit in-app auth).
+    public func resolveStoredToken() throws -> AuthToken {
+        if let stored = try? loadStoredTokenGlobal(), !stored.isEmpty {
+            return AuthToken(token: stored, source: .stored)
+        }
+        if let vaultPath, let stored = try? loadStoredTokenVault(vaultPath: vaultPath), !stored.isEmpty {
+            return AuthToken(token: stored, source: .stored)
+        }
+        throw AuthError.noTokenFound
+    }
+
     /// Resolve token in priority order: $GITHUB_TOKEN → gh auth token → stored in ~/.maho/config.yaml (or vault .maho/)
     public func resolveToken() throws -> AuthToken {
         // 1. Environment variable

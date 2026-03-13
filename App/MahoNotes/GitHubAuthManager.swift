@@ -41,12 +41,13 @@ final class GitHubAuthManager: @unchecked Sendable {
     // MARK: - Public API
 
     /// Check whether a valid stored token exists, and if so fetch the GitHub username.
+    /// Only checks stored tokens (config.yaml) — does NOT try `gh` CLI.
+    /// This ensures the GitHub import option only appears after explicit in-app authentication.
     @MainActor
     func checkAuth() async {
-        // Resolve token off-actor — may run `gh auth token` subprocess on macOS.
         let token: String? = await withCheckedContinuation { continuation in
             Task.detached(priority: .background) {
-                continuation.resume(returning: try? Auth().resolveToken().token)
+                continuation.resume(returning: try? Auth().resolveStoredToken().token)
             }
         }
 

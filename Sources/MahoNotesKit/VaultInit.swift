@@ -21,12 +21,23 @@ public func iCloudContainerExists() -> Bool {
 /// - macOS: `~/Library/Group Containers/group.dev.pcca.mahonotes/`
 ///   (accessible by both the sandboxed app and the CLI without entitlements)
 /// - iOS: `<Documents>/.maho/`
+///
+/// On macOS, uses `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` first
+/// (works correctly in both sandboxed and non-sandboxed contexts). Falls back to the
+/// hardcoded path for CLI builds that lack the App Group entitlement.
 public func mahoConfigBase() -> String {
     #if os(iOS)
     return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         .appendingPathComponent(".maho").path
     #else
-    let groupContainer = ("~/Library/Group Containers/group.dev.pcca.mahonotes" as NSString).expandingTildeInPath
+    let groupContainer: String
+    if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: mahoAppGroupIdentifier) {
+        groupContainer = containerURL.path
+    } else {
+        // Fallback for CLI without App Group entitlement — direct path works
+        // because CLI is not sandboxed, so ~ expands to the real home directory.
+        groupContainer = ("~/Library/Group Containers/\(mahoAppGroupIdentifier)" as NSString).expandingTildeInPath
+    }
     migrateFromLegacyConfigIfNeeded(to: groupContainer)
     return groupContainer
     #endif
