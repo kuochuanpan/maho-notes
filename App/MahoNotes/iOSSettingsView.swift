@@ -330,10 +330,10 @@ struct iOSSettingsView: View {
             }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            // Don't cancel auth on sheet dismiss — the user may have switched to
+            // Safari to enter the code. Polling continues in the background.
+            // Auth is only cancelled explicitly via the Cancel button in DeviceFlowSheet.
             didInitiateAuth = false
-            if !appState.authManager.isAuthenticated {
-                appState.authManager.cancelAuth()
-            }
         }) {
             DeviceFlowSheet(authManager: appState.authManager)
         }

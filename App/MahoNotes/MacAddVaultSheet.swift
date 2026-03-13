@@ -81,9 +81,9 @@ struct MacAddVaultSheet: View {
             }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            // Don't cancel auth on sheet dismiss — polling continues in background.
             didInitiateAuth = false
             if !appState.authManager.isAuthenticated {
-                appState.authManager.cancelAuth()
                 isCreating = false
             }
         }) {

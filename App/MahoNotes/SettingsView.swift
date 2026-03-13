@@ -620,10 +620,9 @@ struct GitHubAccountGroupBox: View {
             }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            // Don't cancel auth on sheet dismiss — polling continues in background.
+            // Auth is only cancelled via the Cancel button in DeviceFlowSheet.
             didInitiateAuth = false
-            if !authManager.isAuthenticated {
-                authManager.cancelAuth()
-            }
         }) {
             DeviceFlowSheet(authManager: authManager)
         }
@@ -716,6 +715,7 @@ struct DeviceFlowSheet: View {
             .padding(.top, 4)
 
             Button("Cancel") {
+                authManager.cancelAuth()
                 dismiss()
             }
             .buttonStyle(.bordered)
