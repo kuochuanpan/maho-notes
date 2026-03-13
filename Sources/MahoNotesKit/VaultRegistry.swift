@@ -124,7 +124,9 @@ func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
         // Only migrate .device vaults (local path-based vaults stay as-is)
         guard entry.type == .device else { continue }
 
-        let sourcePath = resolvedPath(for: entry).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        // Only trim trailing slash — leading "/" is part of the absolute path
+        var sourcePath = resolvedPath(for: entry)
+        while sourcePath.hasSuffix("/") { sourcePath.removeLast() }
         let destPath = (iCloudVaultsBase as NSString).appendingPathComponent(entry.name)
 
         // Skip if source doesn't exist
@@ -166,7 +168,9 @@ func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
     for (index, entry) in registry.vaults.enumerated() {
         guard entry.type == .icloud else { continue }
 
-        let sourcePath = resolvedPath(for: entry).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        // Only trim trailing slash — leading "/" is part of the absolute path
+        var sourcePath = resolvedPath(for: entry)
+        while sourcePath.hasSuffix("/") { sourcePath.removeLast() }
         let destPath = (localVaultsBase as NSString).appendingPathComponent(entry.name)
 
         guard fm.fileExists(atPath: sourcePath) else { continue }
