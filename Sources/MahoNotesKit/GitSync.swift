@@ -462,7 +462,7 @@ public struct GitSync: Sendable {
     }
 
     private func printWarning(_ message: String) {
-        print("⚠ \(message)")
+        Log.sync.warning("\(message)")
     }
 }
 #endif

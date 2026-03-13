@@ -475,7 +475,7 @@ func loadRegistry(globalConfigDir: String = mahoConfigBase()) throws -> VaultReg
             do {
                 content = try coordinatedRead(at: iCloudPath)
             } catch {
-                print("Warning: coordinated read from iCloud failed (\(error.localizedDescription)), falling back to regular read")
+                Log.sync.warning("coordinated read from iCloud failed (\(error.localizedDescription)), falling back to regular read")
                 content = try String(contentsOfFile: iCloudPath, encoding: .utf8)
             }
             return try YAMLDecoder().decode(VaultRegistry.self, from: content)
@@ -511,7 +511,7 @@ func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = mahoConfi
         do {
             try coordinatedWrite(yaml, to: primaryPath)
         } catch {
-            print("Warning: coordinated write to iCloud failed (\(error.localizedDescription)), falling back to regular write")
+            Log.sync.warning("coordinated write to iCloud failed (\(error.localizedDescription)), falling back to regular write")
             try yaml.write(toFile: primaryPath, atomically: true, encoding: .utf8)
         }
 

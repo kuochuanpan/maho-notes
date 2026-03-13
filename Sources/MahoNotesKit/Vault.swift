@@ -516,7 +516,7 @@ func updateFrontmatterField(filePath: String, field: String, value: String) {
     do {
         try updatedLines.joined(separator: "\n").write(toFile: filePath, atomically: true, encoding: .utf8)
     } catch {
-        print("[MahoNotesKit] updateFrontmatterField failed for \(filePath): \(error)")
+        Log.kit.error("updateFrontmatterField failed for \(filePath): \(error)")
     }
 }
 

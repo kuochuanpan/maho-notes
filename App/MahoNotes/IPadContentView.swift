@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import os
 import MahoNotesKit
 
 /// iPad layout using 3-column NavigationSplitView matching macOS:
@@ -129,7 +130,7 @@ struct IPadContentView: View {
                 do {
                     try appState.deleteNote(relativePath: sheets.deleteNotePath)
                 } catch {
-                    print("[MahoNotes] deleteNote failed: \(error)")
+                    Logger(subsystem: "dev.pcca.maho-notes", category: "app").error("deleteNote failed: \(error)")
                 }
             }
         } message: {
@@ -157,7 +158,7 @@ struct IPadContentView: View {
                         try appState.deleteSubCollection(collectionId: sheets.deleteCollectionId)
                     }
                 } catch {
-                    print("[MahoNotes] deleteCollection failed: \(error)")
+                    Logger(subsystem: "dev.pcca.maho-notes", category: "app").error("deleteCollection failed: \(error)")
                 }
             }
         } message: {

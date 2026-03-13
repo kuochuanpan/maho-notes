@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import os
 import MahoNotesKit
 
 /// iPhone layout: ZStack with custom slide-over vault rail sidebar.
@@ -101,7 +102,7 @@ struct iPhoneContentView: View {
                 do {
                     try appState.deleteNote(relativePath: sheets.deleteNotePath)
                 } catch {
-                    print("[MahoNotes] deleteNote failed: \(error)")
+                    Logger(subsystem: "dev.pcca.maho-notes", category: "app").error("deleteNote failed: \(error)")
                 }
             }
         } message: {
@@ -129,7 +130,7 @@ struct iPhoneContentView: View {
                         try appState.deleteSubCollection(collectionId: sheets.deleteCollectionId)
                     }
                 } catch {
-                    print("[MahoNotes] deleteCollection failed: \(error)")
+                    Logger(subsystem: "dev.pcca.maho-notes", category: "app").error("deleteCollection failed: \(error)")
                 }
             }
         } message: {
@@ -656,7 +657,7 @@ struct iPhoneContentView: View {
                             try appState.createSubCollection(name: name, parentId: sheets.newSubCollectionParentId)
                             sheets.showingNewSubCollection = false
                         } catch {
-                            print("[MahoNotes] iPhone: sub-collection error: \(error)")
+                            Logger(subsystem: "dev.pcca.maho-notes", category: "app").error("sub-collection creation failed: \(error)")
                             sheets.subCollectionError = error.localizedDescription
                         }
                     }

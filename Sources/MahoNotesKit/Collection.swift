@@ -59,7 +59,7 @@ public func loadCollections(from vaultPath: String) throws -> [Collection] {
             let merged = mahoContent + separator + legacyContent
             try merged.write(to: mahoURL, atomically: true, encoding: .utf8)
             try fm.removeItem(at: legacyURL)
-            print("Migrated collections from collections.yaml → maho.yaml")
+            Log.kit.info("Migrated collections from collections.yaml → maho.yaml")
         }
     }
 
