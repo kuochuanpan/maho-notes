@@ -231,7 +231,7 @@ public actor VaultStore {
     /// from causing unexpected merges when cloud sync is re-enabled.
     public func cleanupCloudArtifacts() throws {
         let fm = FileManager.default
-        let iCloudBase = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents" as NSString).expandingTildeInPath
+        let iCloudBase = iCloudDocumentsBasePath()
 
         // Remove iCloud registry
         let iCloudConfigDir = (iCloudBase as NSString).appendingPathComponent("config")

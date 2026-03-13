@@ -164,7 +164,7 @@ struct VaultAddSubcommand: AsyncParsableCommand {
             throw ValidationError("Cannot create an iCloud vault: Cloud Sync is OFF. Use --device instead, or enable Cloud Sync with: mn config set --global sync.cloud icloud")
         }
 
-        let base = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        let base = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
         let vaultPath = (base as NSString).appendingPathComponent(name)
 
         try initVault(

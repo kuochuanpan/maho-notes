@@ -10,7 +10,10 @@ public enum StorageOption: String, Sendable, CaseIterable {
 // MARK: - iCloud detection
 
 public func iCloudContainerExists() -> Bool {
-    let path = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes" as NSString).expandingTildeInPath
+    // Use the system-resolved iCloud base path (works correctly in sandboxed apps).
+    // The hardcoded ~/Library/Mobile Documents/... path breaks under App Sandbox
+    // because ~ expands to the sandbox container, not the real home directory.
+    let path = iCloudDocumentsBasePath()
     return FileManager.default.fileExists(atPath: path)
 }
 
@@ -88,7 +91,7 @@ public func resolveVaultRoot(storage: StorageOption?) -> String {
         return mahoConfigBase() + "/vaults"
     case nil:
         if iCloudContainerExists() {
-            return ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+            return (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
         }
         return mahoConfigBase() + "/vaults"
     }
@@ -241,7 +244,7 @@ func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, gl
         resolvedType = .github
     } else {
         let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
-        let iCloudRoot = ("~/Library/Mobile Documents/iCloud~dev~pcca~mahonotes/Documents/vaults" as NSString).expandingTildeInPath
+        let iCloudRoot = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
         if cloudSync == .icloud && vaultPath.hasPrefix(iCloudRoot) {
             resolvedType = .icloud
         } else {
