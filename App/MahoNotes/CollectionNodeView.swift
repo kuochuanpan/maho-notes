@@ -239,7 +239,7 @@ struct CollectionNodeView: View {
         .listRowBackground(
             MahoTheme.accent(for: colorScheme)
                 .opacity(appState.navigatorSelection.contains(path) ? 0.25 : 0)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         )
         #if os(macOS)
         .onTapGesture {

@@ -149,16 +149,18 @@ struct NavigatorView: View {
 
     // MARK: - List Content
 
-    /// Uses `List(selection:)` for native sidebar styling with ↑↓ keyboard navigation.
+    /// Uses a plain List with manual selection via `.listRowBackground()`.
+    /// `List(selection:)` was removed because macOS sidebar style draws
+    /// NSTableView's system-accent selection ON TOP of `.listRowBackground()`,
+    /// making it impossible to override the color via SwiftUI alone.
+    /// Selection is handled by explicit `.onTapGesture` on each row.
     private var scrollContent: some View {
-        @Bindable var state = appState
-        return List(selection: $state.navigatorSelection) {
+        return List {
             collectionsSection
             recentSection
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .tint(MahoTheme.accent(for: colorScheme))
         .onChange(of: appState.navigatorSelection) { _, newValue in
             appState.handleNavigatorSelectionChange(newValue)
         }
@@ -300,8 +302,11 @@ struct NavigatorView: View {
         .listRowBackground(
             MahoTheme.accent(for: colorScheme)
                 .opacity(appState.navigatorSelection.contains(note.relativePath) ? 0.25 : 0)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         )
+        .onTapGesture {
+            appState.navigatorSelection = [note.relativePath]
+        }
     }
 
     // MARK: - New Collection Sheet

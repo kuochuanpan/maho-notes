@@ -422,7 +422,6 @@ struct IPadContentView: View {
                 }
             }
         }
-        .tint(MahoTheme.accent(for: colorScheme))
     }
 
     // MARK: - Collections Section
@@ -569,7 +568,7 @@ struct IPadContentView: View {
         .listRowBackground(
             MahoTheme.accent(for: colorScheme)
                 .opacity(selectedNotePath == note.relativePath ? 0.25 : 0)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
