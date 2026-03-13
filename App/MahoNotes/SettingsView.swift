@@ -40,31 +40,50 @@ struct VaultsSettingsTab: View {
         VStack(alignment: .leading, spacing: 16) {
             // MARK: - Cloud Sync
             GroupBox {
-                HStack(spacing: 12) {
-                    Image(systemName: "icloud")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .frame(width: 28)
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "icloud")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+                            .frame(width: 28)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Cloud Sync")
-                            .fontWeight(.medium)
-                        Text("Sync vaults and settings via iCloud")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Cloud Sync")
+                                .fontWeight(.medium)
+                            Text("Sync vaults and settings via iCloud")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if appState.cloudSync.isMigrating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Picker("", selection: Binding(
+                                get: { appState.cloudSync.cloudSyncMode },
+                                set: { appState.cloudSync.requestCloudSyncChange(to: $0) }
+                            )) {
+                                Text("iCloud").tag(CloudSyncMode.icloud)
+                                Text("Off").tag(CloudSyncMode.off)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 140)
+                        }
                     }
 
-                    Spacer()
-
-                    Picker("", selection: Binding(
-                        get: { appState.cloudSync.cloudSyncMode },
-                        set: { appState.cloudSync.requestCloudSyncChange(to: $0) }
-                    )) {
-                        Text("iCloud").tag(CloudSyncMode.icloud)
-                        Text("Off").tag(CloudSyncMode.off)
+                    if let status = appState.cloudSync.migrationStatus {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 40)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 140)
                 }
                 .padding(4)
             }

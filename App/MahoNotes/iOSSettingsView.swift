@@ -37,15 +37,30 @@ struct iOSSettingsView: View {
 
                         Spacer()
 
-                        Picker("", selection: Binding(
-                            get: { appState.cloudSync.cloudSyncMode },
-                            set: { appState.cloudSync.requestCloudSyncChange(to: $0) }
-                        )) {
-                            Text("iCloud").tag(CloudSyncMode.icloud)
-                            Text("Off").tag(CloudSyncMode.off)
+                        if appState.cloudSync.isMigrating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Picker("", selection: Binding(
+                                get: { appState.cloudSync.cloudSyncMode },
+                                set: { appState.cloudSync.requestCloudSyncChange(to: $0) }
+                            )) {
+                                Text("iCloud").tag(CloudSyncMode.icloud)
+                                Text("Off").tag(CloudSyncMode.off)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 140)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 140)
+                    }
+
+                    if let status = appState.cloudSync.migrationStatus {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 

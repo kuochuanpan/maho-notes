@@ -10,6 +10,12 @@ import MahoNotesKit
     /// Current cloud sync mode (read from global config).
     var cloudSyncMode: CloudSyncMode = .off
 
+    /// Whether a cloud migration is in progress.
+    var isMigrating: Bool = false
+
+    /// Status text during migration (e.g. "Migrating vaults to iCloud…").
+    var migrationStatus: String?
+
     /// Whether the merge confirmation sheet is showing.
     var showMergeSheet: Bool = false
 
@@ -39,6 +45,10 @@ import MahoNotesKit
         Task {
             if mode == .off {
                 // Turning off — migrate vaults back to local, then disable
+                isMigrating = true
+                migrationStatus = "Moving vaults to local storage…"
+                defer { isMigrating = false; migrationStatus = nil }
+
                 if let localRegistry = try? await store.loadRegistry() {
                     if let migrated = try? await store.migrateFromCloud(localRegistry) {
                         await applyCloudSyncMode(.off)
@@ -52,10 +62,14 @@ import MahoNotesKit
             }
 
             // Turning on — check if iCloud already has a registry
+            isMigrating = true
+            migrationStatus = "Checking iCloud…"
+
             let check = await store.checkCloudRegistryExists()
             switch check {
             case .noCloudRegistry:
                 // No conflict — activate, migrate vaults to iCloud, and save
+                migrationStatus = "Migrating vaults to iCloud…"
                 await applyCloudSyncMode(.icloud)
                 if var localRegistry = try? await store.loadRegistry() {
                     if let migrated = try? await store.migrateToCloud(localRegistry) {
@@ -64,8 +78,12 @@ import MahoNotesKit
                     try? await store.saveRegistry(localRegistry)
                     await appState?.loadRegistryAsync()
                 }
+                isMigrating = false
+                migrationStatus = nil
             case .cloudRegistryExists(let cloudRegistry):
                 // Need merge — show confirmation
+                isMigrating = false
+                migrationStatus = nil
                 pendingCloudRegistry = cloudRegistry
                 showMergeSheet = true
             }
@@ -75,6 +93,10 @@ import MahoNotesKit
     /// Merge local vaults with cloud registry.
     func performMerge() {
         Task {
+            isMigrating = true
+            migrationStatus = "Merging vaults…"
+            defer { isMigrating = false; migrationStatus = nil }
+
             // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
             let localRegistrySnapshot: VaultRegistry?
             do {
@@ -95,6 +117,7 @@ import MahoNotesKit
             var (merged, conflicts) = await store.mergeRegistries(local: localRegistry, cloud: cloudRegistry)
 
             // Activate cloud sync, then migrate device vaults to iCloud and save
+            migrationStatus = "Migrating vaults to iCloud…"
             await applyCloudSyncMode(.icloud)
             if let migrated = try? await store.migrateToCloud(merged) {
                 merged = migrated
@@ -119,6 +142,10 @@ import MahoNotesKit
     /// Replace cloud registry with local registry (discard cloud).
     func replaceCloudWithLocal() {
         Task {
+            isMigrating = true
+            migrationStatus = "Migrating vaults to iCloud…"
+            defer { isMigrating = false; migrationStatus = nil }
+
             // Load local registry BEFORE switching to iCloud mode
             // (otherwise loadRegistry reads from iCloud and gets the cloud registry)
             let localRegistrySnapshot: VaultRegistry?
