@@ -387,7 +387,7 @@ struct IPadContentView: View {
 
     @ViewBuilder
     private var navigatorContent: some View {
-        List(selection: $selectedNotePath) {
+        List {
             if !searchQuery.isEmpty {
                 searchResultsSection
             } else {
@@ -565,6 +565,10 @@ struct IPadContentView: View {
             hasConflict: appState.conflict(for: note.relativePath) != nil,
             hasGitHubConflict: appState.githubConflictFile(for: note.relativePath) != nil
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedNotePath = note.relativePath
+        }
         .listRowBackground(
             MahoTheme.accent(for: colorScheme)
                 .opacity(selectedNotePath == note.relativePath ? 0.25 : 0)
