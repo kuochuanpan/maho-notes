@@ -1,0 +1,183 @@
+import Foundation
+import Yams
+
+/// A node in the vault file tree — either a directory (collection/subcollection) or a note (leaf).
+///
+/// Value type (struct) so SwiftUI correctly detects tree mutations
+/// (e.g. new sub-collections) when the file tree is rebuilt.
+public struct FileTreeNode: Identifiable, Sendable, Equatable {
+    public let id: String                     // relative path from vault root
+    public let name: String                   // display name
+    public let icon: String                   // SF Symbol name
+    public let isDirectory: Bool
+    public let note: Note?                    // non-nil for leaf nodes
+    public let children: [FileTreeNode]       // sorted: directories first, then notes
+
+    public init(
+        id: String,
+        name: String,
+        icon: String,
+        isDirectory: Bool,
+        note: Note? = nil,
+        children: [FileTreeNode] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.isDirectory = isDirectory
+        self.note = note
+        self.children = children
+    }
+}
+
+extension Vault {
+    /// Build a hierarchical file tree from the vault's collections and notes.
+    ///
+    /// Top-level directories become collection nodes (with icon/name from maho.yaml or _index.md).
+    /// Subdirectories become subcollection nodes. Markdown files become note leaves.
+    public func buildFileTree() throws -> [FileTreeNode] {
+        let collections = try self.collections()
+        let collectionMap = Dictionary(uniqueKeysWithValues: collections.map { ($0.id, $0) })
+        let allNotes = try self.allNotes()
+
+        // Group notes by their directory path
+        var notesByDir: [String: [Note]] = [:]
+        for note in allNotes {
+            let dir = (note.relativePath as NSString).deletingLastPathComponent
+            notesByDir[dir, default: []].append(note)
+        }
+
+        // Discover all directories in the vault (recursively)
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+
+        // Build set of all directory paths that contain content (directly or in subdirs).
+        // Include directories from notes AND from filesystem scan (to catch dirs with only _index.md).
+        var allDirs: Set<String> = []
+
+        // 1. Directories inferred from note paths
+        for note in allNotes {
+            let components = note.relativePath.split(separator: "/").dropLast() // drop filename
+            var current = ""
+            for comp in components {
+                current = current.isEmpty ? String(comp) : current + "/" + String(comp)
+                allDirs.insert(current)
+            }
+        }
+
+        // 2. Directories from filesystem (catches dirs with only _index.md or empty subdirs)
+        // Resolve symlinks for reliable prefix stripping (iOS: /var → /private/var)
+        let resolvedVaultPath = vaultURL.resolvingSymlinksInPath().path
+        let vaultPrefix = resolvedVaultPath.hasSuffix("/") ? resolvedVaultPath : resolvedVaultPath + "/"
+
+        if let enumerator = fm.enumerator(
+            at: vaultURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let dirURL as URL in enumerator {
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue else { continue }
+                let dirName = dirURL.lastPathComponent
+                guard !dirName.hasPrefix("_"), !dirName.hasPrefix(".") else {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                let resolvedDirPath = dirURL.resolvingSymlinksInPath().path
+                guard resolvedDirPath.hasPrefix(vaultPrefix) else { continue }
+                let relativePath = String(resolvedDirPath.dropFirst(vaultPrefix.count))
+                guard !relativePath.isEmpty else { continue }
+                allDirs.insert(relativePath)
+            }
+        }
+
+        // Build tree recursively from top-level directories
+        func buildNode(relativePath: String, depth: Int) -> FileTreeNode? {
+            let dirName = (relativePath as NSString).lastPathComponent
+            let absPath = vaultURL.appendingPathComponent(relativePath).path
+
+            guard fm.fileExists(atPath: absPath) else { return nil }
+
+            // Get display info
+            let name: String
+            let icon: String
+
+            if depth == 0, let col = collectionMap[dirName] {
+                // Top-level collection with maho.yaml metadata
+                name = col.name
+                icon = col.icon.isEmpty ? "folder" : col.icon
+            } else {
+                // Subcollection — check _index.md for title, else use dirname
+                let indexPath = (absPath as NSString).appendingPathComponent("_index.md")
+                if let indexContent = try? String(contentsOfFile: indexPath, encoding: .utf8) {
+                    let (yamlStr, _) = splitFrontmatter(indexContent)
+                    if let yamlStr,
+                       let yaml = try? Yams.load(yaml: yamlStr) as? [String: Any],
+                       let title = yaml["title"] as? String {
+                        name = title
+                    } else {
+                        name = dirName
+                    }
+                } else {
+                    name = dirName
+                }
+                icon = "folder"
+            }
+
+            // Read _index.md ordering for this directory
+            let (noteOrder, childOrder) = readDirectoryOrder(at: absPath)
+
+            // Find child directories
+            let childDirs = allDirs.filter { dirPath in
+                let parent = (dirPath as NSString).deletingLastPathComponent
+                return parent == relativePath
+            }
+
+            // Sort child directories by _index.md children order
+            let sortedChildDirs = sortByOrder(Array(childDirs), order: childOrder) {
+                ($0 as NSString).lastPathComponent
+            }
+
+            // Build child directory nodes
+            var children: [FileTreeNode] = sortedChildDirs.compactMap { childDir in
+                buildNode(relativePath: childDir, depth: depth + 1)
+            }
+
+            // Add note leaves for this directory (sorted by _index.md order)
+            let dirNotes = sortByOrder(notesByDir[relativePath] ?? [], order: noteOrder) {
+                ($0.relativePath as NSString).lastPathComponent
+            }
+            for note in dirNotes {
+                children.append(FileTreeNode(
+                    id: note.relativePath,
+                    name: note.title,
+                    icon: "doc.text",
+                    isDirectory: false,
+                    note: note
+                ))
+            }
+
+            // Show all directories — empty ones represent user-created collections
+            // that just don't have notes yet.
+            return FileTreeNode(
+                id: relativePath,
+                name: name,
+                icon: icon,
+                isDirectory: true,
+                children: children
+            )
+        }
+
+        // Get top-level directories
+        let topLevelDirs = allDirs.filter { !$0.contains("/") }.sorted()
+
+        // Build top-level nodes, preserving maho.yaml order for defined collections
+        let definedIds = collections.map { $0.id }
+        let discoveredIds = topLevelDirs.filter { !definedIds.contains($0) }
+        let orderedIds = definedIds + discoveredIds
+
+        return orderedIds.compactMap { dirId in
+            buildNode(relativePath: dirId, depth: 0)
+        }
+    }
+}
