@@ -34,7 +34,7 @@ final class GitHubAuthManager: @unchecked Sendable {
     @MainActor var verificationURL: String?
 
     /// Active polling task (so we can cancel on disconnect or re-auth).
-    @MainActor private var pollingTask: Task<Void, Never>?
+    @MainActor private var pollingTask: Task<OAuthTokenResponse, any Error>?
 
     nonisolated init() {}
 
@@ -67,6 +67,10 @@ final class GitHubAuthManager: @unchecked Sendable {
             username = nil
         }
     }
+
+    /// Called after successful authentication so dependents (e.g. SyncCoordinator)
+    /// can reinitialize with the new token.
+    @MainActor var onAuthenticated: (() -> Void)?
 
     /// Start the GitHub Device Flow.
     ///
@@ -101,10 +105,15 @@ final class GitHubAuthManager: @unchecked Sendable {
             userCode = codeResponse.userCode
             verificationURL = codeResponse.verificationUri
 
-            // Step 3: Poll for token in background
-            let tokenResponse = try await flow.pollForToken(deviceCode: codeResponse)
+            // Step 3: Poll for token in a cancellable Task
+            let pollTask = Task {
+                try await flow.pollForToken(deviceCode: codeResponse)
+            }
+            pollingTask = pollTask
+            let tokenResponse = try await pollTask.value
 
             // Step 4: Store token and fetch username
+            pollingTask = nil
             try Auth().storeToken(tokenResponse.accessToken)
             let name = try await fetchUsername(token: tokenResponse.accessToken)
 
@@ -113,7 +122,11 @@ final class GitHubAuthManager: @unchecked Sendable {
             isAuthenticating = false
             userCode = nil
             verificationURL = nil
+
+            // Notify dependents (e.g. SyncCoordinator) that auth is ready
+            onAuthenticated?()
         } catch {
+            pollingTask = nil
             isAuthenticating = false
             userCode = nil
             verificationURL = nil

@@ -80,6 +80,12 @@ import os
                 self.reloadCurrentVault()
             }
         }
+
+        // Re-initialize SyncCoordinator when GitHub auth completes
+        authManager.onAuthenticated = { [weak self] in
+            guard let self else { return }
+            self.syncCoordinator.startResolving(vaults: self.vaults)
+        }
     }
 
     /// Update a note in both allNotes and notesByCollection.
