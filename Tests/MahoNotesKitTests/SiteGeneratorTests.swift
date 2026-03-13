@@ -72,6 +72,21 @@ struct SiteGeneratorTests {
         #expect(html.contains("<ruby><rb>首都</rb>"))
     }
 
+    @Test func rubyAnnotationInTable() {
+        let md = """
+        | 漢字 | 読み |
+        |------|------|
+        | {漢字|かんじ} | kanji |
+        | {日本語|にほんご} | Japanese |
+        """
+        let html = renderer.render(md)
+        #expect(html.contains("<ruby><rb>漢字</rb><rp>(</rp><rt>かんじ</rt><rp>)</rp></ruby>"))
+        #expect(html.contains("<ruby><rb>日本語</rb><rp>(</rp><rt>にほんご</rt><rp>)</rp></ruby>"))
+        // Should have exactly 2 data rows (not broken by ruby pipe)
+        let tdCount = html.components(separatedBy: "<td>").count - 1
+        #expect(tdCount == 4) // 2 rows × 2 columns
+    }
+
     // MARK: - Admonitions
 
     @Test func admonitionTip() {

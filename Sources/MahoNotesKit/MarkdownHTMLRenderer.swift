@@ -6,10 +6,31 @@ public struct MarkdownHTMLRenderer: Sendable {
     public init() {}
 
     public func render(_ markdown: String) -> String {
-        let preprocessed = preprocessMath(markdown)
+        let withRubyPlaceholders = preprocessRubyAnnotations(markdown)
+        let preprocessed = preprocessMath(withRubyPlaceholders)
         let document = Document(parsing: preprocessed, options: [.parseBlockDirectives, .parseSymbolLinks])
         var visitor = HTMLVisitor()
         return visitor.visit(document)
+    }
+
+    /// Replace ruby annotations {base|reading} with placeholders before markdown parsing.
+    /// This prevents the `|` inside ruby syntax from being interpreted as a table column separator.
+    private func preprocessRubyAnnotations(_ text: String) -> String {
+        // Match {base|annotation} — base and annotation must not contain } or {
+        let pattern = try! NSRegularExpression(pattern: "\\{([^|{}]+)\\|([^{}]+)\\}", options: [])
+        let nsRange = NSRange(text.startIndex..., in: text)
+        var result = text
+        let matches = pattern.matches(in: result, range: nsRange)
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result),
+                  let baseRange = Range(match.range(at: 1), in: result),
+                  let annotRange = Range(match.range(at: 2), in: result) else { continue }
+            let base = String(result[baseRange])
+            let annotation = String(result[annotRange])
+            let encoded = Data("\(base)\t\(annotation)".utf8).base64EncodedString()
+            result.replaceSubrange(range, with: "<!--RUBY:\(encoded)-->")
+        }
+        return result
     }
 
     /// Extract math blocks before markdown parsing to avoid interference
@@ -127,19 +148,26 @@ func processHighlight(_ text: String) -> String {
     return result
 }
 
-/// Process ruby annotations: {base|annotation} -> <ruby> HTML
-func processRubyAnnotations(_ text: String) -> String {
-    let pattern = try! NSRegularExpression(pattern: "\\{([^|\\}]+)\\|([^\\}]+)\\}", options: [])
+/// Restore ruby annotation placeholders (<!--RUBY:base64-->) to <ruby> HTML.
+/// Used in visitText and visitInlineHTML to convert preprocessed placeholders.
+func restoreRubyPlaceholders(_ text: String) -> String {
+    let pattern = try! NSRegularExpression(pattern: "<!--RUBY:([A-Za-z0-9+/=]+)-->", options: [])
     let nsRange = NSRange(text.startIndex..., in: text)
     var result = text
-    let matches = pattern.matches(in: text, range: nsRange)
+    let matches = pattern.matches(in: result, range: nsRange)
     for match in matches.reversed() {
         guard let range = Range(match.range, in: result),
-              let baseRange = Range(match.range(at: 1), in: result),
-              let annotRange = Range(match.range(at: 2), in: result) else { continue }
-        let base = String(result[baseRange])
-        let annotation = String(result[annotRange])
-        result.replaceSubrange(range, with: "<ruby><rb>\(base)</rb><rp>(</rp><rt>\(annotation)</rt><rp>)</rp></ruby>")
+              let encodedRange = Range(match.range(at: 1), in: result) else { continue }
+        let encoded = String(result[encodedRange])
+        if let data = Data(base64Encoded: encoded),
+           let decoded = String(data: data, encoding: .utf8) {
+            let parts = decoded.split(separator: "\t", maxSplits: 1)
+            if parts.count == 2 {
+                let base = escapeHTML(String(parts[0]))
+                let annotation = escapeHTML(String(parts[1]))
+                result.replaceSubrange(range, with: "<ruby><rb>\(base)</rb><rp>(</rp><rt>\(annotation)</rt><rp>)</rp></ruby>")
+            }
+        }
     }
     return result
 }
@@ -175,7 +203,7 @@ private struct HTMLVisitor: MarkupVisitor {
 
     mutating func visitText(_ text: Markdown.Text) -> String {
         let escaped = escapeHTML(text.string)
-        let withRuby = processRubyAnnotations(escaped)
+        let withRuby = restoreRubyPlaceholders(escaped)
         return processHighlight(withRuby)
     }
 
@@ -346,10 +374,10 @@ private struct HTMLVisitor: MarkupVisitor {
     }
 
     mutating func visitHTMLBlock(_ html: HTMLBlock) -> String {
-        return html.rawHTML
+        return restoreRubyPlaceholders(html.rawHTML)
     }
 
     mutating func visitInlineHTML(_ html: InlineHTML) -> String {
-        return html.rawHTML
+        return restoreRubyPlaceholders(html.rawHTML)
     }
 }
