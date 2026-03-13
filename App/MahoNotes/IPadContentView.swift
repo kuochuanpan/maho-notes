@@ -133,8 +133,8 @@ struct IPadContentView: View {
         }
         .onChange(of: selectedNotePath) { oldValue, newValue in
             // Auto-save before switching to a different note
-            if oldValue != nil && oldValue != newValue && appState.hasUnsavedChanges {
-                appState.saveNote()
+            if oldValue != nil && oldValue != newValue && appState.editorState.hasUnsavedChanges {
+                appState.editorState.saveNote()
             }
             appState.selectNote(path: newValue)
         }
@@ -333,8 +333,8 @@ struct IPadContentView: View {
                             selectedNotePath = path
                             showingNewNote = false
                             // Auto-enter edit mode for new note
-                            appState.viewMode = .editor
-                            appState.startEditing()
+                            appState.editorState.viewMode = .editor
+                            appState.editorState.startEditing()
                         } catch {
                             noteError = error.localizedDescription
                         }
@@ -524,15 +524,15 @@ struct IPadContentView: View {
                     Divider()
 
                     Button {
-                        appState.pasteNotes(toCollection: node.id)
+                        appState.clipboard.pasteNotes(toCollection: node.id)
                     } label: {
-                        if let clipboard = appState.noteClipboard, clipboard.count > 1 {
+                        if let clipboard = appState.clipboard.entries, clipboard.count > 1 {
                             Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
                         } else {
                             Label("Paste Note", systemImage: "doc.on.clipboard")
                         }
                     }
-                    .disabled(appState.noteClipboard == nil)
+                    .disabled(appState.clipboard.entries == nil)
 
                     Divider()
 
@@ -622,7 +622,7 @@ struct IPadContentView: View {
         .contextMenu {
             Button {
                 appState.selectedNotePath = note.relativePath
-                appState.copySelectedNotes()
+                appState.clipboard.copySelectedNotes()
             } label: {
                 Label("Copy Note", systemImage: "doc.on.doc")
             }

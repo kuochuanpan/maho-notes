@@ -57,8 +57,8 @@ struct VaultsSettingsTab: View {
                     Spacer()
 
                     Picker("", selection: Binding(
-                        get: { appState.cloudSyncMode },
-                        set: { appState.requestCloudSyncChange(to: $0) }
+                        get: { appState.cloudSync.cloudSyncMode },
+                        set: { appState.cloudSync.requestCloudSyncChange(to: $0) }
                     )) {
                         Text("iCloud").tag(CloudSyncMode.icloud)
                         Text("Off").tag(CloudSyncMode.off)
@@ -116,19 +116,19 @@ struct VaultsSettingsTab: View {
         }
         // MARK: - Cloud Sync Merge Sheet
         .sheet(isPresented: Binding(
-            get: { appState.showMergeSheet },
-            set: { if !$0 { appState.cancelMerge() } }
+            get: { appState.cloudSync.showMergeSheet },
+            set: { if !$0 { appState.cloudSync.cancelMerge() } }
         )) {
             cloudSyncMergeSheet
         }
         // MARK: - Merge Result Alert
         .alert("Merge Complete", isPresented: Binding(
-            get: { appState.showMergeResult },
-            set: { _ in appState.showMergeResult = false }
+            get: { appState.cloudSync.showMergeResult },
+            set: { _ in appState.cloudSync.showMergeResult = false }
         )) {
-            Button("OK") { appState.showMergeResult = false }
+            Button("OK") { appState.cloudSync.showMergeResult = false }
         } message: {
-            let conflicts = appState.lastMergeConflicts
+            let conflicts = appState.cloudSync.lastMergeConflicts
             if conflicts.isEmpty {
                 Text("Vaults merged successfully with no conflicts.")
             } else {
@@ -143,7 +143,7 @@ struct VaultsSettingsTab: View {
 
     @ViewBuilder
     private var cloudSyncMergeSheet: some View {
-        let cloudVaults = appState.pendingCloudRegistry?.vaults ?? []
+        let cloudVaults = appState.cloudSync.pendingCloudRegistry?.vaults ?? []
         VStack(spacing: 16) {
             Image(systemName: "icloud.and.arrow.down")
                 .font(.largeTitle)
@@ -174,14 +174,14 @@ struct VaultsSettingsTab: View {
             .frame(maxWidth: 280)
 
             VStack(spacing: 8) {
-                Button(action: { appState.performMerge() }) {
+                Button(action: { appState.cloudSync.performMerge() }) {
                     Label("Merge", systemImage: "arrow.triangle.merge")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Button(action: { appState.replaceCloudWithLocal() }) {
+                Button(action: { appState.cloudSync.replaceCloudWithLocal() }) {
                     Label("Replace with Local", systemImage: "arrow.up.to.line")
                         .frame(maxWidth: .infinity)
                 }
@@ -189,7 +189,7 @@ struct VaultsSettingsTab: View {
                 .controlSize(.large)
 
                 Button("Cancel", role: .cancel) {
-                    appState.cancelMerge()
+                    appState.cloudSync.cancelMerge()
                 }
                 .controlSize(.large)
             }

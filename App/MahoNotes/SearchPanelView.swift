@@ -13,7 +13,7 @@ struct SearchPanelView: View {
             togglesSection
             Divider()
 
-            if !appState.searchQuery.isEmpty {
+            if !appState.searchManager.searchQuery.isEmpty {
                 resultsList
             } else {
                 quickAccessSection
@@ -30,23 +30,23 @@ struct SearchPanelView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Search notes...", text: Binding(
-                get: { appState.searchQuery },
+                get: { appState.searchManager.searchQuery },
                 set: { newValue in
-                    appState.searchQuery = newValue
+                    appState.searchManager.searchQuery = newValue
                     scheduleSearch()
                 }
             ))
             .textFieldStyle(.plain)
             .focused($isFieldFocused)
             .onSubmit {
-                if let first = appState.searchResults.first {
-                    appState.selectSearchResult(first)
+                if let first = appState.searchManager.searchResults.first {
+                    appState.searchManager.selectSearchResult(first)
                 }
             }
 
-            if !appState.searchQuery.isEmpty {
+            if !appState.searchManager.searchQuery.isEmpty {
                 Button {
-                    appState.clearSearch()
+                    appState.searchManager.clearSearch()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -71,8 +71,8 @@ struct SearchPanelView: View {
                 Spacer()
                 ThemePicker(
                     selection: Binding(
-                        get: { appState.searchScope },
-                        set: { appState.searchScope = $0; scheduleSearch() }
+                        get: { appState.searchManager.searchScope },
+                        set: { appState.searchManager.searchScope = $0; scheduleSearch() }
                     ),
                     options: [("allVaults", "All Vaults"), ("thisVault", "This Vault")]
                 )
@@ -87,8 +87,8 @@ struct SearchPanelView: View {
                 Spacer()
                 ThemePicker(
                     selection: Binding(
-                        get: { appState.searchMode },
-                        set: { appState.searchMode = $0; scheduleSearch() }
+                        get: { appState.searchManager.searchMode },
+                        set: { appState.searchManager.searchMode = $0; scheduleSearch() }
                     ),
                     options: [("text", "Text"), ("semantic", "Semantic"), ("hybrid", "Hybrid")]
                 )
@@ -103,7 +103,7 @@ struct SearchPanelView: View {
 
     private var resultsList: some View {
         Group {
-            if let error = appState.searchError {
+            if let error = appState.searchManager.searchError {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.title3)
@@ -115,12 +115,12 @@ struct SearchPanelView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(20)
-            } else if appState.searchResults.isEmpty {
+            } else if appState.searchManager.searchResults.isEmpty {
                 noResults
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(appState.searchResults, id: \.relativePath) { note in
+                        ForEach(appState.searchManager.searchResults, id: \.relativePath) { note in
                             resultRow(note)
                         }
                     }
@@ -132,7 +132,7 @@ struct SearchPanelView: View {
 
     private func resultRow(_ note: Note) -> some View {
         Button {
-            appState.selectSearchResult(note)
+            appState.searchManager.selectSearchResult(note)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(note.title)
@@ -179,7 +179,7 @@ struct SearchPanelView: View {
 
                 ForEach(appState.recentNotes.prefix(5), id: \.relativePath) { note in
                     Button {
-                        appState.selectSearchResult(note)
+                        appState.searchManager.selectSearchResult(note)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "doc.text")
@@ -211,7 +211,7 @@ struct SearchPanelView: View {
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            appState.performSearch()
+            appState.searchManager.performSearch()
         }
     }
 }

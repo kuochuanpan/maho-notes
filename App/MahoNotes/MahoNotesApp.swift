@@ -53,19 +53,19 @@ struct MahoNotesApp: App {
 
             CommandGroup(after: .toolbar) {
                 Button("Cycle View Mode") {
-                    appState.cycleViewMode()
+                    appState.editorState.cycleViewMode()
                 }
                 .keyboardShortcut("e", modifiers: .command)
             }
 
             CommandGroup(after: .textEditing) {
                 Button("Search Notes") {
-                    appState.toggleSearch()
+                    appState.searchManager.toggleSearch()
                 }
                 .keyboardShortcut("k", modifiers: .command)
 
                 Button("Find in Notes") {
-                    appState.toggleSearch()
+                    appState.searchManager.toggleSearch()
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }

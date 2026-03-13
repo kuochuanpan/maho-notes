@@ -134,6 +134,7 @@ struct MacContentView: View {
 
     var body: some View {
         @Bindable var state = appState
+        @Bindable var search = appState.searchManager
 
         NavigationStack {
         ZStack(alignment: .top) {
@@ -187,7 +188,7 @@ struct MacContentView: View {
             }
 
             // Search panel overlay — drops down from top center when active
-            if appState.showSearchPanel {
+            if appState.searchManager.showSearchPanel {
                 searchOverlay
             }
 
@@ -211,10 +212,10 @@ struct MacContentView: View {
             // Centered search field in the title bar (Slack-style)
             ToolbarItem(placement: .principal) {
                 TitleBarSearchField(
-                    text: $state.searchQuery,
+                    text: $search.searchQuery,
                     onActivate: {
-                        if !appState.showSearchPanel {
-                            appState.showSearchPanel = true
+                        if !appState.searchManager.showSearchPanel {
+                            appState.searchManager.showSearchPanel = true
                         }
                     }
                 )
@@ -230,9 +231,9 @@ struct MacContentView: View {
         } // NavigationStack
         .toolbarBackground(MahoTheme.vaultRailBackground, for: .windowToolbar)
         .toolbarColorScheme(.dark, for: .windowToolbar)
-        .onChange(of: appState.searchQuery) {
-            if !appState.searchQuery.isEmpty && !appState.showSearchPanel {
-                appState.showSearchPanel = true
+        .onChange(of: appState.searchManager.searchQuery) {
+            if !appState.searchManager.searchQuery.isEmpty && !appState.searchManager.showSearchPanel {
+                appState.searchManager.showSearchPanel = true
             }
             scheduleSearch()
         }
@@ -312,8 +313,8 @@ struct MacContentView: View {
                     do {
                         let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
                         showingNewNote = false
-                        appState.viewMode = .editor
-                        appState.startEditing()
+                        appState.editorState.viewMode = .editor
+                        appState.editorState.startEditing()
                     } catch {
                         noteError = error.localizedDescription
                     }
@@ -336,7 +337,7 @@ struct MacContentView: View {
             Color.black.opacity(0.15)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    appState.showSearchPanel = false
+                    appState.searchManager.showSearchPanel = false
                 }
 
             // Search panel dropdown — positioned below the title bar
@@ -406,7 +407,7 @@ struct MacContentView: View {
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            appState.performSearch()
+            appState.searchManager.performSearch()
         }
     }
 

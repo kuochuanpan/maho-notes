@@ -373,15 +373,15 @@ struct iPhoneContentView: View {
                     Divider()
 
                     Button {
-                        appState.pasteNotes(toCollection: node.id)
+                        appState.clipboard.pasteNotes(toCollection: node.id)
                     } label: {
-                        if let clipboard = appState.noteClipboard, clipboard.count > 1 {
-                            Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
+                        if let entries = appState.clipboard.entries, entries.count > 1 {
+                            Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
                         } else {
                             Label("Paste Note", systemImage: "doc.on.clipboard")
                         }
                     }
-                    .disabled(appState.noteClipboard == nil)
+                    .disabled(appState.clipboard.entries == nil)
 
                     Divider()
 
@@ -473,7 +473,7 @@ struct iPhoneContentView: View {
         .contextMenu {
             Button {
                 appState.selectedNotePath = note.relativePath
-                appState.copySelectedNotes()
+                appState.clipboard.copySelectedNotes()
             } label: {
                 Label("Copy Note", systemImage: "doc.on.doc")
             }
@@ -505,7 +505,7 @@ struct iPhoneContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        appState.cycleViewMode(compactWidth: horizontalSizeClass == .compact)
+                        appState.editorState.cycleViewMode(compactWidth: horizontalSizeClass == .compact)
                     } label: {
                         Image(systemName: viewModeIcon)
                     }
@@ -516,14 +516,14 @@ struct iPhoneContentView: View {
             }
             .onDisappear {
                 // Auto-save when navigating back to B column
-                if appState.hasUnsavedChanges {
-                    appState.saveNote()
+                if appState.editorState.hasUnsavedChanges {
+                    appState.editorState.saveNote()
                 }
             }
     }
 
     private var viewModeIcon: String {
-        switch appState.viewMode {
+        switch appState.editorState.viewMode {
         case .preview: return "eye"
         case .editor: return "pencil"
         case .split: return "rectangle.split.2x1"
@@ -617,8 +617,8 @@ struct iPhoneContentView: View {
                             showingNewNote = false
                             navigationPath.append(path)
                             // Auto-enter edit mode for new note
-                            appState.viewMode = .editor
-                            appState.startEditing()
+                            appState.editorState.viewMode = .editor
+                            appState.editorState.startEditing()
                         } catch {
                             noteError = error.localizedDescription
                         }

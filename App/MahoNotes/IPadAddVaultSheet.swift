@@ -74,13 +74,13 @@ struct IPadAddVaultSheet: View {
                 mode = .create
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
+                    Image(systemName: appState.cloudSync.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
                         .font(.title3)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Create New Vault")
                             .fontWeight(.medium)
-                        Text(appState.cloudSyncMode == .icloud ? "Stored in iCloud" : "Stored on this device")
+                        Text(appState.cloudSync.cloudSyncMode == .icloud ? "Stored in iCloud" : "Stored on this device")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -136,9 +136,9 @@ struct IPadAddVaultSheet: View {
 
             Section {
                 HStack {
-                    Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
+                    Image(systemName: appState.cloudSync.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
                         .foregroundStyle(.secondary)
-                    Text(appState.cloudSyncMode == .icloud ? "Will sync via iCloud" : "Stored on this device only")
+                    Text(appState.cloudSync.cloudSyncMode == .icloud ? "Will sync via iCloud" : "Stored on this device only")
                         .foregroundStyle(.secondary)
                 }
             }

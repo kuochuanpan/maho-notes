@@ -42,7 +42,7 @@ struct NoteRowActionsModifier: ViewModifier {
     private var contextMenuContent: some View {
         Button {
             appState.selectedNotePath = notePath
-            appState.copySelectedNotes()
+            appState.clipboard.copySelectedNotes()
         } label: {
             Label("Copy Note", systemImage: "doc.on.doc")
         }

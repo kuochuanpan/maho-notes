@@ -63,7 +63,7 @@ struct NoteContentView: View {
                 }
                 HStack(spacing: 4) {
                     breadcrumb(for: note)
-                    if appState.hasUnsavedChanges {
+                    if appState.editorState.hasUnsavedChanges {
                         Circle()
                             .fill(.orange)
                             .frame(width: 6, height: 6)
@@ -140,23 +140,23 @@ struct NoteContentView: View {
         if isCloudOnly(note) {
             downloadingPlaceholder(note)
         } else {
-            switch appState.viewMode {
+            switch appState.editorState.viewMode {
             case .preview:
                 MarkdownWebView(markdown: note.body)
             case .editor:
                 editorView
                     .onAppear {
-                        appState.startEditing()
+                        appState.editorState.startEditing()
                         editorFocused = true
                     }
             case .split:
                 HStack(spacing: 0) {
                     editorView
                     Divider()
-                    MarkdownWebView(markdown: appState.editingBody)
+                    MarkdownWebView(markdown: appState.editorState.editingBody)
                 }
                 .onAppear {
-                    appState.startEditing()
+                    appState.editorState.startEditing()
                     editorFocused = true
                 }
             }
@@ -221,20 +221,20 @@ struct NoteContentView: View {
     }
 
     private var editorView: some View {
-        @Bindable var state = appState
-        return TextEditor(text: $state.editingBody)
+        @Bindable var editor = appState.editorState
+        return TextEditor(text: $editor.editingBody)
             .focused($editorFocused)
             .font(.system(size: editorFontSize, design: .monospaced))
             .scrollContentBackground(.hidden)
             .padding(12)
-            .task(id: appState.editingBody) {
+            .task(id: appState.editorState.editingBody) {
                 // Debounced auto-save: 2s after last keystroke
                 // Guard: only save when in editor/split mode with non-empty buffer
-                guard appState.viewMode != .preview else { return }
-                guard !appState.editingBody.isEmpty else { return }
+                guard appState.editorState.viewMode != .preview else { return }
+                guard !appState.editorState.editingBody.isEmpty else { return }
                 try? await Task.sleep(for: .seconds(2))
-                if !Task.isCancelled && appState.viewMode != .preview {
-                    appState.saveNote()
+                if !Task.isCancelled && appState.editorState.viewMode != .preview {
+                    appState.editorState.saveNote()
                 }
             }
     }

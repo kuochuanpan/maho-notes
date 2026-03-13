@@ -608,8 +608,8 @@ struct NavigatorView: View {
             try appState.createNote(title: title, collectionId: newNoteCollectionId)
             showingNewNote = false
             // Auto-enter edit mode for new note
-            appState.viewMode = .editor
-            appState.startEditing()
+            appState.editorState.viewMode = .editor
+            appState.editorState.startEditing()
         } catch {
             noteError = error.localizedDescription
         }
@@ -822,15 +822,15 @@ private struct CollectionNodeView: View {
             Divider()
 
             Button {
-                appState.pasteNotes(toCollection: node.id)
+                appState.clipboard.pasteNotes(toCollection: node.id)
             } label: {
-                if let clipboard = appState.noteClipboard, clipboard.count > 1 {
-                    Label("Paste \(clipboard.count) Notes", systemImage: "doc.on.clipboard")
+                if let entries = appState.clipboard.entries, entries.count > 1 {
+                    Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
                 } else {
                     Label("Paste Note", systemImage: "doc.on.clipboard")
                 }
             }
-            .disabled(appState.noteClipboard == nil)
+            .disabled(appState.clipboard.entries == nil)
 
             Divider()
 
@@ -995,14 +995,14 @@ private struct CollectionNodeView: View {
         .contextMenu {
             Button {
                 if appState.selectedNotePaths.count > 1 && appState.selectedNotePaths.contains(path) {
-                    appState.copySelectedNotes()
+                    appState.clipboard.copySelectedNotes()
                 } else {
                     // Single note: temporarily set selection, copy, restore
                     let prevPaths = appState.selectedNotePaths
                     let prevPath = appState.selectedNotePath
                     appState.selectedNotePaths = []
                     appState.selectedNotePath = path
-                    appState.copySelectedNotes()
+                    appState.clipboard.copySelectedNotes()
                     appState.selectedNotePaths = prevPaths
                     appState.selectedNotePath = prevPath
                 }
