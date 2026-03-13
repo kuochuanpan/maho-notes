@@ -258,7 +258,80 @@ public struct Vault: Sendable {
         newOrder.append(targetFilename)
         try writeDirectoryOrder(at: targetDirAbs, notes: newOrder)
 
+        // Move referenced assets from source to target directory
+        if let content = try? String(contentsOfFile: targetAbs, encoding: .utf8) {
+            let refs = AssetManager.referencedAssets(in: content)
+            if !refs.isEmpty {
+                try? AssetManager.moveAssets(
+                    referencedPaths: refs,
+                    fromDir: sourceDir,
+                    toDir: toCollection,
+                    vaultPath: path,
+                    checkShared: true
+                )
+            }
+        }
+
         // Update the note's frontmatter updated timestamp
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        let now = isoFormatter.string(from: Date())
+        updateFrontmatterField(filePath: targetAbs, field: "updated", value: now)
+
+        return (toCollection as NSString).appendingPathComponent(targetFilename)
+    }
+
+    /// Copy a note to a target collection directory.
+    ///
+    /// Appends " copy" to the filename to avoid conflicts. Also copies any referenced assets.
+    /// - Returns: The new relative path.
+    public func copyNote(relativePath: String, toCollection: String) throws -> String {
+        let fm = FileManager.default
+        let vaultURL = URL(fileURLWithPath: path)
+        let sourceDir = (relativePath as NSString).deletingLastPathComponent
+
+        let targetDirAbs = vaultURL.appendingPathComponent(toCollection).path
+        if !fm.fileExists(atPath: targetDirAbs) {
+            try fm.createDirectory(atPath: targetDirAbs, withIntermediateDirectories: true)
+        }
+
+        // Build target filename with "-copy" suffix
+        let originalFilename = (relativePath as NSString).lastPathComponent
+        let ext = (originalFilename as NSString).pathExtension
+        let baseName = (originalFilename as NSString).deletingPathExtension
+
+        var targetFilename = "\(baseName)-copy.\(ext)"
+        var targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
+        var counter = 1
+        while fm.fileExists(atPath: targetAbs) {
+            targetFilename = "\(baseName)-copy-\(counter).\(ext)"
+            targetAbs = (targetDirAbs as NSString).appendingPathComponent(targetFilename)
+            counter += 1
+        }
+
+        let sourceAbs = vaultURL.appendingPathComponent(relativePath).path
+        try fm.copyItem(atPath: sourceAbs, toPath: targetAbs)
+
+        // Copy referenced assets
+        if let content = try? String(contentsOfFile: targetAbs, encoding: .utf8) {
+            let refs = AssetManager.referencedAssets(in: content)
+            if !refs.isEmpty {
+                try? AssetManager.copyAssets(
+                    referencedPaths: refs,
+                    fromDir: sourceDir,
+                    toDir: toCollection,
+                    vaultPath: path
+                )
+            }
+        }
+
+        // Append to target _index.md order
+        let (targetOrder, _) = readDirectoryOrder(at: targetDirAbs)
+        var newOrder = targetOrder
+        newOrder.append(targetFilename)
+        try writeDirectoryOrder(at: targetDirAbs, notes: newOrder)
+
+        // Update the copy's frontmatter updated timestamp
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime]
         let now = isoFormatter.string(from: Date())

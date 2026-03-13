@@ -770,6 +770,22 @@ import os
         try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
         #endif
 
+        // Clean up orphaned assets no longer referenced by any remaining note
+        if let orphans = try? AssetManager.orphanedAssets(inDirectory: parentDir, vaultPath: vaultPath) {
+            let fm = FileManager.default
+            let assetsDir = URL(fileURLWithPath: parentDirAbs)
+                .appendingPathComponent(AssetManager.assetsDirName)
+            for orphan in orphans {
+                let orphanURL = assetsDir.appendingPathComponent(orphan)
+                try? fm.removeItem(at: orphanURL)
+            }
+            // Remove _assets/ directory if now empty
+            if let remaining = try? fm.contentsOfDirectory(atPath: assetsDir.path),
+               remaining.isEmpty {
+                try? fm.removeItem(at: assetsDir)
+            }
+        }
+
         // Clear selection if the deleted note was selected
         if selectedNotePath == relativePath {
             selectedNotePath = nil
