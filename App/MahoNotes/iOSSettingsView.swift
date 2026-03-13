@@ -300,6 +300,17 @@ struct iOSSettingsView: View {
             if appState.authManager.isAuthenticating && appState.authManager.userCode == nil {
                 ProgressView()
                     .controlSize(.small)
+            } else if appState.authManager.isAuthenticating && !showingDeviceFlow {
+                // Sheet was dismissed (e.g. user went to Safari) — show inline status + cancel
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Button("Cancel") {
+                        appState.authManager.cancelAuth()
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                }
             } else if appState.authManager.isAuthenticated {
                 Button("Disconnect") {
                     appState.authManager.disconnect()

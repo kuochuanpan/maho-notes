@@ -588,6 +588,17 @@ struct GitHubAccountGroupBox: View {
                 if authManager.isAuthenticating && authManager.userCode == nil {
                     ProgressView()
                         .controlSize(.small)
+                } else if authManager.isAuthenticating && !showingDeviceFlow {
+                    // Sheet dismissed (e.g. user went to browser) — show cancel option
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Button("Cancel") {
+                            authManager.cancelAuth()
+                        }
+                        .controlSize(.small)
+                        .buttonStyle(.bordered)
+                    }
                 } else if authManager.isAuthenticated {
                     Button("Disconnect") {
                         authManager.disconnect()
