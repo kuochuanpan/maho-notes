@@ -53,17 +53,17 @@ struct MarkdownEditorView: NSViewRepresentable {
             textView.font = .monospacedSystemFont(ofSize: newFontSize, weight: .regular)
         }
 
-        // Apply pending action
+        // Apply pending action — clear FIRST to prevent re-entrant loop
         if let actionBinding = pendingAction, let action = actionBinding.wrappedValue {
+            // Clear immediately so the text mutation below doesn't re-trigger this block
+            actionBinding.wrappedValue = nil
+
             let selectedRange = textView.selectedRange()
             if let result = MarkdownTextHelper.applyAction(action, text: textView.string, selectedRange: selectedRange) {
                 textView.string = result.text
                 text = result.text
                 textView.setSelectedRange(result.selectedRange)
                 onSelectionChange?(result.selectedRange)
-            }
-            DispatchQueue.main.async {
-                actionBinding.wrappedValue = nil
             }
         }
     }
@@ -145,17 +145,17 @@ struct MarkdownEditorView: UIViewRepresentable {
             textView.font = .monospacedSystemFont(ofSize: newFontSize, weight: .regular)
         }
 
-        // Apply pending action
+        // Apply pending action — clear FIRST to prevent re-entrant loop
         if let actionBinding = pendingAction, let action = actionBinding.wrappedValue {
+            // Clear immediately so the text mutation below doesn't re-trigger this block
+            actionBinding.wrappedValue = nil
+
             let selectedRange = textView.selectedRange
             if let result = MarkdownTextHelper.applyAction(action, text: textView.text, selectedRange: selectedRange) {
                 textView.text = result.text
                 text = result.text
                 textView.selectedRange = result.selectedRange
                 onSelectionChange?(result.selectedRange)
-            }
-            DispatchQueue.main.async {
-                actionBinding.wrappedValue = nil
             }
         }
     }
