@@ -1,0 +1,94 @@
+name: MahoNotes
+options:
+  bundleIdPrefix: com.pcca
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+  xcodeVersion: "26.3"
+  createIntermediateGroups: true
+  localizations:
+  - en
+  - zh-Hant
+  - ja
+  - ko
+  - fr
+  - it
+  - es
+
+packages:
+  MahoNotesPackage:
+    path: ..
+
+targets:
+  MahoNotes:
+    type: application
+    platform: [macOS, iOS]
+    sources:
+      - MahoNotes
+    resources:
+      - path: MahoNotes/Resources
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pcca.mahonotes
+        PRODUCT_NAME: Maho Notes
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_KEY_CFBundleDisplayName: Maho Notes
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.productivity"
+        CODE_SIGN_ENTITLEMENTS: MahoNotes/MahoNotes.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: MahoNotes/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_EMIT_LOC_STRINGS: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: K867NAPA93
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: -O
+    dependencies:
+      - package: MahoNotesPackage
+        product: MahoNotesKit
+    entitlements:
+      path: MahoNotes/MahoNotes.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.application-groups:
+          - group.dev.pcca.mahonotes
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.dev.pcca.mahonotes
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.dev.pcca.mahonotes
+    attributes:
+      SystemCapabilities:
+        com.apple.iCloud:
+          enabled: true
+
+  MahoNotesTests:
+    type: bundle.unit-test
+    platform: [macOS, iOS]
+    sources:
+      - MahoNotesTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pcca.mahonotes.tests
+        PRODUCT_NAME: MahoNotesTests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Maho Notes.app/Contents/MacOS/Maho Notes"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    dependencies:
+      - target: MahoNotes_${platform}
