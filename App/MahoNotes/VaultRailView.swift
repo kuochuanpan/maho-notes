@@ -53,7 +53,6 @@ struct VaultRailView: View {
             )
             .popover(isPresented: $showingAddPopover, arrowEdge: .trailing) {
                 addVaultPopover
-                    .id(addVaultMode)  // Force popover re-render on mode change
             }
 
             Divider()

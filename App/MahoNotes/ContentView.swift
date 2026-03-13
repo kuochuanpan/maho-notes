@@ -192,9 +192,10 @@ struct MacContentView: View {
             }
 
             // Onboarding overlay for first-time users (no vaults)
-            if appState.isLoaded && appState.vaults.isEmpty {
-                onboardingOverlay
-            }
+            // Temporarily disabled — interferes with popover hit testing
+            // if appState.isLoaded && appState.vaults.isEmpty {
+            //     onboardingOverlay
+            // }
         }
         .navigationTitle("")
         .toolbar {
