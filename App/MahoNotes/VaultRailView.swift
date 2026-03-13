@@ -143,11 +143,13 @@ struct VaultRailView: View {
 
     // MARK: - Add Vault Popover
 
+    private var hasGitHub: Bool { appState.authManager.isAuthenticated }
+
     @ViewBuilder
     private var addVaultPopover: some View {
         VStack(spacing: 0) {
-            if addVaultMode == nil {
-                // Mode picker
+            if addVaultMode == nil && hasGitHub {
+                // Mode picker (only when GitHub is authenticated)
                 VStack(spacing: 2) {
                     Text("Add Vault")
                         .font(.headline)
@@ -210,7 +212,7 @@ struct VaultRailView: View {
                 .padding(.bottom, 8)
                 .frame(width: 260)
 
-            } else if addVaultMode == .create {
+            } else if addVaultMode == .create || (addVaultMode == nil && !hasGitHub) {
                 // Create new vault form
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
