@@ -78,9 +78,8 @@ struct NoteContentView: View {
                 if appState.editorState.viewMode != .preview && !appState.editorState.isReadOnly && !isCompactWidth {
                     markdownToolbarButtons
                 }
-                if appState.editorState.viewMode == .preview, let actions = inlineActionButtons {
-                    actions
-                }
+                // iPad/iPhone: no inline action buttons in note content view
+                // (new note / sync / collection buttons removed from breadcrumb bar)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
