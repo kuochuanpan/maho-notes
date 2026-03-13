@@ -73,3 +73,22 @@ targets:
       SystemCapabilities:
         com.apple.iCloud:
           enabled: true
+
+  MahoNotesTests:
+    type: bundle.unit-test
+    platform: [macOS, iOS]
+    sources:
+      - MahoNotesTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pcca.mahonotes.tests
+        PRODUCT_NAME: MahoNotesTests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Maho Notes.app/Contents/MacOS/Maho Notes"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    dependencies:
+      - target: MahoNotes_${platform}

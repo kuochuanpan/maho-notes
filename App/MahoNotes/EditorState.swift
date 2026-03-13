@@ -16,7 +16,19 @@ import MahoNotesKit
     /// The current editing buffer (raw markdown body).
     var editingBody: String = ""
 
+    /// Current cursor/selection range in the editor (kept in sync by MarkdownEditorView).
+    var selectedRange: NSRange = NSRange(location: 0, length: 0)
+
+    /// Set to a non-nil action to trigger formatting in the editor view.
+    /// The editor view reads this, applies it, and clears it.
+    var pendingToolbarAction: MarkdownToolbarAction?
+
     nonisolated init() {}
+
+    /// Trigger a toolbar formatting action on the editor.
+    func applyToolbarAction(_ action: MarkdownToolbarAction) {
+        pendingToolbarAction = action
+    }
 
     /// Whether the editing buffer differs from the saved note body.
     var hasUnsavedChanges: Bool {

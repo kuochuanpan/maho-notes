@@ -31,6 +31,9 @@ struct NoteContentView: View {
     @Environment(\.inlineActionButtons) private var inlineActionButtons
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @FocusState private var editorFocused: Bool
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         if let note = appState.selectedNote {
@@ -71,6 +74,10 @@ struct NoteContentView: View {
                 }
                 .font(.subheadline)
                 Spacer()
+                // Markdown formatting toolbar (macOS + iPad, editor/split mode only)
+                if appState.editorState.viewMode != .preview && !appState.editorState.isReadOnly {
+                    markdownToolbarButtons
+                }
                 if let actions = inlineActionButtons {
                     actions
                 }
@@ -222,21 +229,58 @@ struct NoteContentView: View {
 
     private var editorView: some View {
         @Bindable var editor = appState.editorState
-        return TextEditor(text: $editor.editingBody)
-            .focused($editorFocused)
-            .font(.system(size: editorFontSize, design: .monospaced))
-            .scrollContentBackground(.hidden)
-            .padding(12)
-            .task(id: appState.editorState.editingBody) {
-                // Debounced auto-save: 2s after last keystroke
-                // Guard: only save when in editor/split mode with non-empty buffer
-                guard appState.editorState.viewMode != .preview else { return }
-                guard !appState.editorState.editingBody.isEmpty else { return }
-                try? await Task.sleep(for: .seconds(2))
-                if !Task.isCancelled && appState.editorState.viewMode != .preview {
-                    appState.editorState.saveNote()
-                }
+        return MarkdownEditorView(
+            text: $editor.editingBody,
+            fontSize: editorFontSize,
+            onSelectionChange: { range in
+                appState.editorState.selectedRange = range
+            },
+            pendingAction: $editor.pendingToolbarAction,
+            showKeyboardAccessory: isCompactWidth
+        )
+        .task(id: appState.editorState.editingBody) {
+            // Debounced auto-save: 2s after last keystroke
+            // Guard: only save when in editor/split mode with non-empty buffer
+            guard appState.editorState.viewMode != .preview else { return }
+            guard !appState.editorState.editingBody.isEmpty else { return }
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled && appState.editorState.viewMode != .preview {
+                appState.editorState.saveNote()
             }
+        }
+    }
+
+    /// Whether we're in compact width (iPhone).
+    private var isCompactWidth: Bool {
+        #if os(macOS)
+        false
+        #else
+        horizontalSizeClass == .compact
+        #endif
+    }
+
+    // MARK: - Markdown Toolbar Buttons
+
+    @ViewBuilder
+    private var markdownToolbarButtons: some View {
+        HStack(spacing: 2) {
+            ForEach(MarkdownToolbarAction.breadcrumbActions) { action in
+                Button {
+                    appState.editorState.applyToolbarAction(action)
+                } label: {
+                    Image(systemName: action.icon)
+                        .font(.system(size: 12))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+                #if os(macOS)
+                .help(action.label)
+                #endif
+            }
+        }
+        .controlSize(.small)
     }
 
     // MARK: - Empty State
