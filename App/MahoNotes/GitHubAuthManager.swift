@@ -33,8 +33,8 @@ final class GitHubAuthManager: @unchecked Sendable {
     /// The verification URL where the user enters the code.
     @MainActor var verificationURL: String?
 
-    /// Active polling task (so we can cancel on disconnect or re-auth).
-    @MainActor private var pollingTask: Task<OAuthTokenResponse, any Error>?
+    /// The single active auth task — ensures only one auth flow runs at a time.
+    @MainActor private var authTask: Task<Void, Never>?
 
     nonisolated init() {}
 
@@ -74,17 +74,16 @@ final class GitHubAuthManager: @unchecked Sendable {
 
     /// Start the GitHub Device Flow.
     ///
+    /// Cancels any previous auth flow, then:
     /// 1. Requests a device code from GitHub.
     /// 2. Sets `userCode` and `verificationURL` for the UI to display.
     /// 3. Polls in the background until the user authorizes (or code expires).
     /// 4. Stores the token and fetches the username on success.
-    ///
-    /// - Throws: `OAuthError` or network errors on failure.
     @MainActor
     func authenticate() async throws {
-        // Cancel any existing polling
-        pollingTask?.cancel()
-        pollingTask = nil
+        // Cancel any existing auth flow entirely
+        authTask?.cancel()
+        authTask = nil
 
         isAuthenticating = true
         authError = nil
@@ -97,53 +96,58 @@ final class GitHubAuthManager: @unchecked Sendable {
         )
         let flow = DeviceFlow(configuration: config)
 
-        do {
-            // Step 1: Request device code
-            let codeResponse = try await flow.requestCode()
+        // Run the entire auth flow in a single managed Task
+        let task = Task { @MainActor in
+            do {
+                // Step 1: Request device code
+                let codeResponse = try await flow.requestCode()
+                try Task.checkCancellation()
 
-            // Step 2: Show user code in UI
-            userCode = codeResponse.userCode
-            verificationURL = codeResponse.verificationUri
+                // Step 2: Show user code in UI
+                userCode = codeResponse.userCode
+                verificationURL = codeResponse.verificationUri
 
-            // Step 3: Poll for token in a cancellable Task
-            let pollTask = Task {
-                try await flow.pollForToken(deviceCode: codeResponse)
+                // Step 3: Poll for token
+                let tokenResponse = try await flow.pollForToken(deviceCode: codeResponse)
+                try Task.checkCancellation()
+
+                // Step 4: Store token and fetch username
+                try Auth().storeToken(tokenResponse.accessToken)
+                let name = try await fetchUsername(token: tokenResponse.accessToken)
+                try Task.checkCancellation()
+
+                isAuthenticated = true
+                username = name
+                isAuthenticating = false
+                userCode = nil
+                verificationURL = nil
+
+                // Notify dependents (e.g. SyncCoordinator) that auth is ready
+                onAuthenticated?()
+            } catch {
+                // Only update state if this task wasn't cancelled (superseded by a new one)
+                guard !Task.isCancelled else { return }
+
+                isAuthenticating = false
+                userCode = nil
+                verificationURL = nil
+
+                if !(error is CancellationError) {
+                    authError = error.localizedDescription
+                }
             }
-            pollingTask = pollTask
-            let tokenResponse = try await pollTask.value
-
-            // Step 4: Store token and fetch username
-            pollingTask = nil
-            try Auth().storeToken(tokenResponse.accessToken)
-            let name = try await fetchUsername(token: tokenResponse.accessToken)
-
-            isAuthenticated = true
-            username = name
-            isAuthenticating = false
-            userCode = nil
-            verificationURL = nil
-
-            // Notify dependents (e.g. SyncCoordinator) that auth is ready
-            onAuthenticated?()
-        } catch {
-            pollingTask = nil
-            isAuthenticating = false
-            userCode = nil
-            verificationURL = nil
-
-            if error is CancellationError {
-                return
-            }
-            authError = error.localizedDescription
-            throw error
         }
+        authTask = task
+
+        // Wait for the task to complete (so callers can await)
+        await task.value
     }
 
     /// Cancel any in-progress authentication.
     @MainActor
     func cancelAuth() {
-        pollingTask?.cancel()
-        pollingTask = nil
+        authTask?.cancel()
+        authTask = nil
         isAuthenticating = false
         userCode = nil
         verificationURL = nil
