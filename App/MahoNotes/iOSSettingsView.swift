@@ -144,6 +144,11 @@ struct iOSSettingsView: View {
                     }
                 }
 
+                // Tip Jar
+                Section("Support") {
+                    TipJarView()
+                }
+
                 // About
                 Section("About") {
                     HStack {

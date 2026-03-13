@@ -73,6 +73,8 @@ targets:
       SystemCapabilities:
         com.apple.iCloud:
           enabled: true
+    scheme:
+      storeKitConfiguration: MahoNotes/Products.storekit
 
   MahoNotesTests:
     type: bundle.unit-test

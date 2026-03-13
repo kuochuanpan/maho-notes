@@ -786,6 +786,12 @@ struct AboutSettingsTab: View {
             }
             .font(.callout)
 
+            // Tip Jar
+            GroupBox {
+                TipJarView()
+            }
+            .frame(maxWidth: 340)
+
             Text("Made with \u{2615} by Kuo-Chuan & Maho \u{1F52D}")
                 .font(.caption)
                 .foregroundStyle(.secondary)
