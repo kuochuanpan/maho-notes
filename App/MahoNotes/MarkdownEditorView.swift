@@ -12,6 +12,12 @@ struct MarkdownEditorView: NSViewRepresentable {
     /// The coordinator will read it, apply the action, and clear it.
     var pendingAction: Binding<MarkdownToolbarAction?>?
 
+    /// Set to a non-nil string to insert arbitrary text at cursor.
+    var pendingInsertion: Binding<String?>?
+
+    /// Called when a complex action (photo/file) is tapped. Unused on macOS (breadcrumb handles it).
+    var onComplexAction: ((MarkdownToolbarAction) -> Void)?
+
     /// Unused on macOS (keyboard accessory is iOS-only). Kept for API parity.
     var showKeyboardAccessory: Bool = false
 
@@ -66,6 +72,20 @@ struct MarkdownEditorView: NSViewRepresentable {
                 onSelectionChange?(result.selectedRange)
             }
         }
+
+        // Apply pending insertion — insert arbitrary text at cursor
+        if let insertionBinding = pendingInsertion, let insertionText = insertionBinding.wrappedValue {
+            insertionBinding.wrappedValue = nil
+
+            let selectedRange = textView.selectedRange()
+            let nsString = textView.string as NSString
+            let newText = nsString.replacingCharacters(in: selectedRange, with: insertionText)
+            textView.string = newText
+            text = newText
+            let newCursor = NSRange(location: selectedRange.location + (insertionText as NSString).length, length: 0)
+            textView.setSelectedRange(newCursor)
+            onSelectionChange?(newCursor)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -101,6 +121,12 @@ struct MarkdownEditorView: UIViewRepresentable {
     var fontSize: Double
     var onSelectionChange: ((NSRange) -> Void)?
     var pendingAction: Binding<MarkdownToolbarAction?>?
+
+    /// Set to a non-nil string to insert arbitrary text at cursor.
+    var pendingInsertion: Binding<String?>?
+
+    /// Called when a complex action (photo/file) is tapped from the keyboard accessory.
+    var onComplexAction: ((MarkdownToolbarAction) -> Void)?
 
     /// Keyboard accessory actions for iPhone.
     var showKeyboardAccessory: Bool = false
@@ -160,6 +186,20 @@ struct MarkdownEditorView: UIViewRepresentable {
                 textView.selectedRange = result.selectedRange
                 onSelectionChange?(result.selectedRange)
             }
+        }
+
+        // Apply pending insertion — insert arbitrary text at cursor
+        if let insertionBinding = pendingInsertion, let insertionText = insertionBinding.wrappedValue {
+            insertionBinding.wrappedValue = nil
+
+            let selectedRange = textView.selectedRange
+            let nsString = textView.text as NSString
+            let newText = nsString.replacingCharacters(in: selectedRange, with: insertionText)
+            textView.text = newText
+            text = newText
+            let newCursor = NSRange(location: selectedRange.location + (insertionText as NSString).length, length: 0)
+            textView.selectedRange = newCursor
+            onSelectionChange?(newCursor)
         }
     }
 
@@ -247,6 +287,11 @@ struct MarkdownEditorView: UIViewRepresentable {
         }
 
         private func applyAction(_ action: MarkdownToolbarAction) {
+            // Complex actions (photo/file) need dedicated UI — delegate to parent
+            if action.category == .complex {
+                parent.onComplexAction?(action)
+                return
+            }
             guard let textView else { return }
             let selectedRange = textView.selectedRange
             let contentOffset = textView.contentOffset

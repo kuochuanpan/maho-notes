@@ -1,5 +1,9 @@
 import SwiftUI
 import MahoNotesKit
+import UniformTypeIdentifiers
+#if os(iOS)
+import PhotosUI
+#endif
 
 // MARK: - Environment Keys for iPad inline controls
 
@@ -31,8 +35,12 @@ struct NoteContentView: View {
     @Environment(\.inlineActionButtons) private var inlineActionButtons
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @FocusState private var editorFocused: Bool
+    @State private var showPhotoPicker = false
+    @State private var showFilePicker = false
+    @State private var importError: String?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var selectedPhotoItem: PhotosPickerItem?
     #endif
 
     var body: some View {
@@ -93,6 +101,40 @@ struct NoteContentView: View {
                 FloatingToolbarView()
             }
         }
+        #if os(macOS)
+        .onChange(of: showPhotoPicker) { _, show in
+            guard show else { return }
+            showPhotoPicker = false
+            presentMacOSPhotoPicker(for: note)
+        }
+        .onChange(of: showFilePicker) { _, show in
+            guard show else { return }
+            showFilePicker = false
+            presentMacOSFilePicker(for: note)
+        }
+        #else
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+        .onChange(of: selectedPhotoItem) { _, item in
+            guard let item else { return }
+            selectedPhotoItem = nil
+            Task { await importPhotoItem(item, for: note) }
+        }
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result, for: note)
+        }
+        #endif
+        .alert("Import Error", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
     }
 
     // MARK: - Conflict Banner
@@ -148,7 +190,7 @@ struct NoteContentView: View {
         } else {
             switch appState.editorState.viewMode {
             case .preview:
-                MarkdownWebView(markdown: note.body)
+                MarkdownWebView(markdown: note.body, noteDirectoryURL: noteDirectoryURL(for: note))
             case .editor:
                 editorView
                     .onAppear {
@@ -159,7 +201,7 @@ struct NoteContentView: View {
                 HStack(spacing: 0) {
                     editorView
                     Divider()
-                    MarkdownWebView(markdown: appState.editorState.editingBody)
+                    MarkdownWebView(markdown: appState.editorState.editingBody, noteDirectoryURL: noteDirectoryURL(for: note))
                 }
                 .onAppear {
                     appState.editorState.startEditing()
@@ -200,6 +242,14 @@ struct NoteContentView: View {
         }
     }
 
+    /// Compute the directory URL containing the note file (for resolving _assets/ paths).
+    private func noteDirectoryURL(for note: Note) -> URL? {
+        guard let entry = appState.selectedVault else { return nil }
+        let vaultPath = appState.store.resolvedPath(for: entry)
+        let noteDir = (note.relativePath as NSString).deletingLastPathComponent
+        return URL(fileURLWithPath: vaultPath).appendingPathComponent(noteDir)
+    }
+
     /// Check if the note's file is a cloud-only placeholder (not downloaded yet).
     private func isCloudOnly(_ note: Note) -> Bool {
         guard let entry = appState.selectedVault, entry.type == .icloud else { return false }
@@ -235,6 +285,10 @@ struct NoteContentView: View {
                 appState.editorState.selectedRange = range
             },
             pendingAction: $editor.pendingToolbarAction,
+            pendingInsertion: $editor.pendingInsertion,
+            onComplexAction: { action in
+                handleToolbarAction(action)
+            },
             showKeyboardAccessory: isCompactWidth
         )
         .task(id: appState.editorState.editingBody) {
@@ -265,7 +319,7 @@ struct NoteContentView: View {
         HStack(spacing: 2) {
             ForEach(MarkdownToolbarAction.breadcrumbActions) { action in
                 Button {
-                    appState.editorState.applyToolbarAction(action)
+                    handleToolbarAction(action)
                 } label: {
                     Image(systemName: action.icon)
                         .font(.system(size: 12))
@@ -281,6 +335,116 @@ struct NoteContentView: View {
         }
         .controlSize(.small)
     }
+
+    /// Route toolbar actions — pickers for photo/file, normal applyToolbarAction for the rest.
+    private func handleToolbarAction(_ action: MarkdownToolbarAction) {
+        switch action {
+        case .insertPhoto:
+            showPhotoPicker = true
+        case .insertFile:
+            showFilePicker = true
+        default:
+            appState.editorState.applyToolbarAction(action)
+        }
+    }
+
+    // MARK: - Asset Import
+
+    private static let imageTypes: [UTType] = [.png, .jpeg, .gif, .webP, .svg, .heic]
+
+    /// Import a file URL into the note's _assets/ directory and insert markdown at cursor.
+    private func importAssetAndInsert(from url: URL, for note: Note, isImage: Bool) {
+        guard let entry = appState.selectedVault else {
+            importError = "No vault selected"
+            return
+        }
+        let vaultPath = appState.store.resolvedPath(for: entry)
+        do {
+            let assetPath = try AssetManager.importAsset(
+                from: url,
+                forNotePath: note.relativePath,
+                vaultPath: vaultPath
+            )
+            let filename = (assetPath as NSString).lastPathComponent
+            let name = (filename as NSString).deletingPathExtension
+            let markdown: String
+            if isImage {
+                markdown = "![" + name + "|center|50%](" + assetPath + ")"
+            } else {
+                markdown = "[" + filename + "](" + assetPath + ")"
+            }
+            appState.editorState.pendingInsertion = markdown
+        } catch {
+            importError = "Failed to import asset: \(error.localizedDescription)"
+        }
+    }
+
+    #if os(macOS)
+    private func presentMacOSPhotoPicker(for note: Note) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = Self.imageTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose an image to insert"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            importAssetAndInsert(from: url, for: note, isImage: true)
+        }
+    }
+
+    private func presentMacOSFilePicker(for note: Note) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a file to attach"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let isImage = Self.imageTypes.contains { type in
+                UTType(filenameExtension: url.pathExtension)?.conforms(to: type) == true
+            }
+            importAssetAndInsert(from: url, for: note, isImage: isImage)
+        }
+    }
+    #else
+    private func importPhotoItem(_ item: PhotosPickerItem, for note: Note) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                importError = "Could not load image data"
+                return
+            }
+            // Determine extension from content type
+            let ext: String
+            if let contentType = item.supportedContentTypes.first {
+                ext = contentType.preferredFilenameExtension ?? "png"
+            } else {
+                ext = "png"
+            }
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(ext)
+            try data.write(to: tempURL)
+            importAssetAndInsert(from: tempURL, for: note, isImage: true)
+            try? FileManager.default.removeItem(at: tempURL)
+        } catch {
+            importError = "Failed to load photo: \(error.localizedDescription)"
+        }
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>, for note: Note) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let isImage = Self.imageTypes.contains { type in
+                UTType(filenameExtension: url.pathExtension)?.conforms(to: type) == true
+            }
+            importAssetAndInsert(from: url, for: note, isImage: isImage)
+        case .failure(let error):
+            importError = "Failed to import file: \(error.localizedDescription)"
+        }
+    }
+    #endif
 
     // MARK: - Empty State
 

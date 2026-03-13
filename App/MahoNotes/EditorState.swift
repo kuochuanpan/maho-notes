@@ -23,6 +23,10 @@ import MahoNotesKit
     /// The editor view reads this, applies it, and clears it.
     var pendingToolbarAction: MarkdownToolbarAction?
 
+    /// Set to a non-nil string to insert arbitrary markdown text at the cursor.
+    /// The editor view reads this, inserts it, and clears it.
+    var pendingInsertion: String?
+
     nonisolated init() {}
 
     /// Trigger a toolbar formatting action on the editor.

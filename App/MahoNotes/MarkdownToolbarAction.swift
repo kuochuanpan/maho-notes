@@ -94,7 +94,8 @@ enum MarkdownToolbarAction: String, CaseIterable, Identifiable {
 
     /// Actions shown in the macOS/iPad breadcrumb toolbar.
     static let breadcrumbActions: [MarkdownToolbarAction] = [
-        .bold, .italic, .strikethrough, .heading, .code, .quote, .bulletList, .checkbox
+        .bold, .italic, .strikethrough, .heading, .code, .quote, .bulletList, .checkbox,
+        .insertPhoto, .insertFile
     ]
 
     /// Primary actions for iPhone keyboard accessory.
@@ -104,6 +105,7 @@ enum MarkdownToolbarAction: String, CaseIterable, Identifiable {
 
     /// Overflow actions for iPhone keyboard accessory "more" menu.
     static let keyboardOverflowActions: [MarkdownToolbarAction] = [
-        .strikethrough, .code, .quote, .numberedList, .link, .ruby
+        .strikethrough, .code, .quote, .numberedList, .link, .ruby,
+        .insertPhoto, .insertFile
     ]
 }

@@ -5,6 +5,8 @@ import MahoNotesKit
 #if os(macOS)
 struct MarkdownWebView: NSViewRepresentable {
     let markdown: String
+    /// Directory containing the note file — used to resolve relative `_assets/` paths.
+    var noteDirectoryURL: URL?
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -15,7 +17,7 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let html = buildHTML(from: markdown)
+        let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         // Use bundle resource URL as base so KaTeX can resolve relative font paths
         let baseURL = Bundle.main.resourceURL
         webView.loadHTMLString(html, baseURL: baseURL)
@@ -26,6 +28,8 @@ struct MarkdownWebView: NSViewRepresentable {
 #else
 struct MarkdownWebView: UIViewRepresentable {
     let markdown: String
+    /// Directory containing the note file — used to resolve relative `_assets/` paths.
+    var noteDirectoryURL: URL?
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -38,7 +42,7 @@ struct MarkdownWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let html = buildHTML(from: markdown)
+        let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         webView.loadHTMLString(html, baseURL: baseURL)
     }
@@ -121,9 +125,41 @@ extension MarkdownWebView {
     </script>
     """
 
-    func buildHTML(from markdown: String) -> String {
+    /// Replace relative `_assets/` paths with absolute `file://` URLs so WKWebView can load them.
+    private func resolveAssetPaths(in markdown: String, noteDirectoryURL: URL?) -> String {
+        guard let dirURL = noteDirectoryURL else { return markdown }
+        // Match both ![...](_assets/...) and [...](_assets/...)
+        let pattern = #"(\!\[[^\]]*\]\()(_assets/[^)]+)(\))"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return markdown }
+        var result = markdown
+        let nsRange = NSRange(result.startIndex..., in: result)
+        let matches = regex.matches(in: result, range: nsRange)
+        for match in matches.reversed() {
+            guard let pathRange = Range(match.range(at: 2), in: result) else { continue }
+            let relativePath = String(result[pathRange])
+            let absoluteURL = dirURL.appendingPathComponent(relativePath)
+            result.replaceSubrange(pathRange, with: absoluteURL.absoluteString)
+        }
+        // Also handle non-image links: [text](_assets/file.pdf)
+        let linkPattern = #"(\[[^\]]*\]\()(_assets/[^)]+)(\))"#
+        guard let linkRegex = try? NSRegularExpression(pattern: linkPattern) else { return result }
+        let nsRange2 = NSRange(result.startIndex..., in: result)
+        let linkMatches = linkRegex.matches(in: result, range: nsRange2)
+        for match in linkMatches.reversed() {
+            guard let pathRange = Range(match.range(at: 2), in: result) else { continue }
+            let relativePath = String(result[pathRange])
+            // Only replace if still a relative path (not already resolved by image pass)
+            guard !relativePath.hasPrefix("file://") else { continue }
+            let absoluteURL = dirURL.appendingPathComponent(relativePath)
+            result.replaceSubrange(pathRange, with: absoluteURL.absoluteString)
+        }
+        return result
+    }
+
+    func buildHTML(from markdown: String, noteDirectoryURL: URL? = nil) -> String {
+        let resolved = resolveAssetPaths(in: markdown, noteDirectoryURL: noteDirectoryURL)
         let renderer = MarkdownHTMLRenderer()
-        let body = renderer.render(markdown)
+        let body = renderer.render(resolved)
         return """
         <!DOCTYPE html>
         <html>
