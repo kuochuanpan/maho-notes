@@ -71,6 +71,15 @@ import os
         editorState.appState = self
         cloudSync.appState = self
         clipboard.appState = self
+
+        // Reload UI after GitHub sync pulls remote changes
+        syncCoordinator.onSyncCompleted = { [weak self] vaultName in
+            guard let self else { return }
+            // Only reload if the synced vault is the currently selected one
+            if self.selectedVault?.name == vaultName {
+                self.reloadCurrentVault()
+            }
+        }
     }
 
     /// Update a note in both allNotes and notesByCollection.

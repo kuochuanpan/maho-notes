@@ -57,6 +57,10 @@ final class SyncCoordinator: @unchecked Sendable {
     /// Conflict files by vault name → list of relative conflict paths (device-name format).
     var githubConflictFiles: [String: [String]] = [:]
 
+    /// Called after a successful sync that pulled remote changes.
+    /// Set by AppState to trigger `reloadCurrentVault()`.
+    var onSyncCompleted: ((String) -> Void)?
+
     // MARK: - Private State
 
     private var managers: [String: GitHubSyncManager] = [:]
@@ -219,6 +223,11 @@ final class SyncCoordinator: @unchecked Sendable {
             lastSyncDate = Date()
             lastSyncError = nil  // Clear global error on success
             processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
+
+            // Notify AppState to reload UI if remote changes were pulled
+            if result.pulled || result.cloned {
+                onSyncCompleted?(vaultName)
+            }
         } catch {
             vaultSyncStatus[vaultName]?.isSyncing = false
             vaultSyncStatus[vaultName]?.lastError = String(describing: error)
