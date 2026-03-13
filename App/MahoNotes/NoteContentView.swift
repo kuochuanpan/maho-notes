@@ -37,6 +37,7 @@ struct NoteContentView: View {
     @FocusState private var editorFocused: Bool
     @State private var showPhotoPicker = false
     @State private var showFilePicker = false
+    @State private var showTablePicker = false
     @State private var importError: String?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -134,6 +135,18 @@ struct NoteContentView: View {
             Button("OK") { importError = nil }
         } message: {
             Text(importError ?? "")
+        }
+        .sheet(isPresented: $showTablePicker) {
+            TablePickerView(
+                onInsert: { rows, columns in
+                    let table = MarkdownTextHelper.generateTable(rows: rows, columns: columns)
+                    appState.editorState.pendingInsertion = table
+                    showTablePicker = false
+                },
+                onCancel: {
+                    showTablePicker = false
+                }
+            )
         }
     }
 
@@ -336,13 +349,15 @@ struct NoteContentView: View {
         .controlSize(.small)
     }
 
-    /// Route toolbar actions — pickers for photo/file, normal applyToolbarAction for the rest.
+    /// Route toolbar actions — pickers for photo/file/table, normal applyToolbarAction for the rest.
     private func handleToolbarAction(_ action: MarkdownToolbarAction) {
         switch action {
         case .insertPhoto:
             showPhotoPicker = true
         case .insertFile:
             showFilePicker = true
+        case .table:
+            showTablePicker = true
         default:
             appState.editorState.applyToolbarAction(action)
         }

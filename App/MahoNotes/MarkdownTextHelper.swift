@@ -171,6 +171,19 @@ enum MarkdownTextHelper {
         }
     }
 
+    // MARK: - Generate Table
+
+    /// Generates a markdown table with the given dimensions.
+    /// First row contains "Column 1", "Column 2", etc. headers.
+    /// Second row is the separator. Remaining rows are empty.
+    static func generateTable(rows: Int, columns: Int) -> String {
+        let header = "| " + (1...columns).map { "Column \($0)" }.joined(separator: " | ") + " |"
+        let separator = "| " + (1...columns).map { _ in "---" }.joined(separator: " | ") + " |"
+        let emptyRow = "| " + (1...columns).map { _ in " " }.joined(separator: " | ") + " |"
+        let dataRows = Array(repeating: emptyRow, count: max(rows - 1, 0))
+        return ([header, separator] + dataRows).joined(separator: "\n")
+    }
+
     // MARK: - Apply Action
 
     /// Apply a toolbar action to the given text and selection.
