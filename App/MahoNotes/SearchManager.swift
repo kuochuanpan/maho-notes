@@ -64,6 +64,12 @@ import MahoNotesKit
     }
 
     /// Get or create the embedding provider for the current model setting.
+    /// Public access for iOS views that run search independently.
+    func embeddingProviderForSearch() -> any EmbeddingProvider {
+        getEmbeddingProvider()
+    }
+
+    /// Get or create the embedding provider for the current model setting.
     private func getEmbeddingProvider() -> any EmbeddingProvider {
         if let provider = embeddingProvider, provider.modelIdentifier == embeddingModel {
             return provider

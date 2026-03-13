@@ -518,16 +518,45 @@ struct iPhoneContentView: View {
     private func scheduleSearch(_ text: String) {
         debounceTask?.cancel()
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, let entry = appState.selectedVault else {
+        guard !trimmed.isEmpty else {
             searchResults = []
             return
         }
+        let locations = resolveSearchLocations()
+        guard !locations.isEmpty else {
+            searchResults = []
+            return
+        }
+        let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let vault = Vault(path: appState.store.resolvedPath(for: entry))
-            searchResults = (try? Array(vault.searchNotes(query: trimmed).prefix(20))) ?? []
+            let provider: (any EmbeddingProvider)? = (mode != .text)
+                ? appState.searchManager.embeddingProviderForSearch()
+                : nil
+            let results = (try? await VaultSearchService.search(
+                query: trimmed, mode: mode, vaults: locations,
+                embeddingProvider: provider, limit: 20
+            )) ?? []
+            if !Task.isCancelled {
+                searchResults = results
+            }
         }
+    }
+
+    /// Resolve vault locations for search.
+    private func resolveSearchLocations() -> [VaultLocation] {
+        let store = appState.store
+        let scope = appState.searchManager.searchScope
+        let entries: [VaultEntry]
+        if scope == "allVaults" {
+            entries = appState.vaults
+        } else if let entry = appState.selectedVault {
+            entries = [entry]
+        } else {
+            return []
+        }
+        return entries.map { VaultLocation(name: $0.name, path: store.resolvedPath(for: $0)) }
     }
 
     // MARK: - New Note Sheet
@@ -716,15 +745,29 @@ struct iOSSearchView: View {
     private func scheduleSearch(_ text: String) {
         debounceTask?.cancel()
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, let entry = appState.selectedVault else {
+        guard !trimmed.isEmpty else {
             results = []
             return
         }
+        let store = appState.store
+        let scope = appState.searchManager.searchScope
+        let entries: [VaultEntry] = scope == "allVaults"
+            ? appState.vaults
+            : (appState.selectedVault.map { [$0] } ?? [])
+        let locations = entries.map { VaultLocation(name: $0.name, path: store.resolvedPath(for: $0)) }
+        guard !locations.isEmpty else { results = []; return }
+        let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let vault = Vault(path: appState.store.resolvedPath(for: entry))
-            results = (try? Array(vault.searchNotes(query: trimmed).prefix(20))) ?? []
+            let provider: (any EmbeddingProvider)? = (mode != .text)
+                ? appState.searchManager.embeddingProviderForSearch()
+                : nil
+            let found = (try? await VaultSearchService.search(
+                query: trimmed, mode: mode, vaults: locations,
+                embeddingProvider: provider, limit: 20
+            )) ?? []
+            if !Task.isCancelled { results = found }
         }
     }
 }
