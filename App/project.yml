@@ -6,6 +6,14 @@ options:
     iOS: "18.0"
   xcodeVersion: "26.3"
   createIntermediateGroups: true
+  localizations:
+  - en
+  - zh-Hant
+  - ja
+  - ko
+  - fr
+  - it
+  - es
 
 packages:
   MahoNotesPackage:
