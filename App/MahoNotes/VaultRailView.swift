@@ -53,6 +53,7 @@ struct VaultRailView: View {
             )
             .popover(isPresented: $showingAddPopover, arrowEdge: .trailing) {
                 addVaultPopover
+                    .id(addVaultMode)  // Force popover re-render on mode change
             }
 
             Divider()
@@ -147,7 +148,7 @@ struct VaultRailView: View {
                         .padding(.bottom, 8)
 
                     Button {
-                        addVaultMode = .create
+                        withAnimation { addVaultMode = .create }
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
@@ -175,7 +176,7 @@ struct VaultRailView: View {
                         .padding(.horizontal, 12)
 
                     Button {
-                        addVaultMode = .github
+                        withAnimation { addVaultMode = .github }
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "arrow.triangle.branch")
