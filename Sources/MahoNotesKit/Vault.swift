@@ -111,7 +111,11 @@ public struct Vault: Sendable {
         return try parseNote(at: filePath, relativeTo: path)
     }
 
-    /// Search notes by substring match across title, tags, and body
+    /// Search notes by substring match across title, tags, and body.
+    ///
+    /// - Note: This is an O(n) brute-force scan used only as a fallback when FTS5 is unavailable.
+    ///   Prefer `VaultSearchService.search()` or `SearchIndex` for production search.
+    @available(*, deprecated, message: "Use VaultSearchService or SearchIndex for efficient search")
     public func searchNotes(query: String) throws -> [Note] {
         let lowercased = query.lowercased()
         let notes = try allNotes()
@@ -274,7 +278,7 @@ public struct Vault: Sendable {
         // Prevent circular moves
         let targetWithSlash = collectionId + "/"
         if intoParent == collectionId || intoParent.hasPrefix(targetWithSlash) {
-            throw MoveError.circularMove
+            throw VaultError.circularMove
         }
 
         let sourceAbs = vaultURL.appendingPathComponent(collectionId).path
@@ -282,7 +286,7 @@ public struct Vault: Sendable {
         let targetAbs = (targetParentAbs as NSString).appendingPathComponent(dirName)
 
         guard !fm.fileExists(atPath: targetAbs) else {
-            throw MoveError.destinationExists
+            throw VaultError.destinationExists
         }
 
         try fm.moveItem(atPath: sourceAbs, toPath: targetAbs)
@@ -322,14 +326,14 @@ public struct Vault: Sendable {
 
         // Already top-level?
         guard !sourceParent.isEmpty else {
-            throw MoveError.circularMove
+            throw VaultError.circularMove
         }
 
         let sourceAbs = vaultURL.appendingPathComponent(collectionId).path
         let targetAbs = vaultURL.appendingPathComponent(dirName).path
 
         guard !fm.fileExists(atPath: targetAbs) else {
-            throw MoveError.destinationExists
+            throw VaultError.destinationExists
         }
 
         try fm.moveItem(atPath: sourceAbs, toPath: targetAbs)
@@ -458,17 +462,7 @@ public struct Vault: Sendable {
     }
 }
 
-public enum MoveError: Error, LocalizedError {
-    case circularMove
-    case destinationExists
-
-    public var errorDescription: String? {
-        switch self {
-        case .circularMove: return "Cannot move a directory into itself or its descendant."
-        case .destinationExists: return "A directory with that name already exists at the destination."
-        }
-    }
-}
+// MoveError moved to VaultError.swift
 
 // MARK: - Helpers
 

@@ -638,7 +638,7 @@ import os
     /// - Returns: The relative path of the created note.
     @discardableResult
     func createNote(title: String, collectionId: String) throws -> String {
-        guard let entry = selectedVault else { throw CollectionError.invalidName }
+        guard let entry = selectedVault else { throw VaultError.invalidCollectionName }
         let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
         let author = authorName ?? ""
@@ -673,7 +673,7 @@ import os
         let vaultPath = store.resolvedPath(for: entry)
         let slug = makeSlug(from: name)
         guard !slug.isEmpty else {
-            throw CollectionError.invalidName
+            throw VaultError.invalidCollectionName
         }
 
         let subDir = (vaultPath as NSString)
@@ -683,7 +683,7 @@ import os
 
 
         if fm.fileExists(atPath: subDir) {
-            throw CollectionError.alreadyExists(slug)
+            throw VaultError.collectionAlreadyExists(slug)
         }
 
         try fm.createDirectory(atPath: subDir, withIntermediateDirectories: true)

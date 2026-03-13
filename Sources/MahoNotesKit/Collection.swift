@@ -100,7 +100,7 @@ public func addCollection(
 ) throws {
     let collectionId = id ?? makeSlug(from: name)
     guard !collectionId.isEmpty else {
-        throw CollectionError.invalidName
+        throw VaultError.invalidCollectionName
     }
 
     let fm = FileManager.default
@@ -118,7 +118,7 @@ public func addCollection(
 
     // Check for duplicate id
     if collections.contains(where: { ($0["id"] as? String) == collectionId }) {
-        throw CollectionError.alreadyExists(collectionId)
+        throw VaultError.collectionAlreadyExists(collectionId)
     }
 
     // Add new collection entry
@@ -214,14 +214,4 @@ public func updateCollectionInConfig(vaultPath: String, id: String, name: String
     try output.write(to: mahoURL, atomically: true, encoding: .utf8)
 }
 
-public enum CollectionError: Error, LocalizedError {
-    case invalidName
-    case alreadyExists(String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .invalidName: return "Collection name is invalid."
-        case .alreadyExists(let id): return "Collection '\(id)' already exists."
-        }
-    }
-}
+// CollectionError moved to VaultError.swift
