@@ -33,6 +33,11 @@ final class GitHubAuthManager: @unchecked Sendable {
     /// The verification URL where the user enters the code.
     @MainActor var verificationURL: String?
 
+    /// Whether the DeviceFlow sheet should be presented.
+    /// Set to `true` when a device code is available, `false` when auth completes/cancels.
+    /// The view binds directly to this — no need for `onChange` or `didInitiateAuth`.
+    @MainActor var showDeviceFlowSheet: Bool = false
+
     /// The single active auth task — ensures only one auth flow runs at a time.
     @MainActor private var authTask: Task<Void, Never>?
 
@@ -103,9 +108,10 @@ final class GitHubAuthManager: @unchecked Sendable {
                 let codeResponse = try await flow.requestCode()
                 try Task.checkCancellation()
 
-                // Step 2: Show user code in UI
+                // Step 2: Show user code in UI and present the sheet
                 userCode = codeResponse.userCode
                 verificationURL = codeResponse.verificationUri
+                showDeviceFlowSheet = true
 
                 // Step 3: Poll for token
                 let tokenResponse = try await flow.pollForToken(deviceCode: codeResponse)
@@ -121,6 +127,7 @@ final class GitHubAuthManager: @unchecked Sendable {
                 isAuthenticating = false
                 userCode = nil
                 verificationURL = nil
+                showDeviceFlowSheet = false
 
                 // Notify dependents (e.g. SyncCoordinator) that auth is ready
                 onAuthenticated?()
@@ -131,6 +138,7 @@ final class GitHubAuthManager: @unchecked Sendable {
                 isAuthenticating = false
                 userCode = nil
                 verificationURL = nil
+                showDeviceFlowSheet = false
 
                 if !(error is CancellationError) {
                     authError = error.localizedDescription
@@ -151,6 +159,7 @@ final class GitHubAuthManager: @unchecked Sendable {
         isAuthenticating = false
         userCode = nil
         verificationURL = nil
+        showDeviceFlowSheet = false
     }
 
     /// Remove the stored token and reset auth state.

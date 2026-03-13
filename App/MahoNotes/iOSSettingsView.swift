@@ -13,8 +13,7 @@ struct iOSSettingsView: View {
     @State private var vaultToRemove: String?
     @State private var isBuilding = false
     @State private var buildStatus: String?
-    @State private var showingDeviceFlow = false
-    @State private var didInitiateAuth = false
+    
 
     var body: some View {
         NavigationStack {
@@ -300,8 +299,8 @@ struct iOSSettingsView: View {
             if appState.authManager.isAuthenticating && appState.authManager.userCode == nil {
                 ProgressView()
                     .controlSize(.small)
-            } else if appState.authManager.isAuthenticating && !showingDeviceFlow {
-                // Sheet was dismissed (e.g. user went to Safari) — show inline status + cancel
+            } else if appState.authManager.isAuthenticating && !appState.authManager.showDeviceFlowSheet {
+                // Sheet was dismissed (e.g. user went to Safari) — show inline cancel
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
@@ -320,32 +319,23 @@ struct iOSSettingsView: View {
             } else if !appState.authManager.isAuthenticating {
                 Button("Connect") {
                     Task {
-                        didInitiateAuth = true
                         try? await appState.authManager.authenticate()
-                        didInitiateAuth = false
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
         }
-        .onChange(of: appState.authManager.userCode) { _, newValue in
-            if didInitiateAuth {
-                showingDeviceFlow = newValue != nil
+        .sheet(isPresented: Binding(
+            get: { appState.authManager.showDeviceFlowSheet },
+            set: { newValue in
+                if !newValue {
+                    // User dismissed the sheet (swipe/tap outside) — just hide it,
+                    // don't cancel auth. Polling continues in background.
+                    appState.authManager.showDeviceFlowSheet = false
+                }
             }
-        }
-        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated {
-                showingDeviceFlow = false
-                didInitiateAuth = false
-            }
-        }
-        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
-            // Don't cancel auth on sheet dismiss — the user may have switched to
-            // Safari to enter the code. Polling continues in the background.
-            // Auth is only cancelled explicitly via the Cancel button in DeviceFlowSheet.
-            didInitiateAuth = false
-        }) {
+        )) {
             DeviceFlowSheet(authManager: appState.authManager)
         }
     }

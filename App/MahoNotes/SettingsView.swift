@@ -548,8 +548,6 @@ struct SearchSettingsTab: View {
 
 struct GitHubAccountGroupBox: View {
     let authManager: GitHubAuthManager
-    @State private var showingDeviceFlow = false
-    @State private var didInitiateAuth = false
 
     var body: some View {
         GroupBox {
@@ -588,7 +586,7 @@ struct GitHubAccountGroupBox: View {
                 if authManager.isAuthenticating && authManager.userCode == nil {
                     ProgressView()
                         .controlSize(.small)
-                } else if authManager.isAuthenticating && !showingDeviceFlow {
+                } else if authManager.isAuthenticating && !authManager.showDeviceFlowSheet {
                     // Sheet dismissed (e.g. user went to browser) — show cancel option
                     HStack(spacing: 6) {
                         ProgressView()
@@ -608,9 +606,7 @@ struct GitHubAccountGroupBox: View {
                 } else if !authManager.isAuthenticating {
                     Button("Connect to GitHub") {
                         Task {
-                            didInitiateAuth = true
                             try? await authManager.authenticate()
-                            didInitiateAuth = false
                         }
                     }
                     .controlSize(.small)
@@ -619,22 +615,14 @@ struct GitHubAccountGroupBox: View {
             }
             .padding(4)
         }
-        .onChange(of: authManager.userCode) { _, newValue in
-            if didInitiateAuth {
-                showingDeviceFlow = newValue != nil
+        .sheet(isPresented: Binding(
+            get: { authManager.showDeviceFlowSheet },
+            set: { newValue in
+                if !newValue {
+                    authManager.showDeviceFlowSheet = false
+                }
             }
-        }
-        .onChange(of: authManager.isAuthenticated) { _, authenticated in
-            if authenticated {
-                showingDeviceFlow = false
-                didInitiateAuth = false
-            }
-        }
-        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
-            // Don't cancel auth on sheet dismiss — polling continues in background.
-            // Auth is only cancelled via the Cancel button in DeviceFlowSheet.
-            didInitiateAuth = false
-        }) {
+        )) {
             DeviceFlowSheet(authManager: authManager)
         }
     }
