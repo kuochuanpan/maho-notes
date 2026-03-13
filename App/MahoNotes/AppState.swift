@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import MahoNotesKit
+import os
 
 /// Central app state — loads vault registry, resolves vault paths, tracks selection.
 @Observable
@@ -20,6 +21,11 @@ import MahoNotesKit
 
     /// Error message if vault registry failed to load.
     private(set) var errorMessage: String?
+
+    /// Transient error from vault/note operations, shown via alert then cleared.
+    var lastError: String?
+
+    private let logger = Logger(subsystem: "dev.pcca.maho-notes", category: "app")
 
     /// Whether the initial load has completed.
     private(set) var isLoaded: Bool = false
@@ -252,7 +258,12 @@ import MahoNotesKit
 
         var lastNewPath: String?
         for path in paths {
-            lastNewPath = try? vault.moveNote(relativePath: path, toCollection: toCollection)
+            do {
+                lastNewPath = try vault.moveNote(relativePath: path, toCollection: toCollection)
+            } catch {
+                logger.error("moveNote failed for \(path): \(error)")
+                lastError = "Failed to move note: \(error.localizedDescription)"
+            }
         }
 
         // Update selection to last moved note
@@ -498,15 +509,19 @@ import MahoNotesKit
     /// Remove a vault from the registry (does not delete files).
     func removeVault(name: String) {
         Task {
-            guard var registry = try? await store.loadRegistry() else { return }
-            try? registry.removeVault(named: name)
-            // If removing the primary, reassign to first remaining vault
-            if registry.primary == name, let first = registry.vaults.first {
-                registry.primary = first.name
-            }
-            try? await store.saveRegistry(registry)
-            if selectedVaultName == name {
-                selectedVaultName = registry.primary
+            do {
+                guard var registry = try await store.loadRegistry() else { return }
+                try registry.removeVault(named: name)
+                if registry.primary == name, let first = registry.vaults.first {
+                    registry.primary = first.name
+                }
+                try await store.saveRegistry(registry)
+                if selectedVaultName == name {
+                    selectedVaultName = registry.primary
+                }
+            } catch {
+                logger.error("removeVault failed: \(error)")
+                lastError = "Failed to remove vault: \(error.localizedDescription)"
             }
             await loadRegistryAsync()
         }
@@ -515,9 +530,14 @@ import MahoNotesKit
     /// Set a vault as the primary vault.
     func setPrimaryVault(name: String) {
         Task {
-            guard var registry = try? await store.loadRegistry() else { return }
-            try? registry.setPrimary(name)
-            try? await store.saveRegistry(registry)
+            do {
+                guard var registry = try await store.loadRegistry() else { return }
+                try registry.setPrimary(name)
+                try await store.saveRegistry(registry)
+            } catch {
+                logger.error("setPrimaryVault failed: \(error)")
+                lastError = "Failed to set primary vault: \(error.localizedDescription)"
+            }
             await loadRegistryAsync()
         }
     }
@@ -845,10 +865,15 @@ import MahoNotesKit
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
-        let newPath = try? vault.moveNote(relativePath: relativePath, toCollection: toCollection)
-        if selectedNotePath == relativePath, let newPath {
-            selectedNotePath = newPath
-            navigatorSelection = [newPath]
+        do {
+            let newPath = try vault.moveNote(relativePath: relativePath, toCollection: toCollection)
+            if selectedNotePath == relativePath {
+                selectedNotePath = newPath
+                navigatorSelection = [newPath]
+            }
+        } catch {
+            logger.error("moveNote failed: \(error)")
+            lastError = "Failed to move note: \(error.localizedDescription)"
         }
         reloadCurrentVault()
     }
@@ -858,7 +883,12 @@ import MahoNotesKit
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
-        _ = try? vault.moveCollection(collectionId: collectionId, intoParent: intoParent)
+        do {
+            _ = try vault.moveCollection(collectionId: collectionId, intoParent: intoParent)
+        } catch {
+            logger.error("moveCollection failed: \(error)")
+            lastError = "Failed to move collection: \(error.localizedDescription)"
+        }
         reloadCurrentVault()
     }
 
@@ -867,7 +897,12 @@ import MahoNotesKit
         guard let entry = selectedVault else { return }
         let vaultPath = store.resolvedPath(for: entry)
         let vault = Vault(path: vaultPath)
-        _ = try? vault.promoteToTopLevel(collectionId: collectionId)
+        do {
+            _ = try vault.promoteToTopLevel(collectionId: collectionId)
+        } catch {
+            logger.error("promoteToTopLevel failed: \(error)")
+            lastError = "Failed to promote collection: \(error.localizedDescription)"
+        }
         reloadCurrentVault()
     }
 

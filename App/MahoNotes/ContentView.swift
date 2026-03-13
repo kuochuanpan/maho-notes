@@ -40,6 +40,14 @@ struct ContentView: View {
         .onChange(of: appState.selectedVaultName) {
             appState.loadSelectedVault()
         }
+        .alert("Error", isPresented: Binding(
+            get: { appState.lastError != nil },
+            set: { if !$0 { appState.lastError = nil } }
+        )) {
+            Button("OK") { appState.lastError = nil }
+        } message: {
+            Text(appState.lastError ?? "")
+        }
     }
 }
 
