@@ -14,6 +14,7 @@ struct iOSSettingsView: View {
     @State private var isBuilding = false
     @State private var buildStatus: String?
     @State private var showingDeviceFlow = false
+    @State private var didInitiateAuth = false
 
     var body: some View {
         NavigationStack {
@@ -287,19 +288,29 @@ struct iOSSettingsView: View {
                 .controlSize(.small)
             } else if !appState.authManager.isAuthenticating {
                 Button("Connect") {
-                    Task { try? await appState.authManager.authenticate() }
+                    Task {
+                        didInitiateAuth = true
+                        try? await appState.authManager.authenticate()
+                        didInitiateAuth = false
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
         }
         .onChange(of: appState.authManager.userCode) { _, newValue in
-            showingDeviceFlow = newValue != nil
+            if didInitiateAuth {
+                showingDeviceFlow = newValue != nil
+            }
         }
         .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated { showingDeviceFlow = false }
+            if authenticated {
+                showingDeviceFlow = false
+                didInitiateAuth = false
+            }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            didInitiateAuth = false
             if !appState.authManager.isAuthenticated {
                 appState.authManager.cancelAuth()
             }

@@ -13,6 +13,7 @@ struct VaultRailView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showingDeviceFlow = false
+    @State private var didInitiateAuth = false
     @State private var showingRenameDialog = false
     @State private var renameTarget: VaultEntry?
     @State private var renameText = ""
@@ -104,12 +105,19 @@ struct VaultRailView: View {
         .frame(width: 48)
         .background(MahoTheme.vaultRailBackground)
         .onChange(of: appState.authManager.userCode) { _, newValue in
-            showingDeviceFlow = newValue != nil
+            // Only show sheet if this view initiated the auth flow
+            if didInitiateAuth {
+                showingDeviceFlow = newValue != nil
+            }
         }
         .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated { showingDeviceFlow = false }
+            if authenticated {
+                showingDeviceFlow = false
+                didInitiateAuth = false
+            }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            didInitiateAuth = false
             if !appState.authManager.isAuthenticated {
                 appState.authManager.cancelAuth()
                 isCreating = false
@@ -362,7 +370,9 @@ struct VaultRailView: View {
             do {
                 // Authenticate if no token is available yet.
                 if !appState.authManager.isAuthenticated {
+                    didInitiateAuth = true
                     try await appState.authManager.authenticate()
+                    didInitiateAuth = false
                     // If user cancelled (authenticate() returns without throwing), stop.
                     guard appState.authManager.isAuthenticated else {
                         isCreating = false

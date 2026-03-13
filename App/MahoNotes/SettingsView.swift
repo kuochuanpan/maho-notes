@@ -530,6 +530,7 @@ struct SearchSettingsTab: View {
 struct GitHubAccountGroupBox: View {
     let authManager: GitHubAuthManager
     @State private var showingDeviceFlow = false
+    @State private var didInitiateAuth = false
 
     var body: some View {
         GroupBox {
@@ -577,7 +578,9 @@ struct GitHubAccountGroupBox: View {
                 } else if !authManager.isAuthenticating {
                     Button("Connect to GitHub") {
                         Task {
+                            didInitiateAuth = true
                             try? await authManager.authenticate()
+                            didInitiateAuth = false
                         }
                     }
                     .controlSize(.small)
@@ -587,12 +590,18 @@ struct GitHubAccountGroupBox: View {
             .padding(4)
         }
         .onChange(of: authManager.userCode) { _, newValue in
-            showingDeviceFlow = newValue != nil
+            if didInitiateAuth {
+                showingDeviceFlow = newValue != nil
+            }
         }
         .onChange(of: authManager.isAuthenticated) { _, authenticated in
-            if authenticated { showingDeviceFlow = false }
+            if authenticated {
+                showingDeviceFlow = false
+                didInitiateAuth = false
+            }
         }
         .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            didInitiateAuth = false
             if !authManager.isAuthenticated {
                 authManager.cancelAuth()
             }
