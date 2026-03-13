@@ -92,12 +92,22 @@ import MahoNotesKit
 
     /// Merge local vaults with cloud registry.
     func performMerge() {
+        // Capture pendingCloudRegistry synchronously before the Task starts.
+        // On iOS, dismiss() may trigger cancelMerge() which clears it before
+        // the async Task body executes.
+        guard let cloudRegistry = pendingCloudRegistry else {
+            showMergeSheet = false
+            return
+        }
+        pendingCloudRegistry = nil
+        showMergeSheet = false
+
         Task {
             isMigrating = true
             migrationStatus = "Merging vaults…"
             defer { isMigrating = false; migrationStatus = nil }
 
-            // Load local registry BEFORE switching mode (same reason as replaceCloudWithLocal)
+            // Load local registry BEFORE switching mode
             let localRegistrySnapshot: VaultRegistry?
             do {
                 localRegistrySnapshot = try await store.loadRegistry()
@@ -105,14 +115,7 @@ import MahoNotesKit
                 localRegistrySnapshot = nil
             }
 
-            guard let cloudRegistry = pendingCloudRegistry,
-                  let localRegistry = localRegistrySnapshot ?? VaultRegistry(primary: "default", vaults: [])
-                  as VaultRegistry?
-            else {
-                pendingCloudRegistry = nil
-                showMergeSheet = false
-                return
-            }
+            let localRegistry = localRegistrySnapshot ?? VaultRegistry(primary: "default", vaults: [])
 
             var (merged, conflicts) = await store.mergeRegistries(local: localRegistry, cloud: cloudRegistry)
 
@@ -127,8 +130,9 @@ import MahoNotesKit
             // Update local state directly (avoid loadRegistry re-reading before iCloud propagates)
             appState?.updateRegistryState(vaults: merged.vaults, primaryVaultName: merged.primary)
             self.lastMergeConflicts = conflicts
-            self.pendingCloudRegistry = nil
-            self.showMergeSheet = false
+
+            // Trigger iCloud download for cloud vaults that may not be on this device yet
+            await triggerICloudDownloads(for: merged.vaults)
 
             // Now reload to pick up resolved paths
             await appState?.loadRegistryAsync()
@@ -141,6 +145,9 @@ import MahoNotesKit
 
     /// Replace cloud registry with local registry (discard cloud).
     func replaceCloudWithLocal() {
+        pendingCloudRegistry = nil
+        showMergeSheet = false
+
         Task {
             isMigrating = true
             migrationStatus = "Migrating vaults to iCloud…"
@@ -164,9 +171,19 @@ import MahoNotesKit
                 try? await store.saveRegistry(registry)
             }
 
-            pendingCloudRegistry = nil
-            showMergeSheet = false
             await appState?.loadRegistryAsync()
+        }
+    }
+
+    /// Trigger iCloud file downloads for vaults that may not be on this device yet.
+    private func triggerICloudDownloads(for vaults: [VaultEntry]) async {
+        let fm = FileManager.default
+        for entry in vaults where entry.type == .icloud {
+            let path = store.resolvedPath(for: entry)
+            let url = URL(fileURLWithPath: path)
+            // startDownloadingUbiquitousItem tells iCloud to download this directory
+            // if it exists in the cloud but hasn't been fetched to this device yet.
+            try? fm.startDownloadingUbiquitousItem(at: url)
         }
     }
 

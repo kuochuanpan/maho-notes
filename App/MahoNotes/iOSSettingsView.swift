@@ -526,14 +526,14 @@ private struct iOSCloudSyncMergeSheet: View {
                 .frame(maxWidth: 280)
 
                 VStack(spacing: 8) {
-                    Button(action: { appState.cloudSync.performMerge(); dismiss() }) {
+                    Button(action: { appState.cloudSync.performMerge() }) {
                         Label("Merge", systemImage: "arrow.triangle.merge")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
-                    Button(action: { appState.cloudSync.replaceCloudWithLocal(); dismiss() }) {
+                    Button(action: { appState.cloudSync.replaceCloudWithLocal() }) {
                         Label("Replace with Local", systemImage: "arrow.up.to.line")
                             .frame(maxWidth: .infinity)
                     }
@@ -542,7 +542,6 @@ private struct iOSCloudSyncMergeSheet: View {
 
                     Button("Cancel", role: .cancel) {
                         appState.cloudSync.cancelMerge()
-                        dismiss()
                     }
                     .controlSize(.large)
                 }
