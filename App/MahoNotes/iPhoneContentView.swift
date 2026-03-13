@@ -13,46 +13,10 @@ struct iPhoneContentView: View {
     @State private var debounceTask: Task<Void, Never>?
     @State private var navigationPath = NavigationPath()
     @State private var showSidebar = false
-    @State private var showingNewNote = false
-    @State private var newNoteTitle = ""
-    @State private var newNoteCollectionId = ""
-    @State private var newNoteFromContextMenu = false
-    @State private var noteError: String?
-    @State private var showingNewCollection = false
-    @State private var newCollectionName = ""
-    @State private var newCollectionIcon = "folder"
-    @State private var collectionError: String?
-    @State private var showingSettings = false
-    @State private var showingAddVault = false
-
-    // Rename / Delete note alerts
-    @State private var showingRenameNote = false
-    @State private var renameNotePath = ""
-    @State private var renameNoteTitle = ""
-    @State private var showingDeleteNote = false
-    @State private var deleteNotePath = ""
-    @State private var deleteNoteTitle = ""
-
-    // Rename / Delete collection alerts
-    @State private var showingRenameCollection = false
-    @State private var renameCollectionId = ""
-    @State private var renameCollectionName = ""
-    @State private var showingDeleteCollection = false
-    @State private var deleteCollectionId = ""
-    @State private var deleteCollectionName = ""
-    @State private var deleteCollectionIsTopLevel = false
-    @State private var deleteCollectionHasContents = false
-    @State private var showingChangeIcon = false
-    @State private var changeIconCollectionId = ""
-    @State private var changeIconValue = ""
-
-    // Sub-collection creation
-    @State private var showingNewSubCollection = false
-    @State private var newSubCollectionName = ""
-    @State private var newSubCollectionParentId = ""
-    @State private var subCollectionError: String?
+    @State private var sheets = SheetCoordinator()
 
     var body: some View {
+        @Bindable var sheets = sheets
         ZStack(alignment: .leading) {
             // B — Navigator + C — Note Detail (via NavigationStack push)
             NavigationStack(path: $navigationPath) {
@@ -90,7 +54,7 @@ struct iPhoneContentView: View {
                         withAnimation(.easeInOut(duration: 0.25)) { showSidebar = false }
                     }
 
-                IPadVaultRail(showingSettings: $showingSettings)
+                IPadVaultRail(showingSettings: $sheets.showingSettings)
                     .frame(width: 68)
                     .background(MahoTheme.vaultRailBackground)
                     .transition(.move(edge: .leading))
@@ -110,32 +74,32 @@ struct iPhoneContentView: View {
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
-        .sheet(isPresented: $showingAddVault) {
-            IPadAddVaultSheet(isPresented: $showingAddVault)
+        .sheet(isPresented: $sheets.showingAddVault) {
+            IPadAddVaultSheet(isPresented: $sheets.showingAddVault)
         }
-        .sheet(isPresented: $showingNewNote) {
+        .sheet(isPresented: $sheets.showingNewNote) {
             newNoteSheet
         }
-        .sheet(isPresented: $showingNewCollection) {
+        .sheet(isPresented: $sheets.showingNewCollection) {
             newCollectionSheet
         }
-        .sheet(isPresented: $showingSettings) {
-            iOSSettingsView(onDismiss: { showingSettings = false })
+        .sheet(isPresented: $sheets.showingSettings) {
+            iOSSettingsView(onDismiss: { sheets.showingSettings = false })
         }
-        .alert("Rename Note", isPresented: $showingRenameNote) {
-            TextField("Title", text: $renameNoteTitle)
+        .alert("Rename Note", isPresented: $sheets.showingRenameNote) {
+            TextField("Title", text: $sheets.renameNoteTitle)
             Button("Cancel", role: .cancel) { }
             Button("Rename") {
-                let trimmed = renameNoteTitle.trimmingCharacters(in: .whitespaces)
+                let trimmed = sheets.renameNoteTitle.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return }
-                appState.renameNote(relativePath: renameNotePath, newTitle: trimmed)
+                appState.renameNote(relativePath: sheets.renameNotePath, newTitle: trimmed)
             }
         }
-        .alert("Delete \"\(deleteNoteTitle)\"?", isPresented: $showingDeleteNote) {
+        .alert("Delete \"\(sheets.deleteNoteTitle)\"?", isPresented: $sheets.showingDeleteNote) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 do {
-                    try appState.deleteNote(relativePath: deleteNotePath)
+                    try appState.deleteNote(relativePath: sheets.deleteNotePath)
                 } catch {
                     print("[MahoNotes] deleteNote failed: \(error)")
                 }
@@ -143,50 +107,50 @@ struct iPhoneContentView: View {
         } message: {
             Text("This note will be moved to Trash.")
         }
-        .alert("Rename Collection", isPresented: $showingRenameCollection) {
-            TextField("Name", text: $renameCollectionName)
+        .alert("Rename Collection", isPresented: $sheets.showingRenameCollection) {
+            TextField("Name", text: $sheets.renameCollectionName)
             Button("Cancel", role: .cancel) { }
             Button("Rename") {
-                let trimmed = renameCollectionName.trimmingCharacters(in: .whitespaces)
+                let trimmed = sheets.renameCollectionName.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return }
-                try? appState.renameCollection(collectionId: renameCollectionId, newName: trimmed)
+                try? appState.renameCollection(collectionId: sheets.renameCollectionId, newName: trimmed)
             }
         }
         .alert(
-            "Delete \"\(deleteCollectionName)\"?",
-            isPresented: $showingDeleteCollection
+            "Delete \"\(sheets.deleteCollectionName)\"?",
+            isPresented: $sheets.showingDeleteCollection
         ) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 do {
-                    if deleteCollectionIsTopLevel {
-                        try appState.deleteTopLevelCollection(collectionId: deleteCollectionId)
+                    if sheets.deleteCollectionIsTopLevel {
+                        try appState.deleteTopLevelCollection(collectionId: sheets.deleteCollectionId)
                     } else {
-                        try appState.deleteSubCollection(collectionId: deleteCollectionId)
+                        try appState.deleteSubCollection(collectionId: sheets.deleteCollectionId)
                     }
                 } catch {
                     print("[MahoNotes] deleteCollection failed: \(error)")
                 }
             }
         } message: {
-            if deleteCollectionHasContents {
+            if sheets.deleteCollectionHasContents {
                 Text("Notes inside will be moved to the parent collection.")
             } else {
                 Text("This empty collection will be deleted.")
             }
         }
-        .sheet(isPresented: $showingChangeIcon) {
+        .sheet(isPresented: $sheets.showingChangeIcon) {
             IconPickerSheet(
                 title: "Change Icon",
-                selectedIcon: $changeIconValue,
+                selectedIcon: $sheets.changeIconValue,
                 onSave: {
-                    try? appState.changeCollectionIcon(collectionId: changeIconCollectionId, newIcon: changeIconValue)
-                    showingChangeIcon = false
+                    try? appState.changeCollectionIcon(collectionId: sheets.changeIconCollectionId, newIcon: sheets.changeIconValue)
+                    sheets.showingChangeIcon = false
                 },
-                onCancel: { showingChangeIcon = false }
+                onCancel: { sheets.showingChangeIcon = false }
             )
         }
-        .sheet(isPresented: $showingNewSubCollection) {
+        .sheet(isPresented: $sheets.showingNewSubCollection) {
             newSubCollectionSheet
         }
     }
@@ -209,10 +173,10 @@ struct iPhoneContentView: View {
 
             floatingButton(icon: "folder.badge.plus",
                            disabled: appState.selectedVault == nil) {
-                showingNewCollection = true
-                newCollectionName = ""
-                newCollectionIcon = "folder"
-                collectionError = nil
+                sheets.showingNewCollection = true
+                sheets.newCollectionName = ""
+                sheets.newCollectionIcon = "folder"
+                sheets.collectionError = nil
             }
 
             // Sync with spinner
@@ -235,7 +199,7 @@ struct iPhoneContentView: View {
             .disabled(appState.syncCoordinator.isSyncing)
 
             floatingButton(icon: "gearshape", disabled: false) {
-                showingSettings = true
+                sheets.showingSettings = true
             }
         }
         .padding(.horizontal, 8)
@@ -281,7 +245,7 @@ struct iPhoneContentView: View {
                     // No vaults at all — guide user to create one
                     Section {
                         Button {
-                            showingAddVault = true
+                            sheets.showingAddVault = true
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "plus.circle.fill")
@@ -353,19 +317,19 @@ struct iPhoneContentView: View {
                 )
                 .contextMenu {
                     Button {
-                        newNoteCollectionId = node.id
-                        newNoteTitle = ""
-                        noteError = nil
-                        newNoteFromContextMenu = true
-                        showingNewNote = true
+                        sheets.newNoteCollectionId = node.id
+                        sheets.newNoteTitle = ""
+                        sheets.noteError = nil
+                        sheets.newNoteFromContextMenu = true
+                        sheets.showingNewNote = true
                     } label: {
                         Label("New Note", systemImage: "doc.badge.plus")
                     }
                     Button {
-                        newSubCollectionParentId = node.id
-                        newSubCollectionName = ""
-                        subCollectionError = nil
-                        showingNewSubCollection = true
+                        sheets.newSubCollectionParentId = node.id
+                        sheets.newSubCollectionName = ""
+                        sheets.subCollectionError = nil
+                        sheets.showingNewSubCollection = true
                     } label: {
                         Label("New Sub-Collection", systemImage: "folder.badge.plus")
                     }
@@ -386,18 +350,18 @@ struct iPhoneContentView: View {
                     Divider()
 
                     Button {
-                        renameCollectionId = node.id
-                        renameCollectionName = node.name
-                        showingRenameCollection = true
+                        sheets.renameCollectionId = node.id
+                        sheets.renameCollectionName = node.name
+                        sheets.showingRenameCollection = true
                     } label: {
                         Label("Rename", systemImage: "pencil")
                     }
 
                     if isTopLevel {
                         Button {
-                            changeIconCollectionId = node.id
-                            changeIconValue = node.icon
-                            showingChangeIcon = true
+                            sheets.changeIconCollectionId = node.id
+                            sheets.changeIconValue = node.icon
+                            sheets.showingChangeIcon = true
                         } label: {
                             Label("Change Icon", systemImage: "photo")
                         }
@@ -406,11 +370,11 @@ struct iPhoneContentView: View {
                     Divider()
 
                     Button(role: .destructive) {
-                        deleteCollectionId = node.id
-                        deleteCollectionName = node.name
-                        deleteCollectionIsTopLevel = isTopLevel
-                        deleteCollectionHasContents = !node.children.isEmpty
-                        showingDeleteCollection = true
+                        sheets.deleteCollectionId = node.id
+                        sheets.deleteCollectionName = node.name
+                        sheets.deleteCollectionIsTopLevel = isTopLevel
+                        sheets.deleteCollectionHasContents = !node.children.isEmpty
+                        sheets.showingDeleteCollection = true
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -418,20 +382,20 @@ struct iPhoneContentView: View {
                 // Swipe actions on the label only — prevents leaking to child note rows
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
-                        deleteCollectionId = node.id
-                        deleteCollectionName = node.name
-                        deleteCollectionIsTopLevel = isTopLevel
-                        deleteCollectionHasContents = !node.children.isEmpty
-                        showingDeleteCollection = true
+                        sheets.deleteCollectionId = node.id
+                        sheets.deleteCollectionName = node.name
+                        sheets.deleteCollectionIsTopLevel = isTopLevel
+                        sheets.deleteCollectionHasContents = !node.children.isEmpty
+                        sheets.showingDeleteCollection = true
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button {
-                        renameCollectionId = node.id
-                        renameCollectionName = node.name
-                        showingRenameCollection = true
+                        sheets.renameCollectionId = node.id
+                        sheets.renameCollectionName = node.name
+                        sheets.showingRenameCollection = true
                     } label: {
                         Label("Rename", systemImage: "pencil")
                     }
@@ -453,18 +417,18 @@ struct iPhoneContentView: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
-                deleteNotePath = note.relativePath
-                deleteNoteTitle = note.title
-                showingDeleteNote = true
+                sheets.deleteNotePath = note.relativePath
+                sheets.deleteNoteTitle = note.title
+                sheets.showingDeleteNote = true
             } label: {
                 Label("Delete", systemImage: "trash")
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button {
-                renameNotePath = note.relativePath
-                renameNoteTitle = note.title
-                showingRenameNote = true
+                sheets.renameNotePath = note.relativePath
+                sheets.renameNoteTitle = note.title
+                sheets.showingRenameNote = true
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
@@ -478,17 +442,17 @@ struct iPhoneContentView: View {
                 Label("Copy Note", systemImage: "doc.on.doc")
             }
             Button {
-                renameNotePath = note.relativePath
-                renameNoteTitle = note.title
-                showingRenameNote = true
+                sheets.renameNotePath = note.relativePath
+                sheets.renameNoteTitle = note.title
+                sheets.showingRenameNote = true
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
             Divider()
             Button(role: .destructive) {
-                deleteNotePath = note.relativePath
-                deleteNoteTitle = note.title
-                showingDeleteNote = true
+                sheets.deleteNotePath = note.relativePath
+                sheets.deleteNoteTitle = note.title
+                sheets.showingDeleteNote = true
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -569,34 +533,34 @@ struct iPhoneContentView: View {
 
     private func presentNewNote() {
         if let first = appState.collections.first {
-            newNoteCollectionId = first.id
+            sheets.newNoteCollectionId = first.id
         }
-        newNoteTitle = ""
-        noteError = nil
-        newNoteFromContextMenu = false
-        showingNewNote = true
+        sheets.newNoteTitle = ""
+        sheets.noteError = nil
+        sheets.newNoteFromContextMenu = false
+        sheets.showingNewNote = true
     }
 
     private var newNoteSheet: some View {
         return NavigationStack {
             Form {
-                if newNoteFromContextMenu {
+                if sheets.newNoteFromContextMenu {
                     // Triggered from collection context menu — fixed location
                     HStack {
                         Text("Location")
                         Spacer()
-                        Text(newNoteCollectionId.split(separator: "/").map(String.init).last ?? newNoteCollectionId)
+                        Text(sheets.newNoteCollectionId.split(separator: "/").map(String.init).last ?? sheets.newNoteCollectionId)
                             .foregroundStyle(.secondary)
                     }
                 } else if appState.collections.count > 1 {
-                    Picker("Collection", selection: $newNoteCollectionId) {
+                    Picker("Collection", selection: $sheets.newNoteCollectionId) {
                         ForEach(appState.collections, id: \.id) { col in
                             Text(col.name).tag(col.id)
                         }
                     }
                 }
-                TextField("Note Title", text: $newNoteTitle)
-                if let error = noteError {
+                TextField("Note Title", text: $sheets.newNoteTitle)
+                if let error = sheets.noteError {
                     Text(error)
                         .foregroundStyle(.red)
                         .font(.caption)
@@ -606,24 +570,24 @@ struct iPhoneContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingNewNote = false }
+                    Button("Cancel") { sheets.showingNewNote = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        let title = newNoteTitle.trimmingCharacters(in: .whitespaces)
+                        let title = sheets.newNoteTitle.trimmingCharacters(in: .whitespaces)
                         guard !title.isEmpty else { return }
                         do {
-                            let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
-                            showingNewNote = false
+                            let path = try appState.createNote(title: title, collectionId: sheets.newNoteCollectionId)
+                            sheets.showingNewNote = false
                             navigationPath.append(path)
                             // Auto-enter edit mode for new note
                             appState.editorState.viewMode = .editor
                             appState.editorState.startEditing()
                         } catch {
-                            noteError = error.localizedDescription
+                            sheets.noteError = error.localizedDescription
                         }
                     }
-                    .disabled(newNoteTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(sheets.newNoteTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -635,8 +599,8 @@ struct iPhoneContentView: View {
     private var newCollectionSheet: some View {
         NavigationStack {
             Form {
-                TextField("Collection Name", text: $newCollectionName)
-                if let error = collectionError {
+                TextField("Collection Name", text: $sheets.newCollectionName)
+                if let error = sheets.collectionError {
                     Text(error)
                         .foregroundStyle(.red)
                         .font(.caption)
@@ -646,20 +610,20 @@ struct iPhoneContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingNewCollection = false }
+                    Button("Cancel") { sheets.showingNewCollection = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        let name = newCollectionName.trimmingCharacters(in: .whitespaces)
+                        let name = sheets.newCollectionName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }
                         do {
-                            try appState.createCollection(name: name, icon: newCollectionIcon)
-                            showingNewCollection = false
+                            try appState.createCollection(name: name, icon: sheets.newCollectionIcon)
+                            sheets.showingNewCollection = false
                         } catch {
-                            collectionError = error.localizedDescription
+                            sheets.collectionError = error.localizedDescription
                         }
                     }
-                    .disabled(newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(sheets.newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -671,8 +635,8 @@ struct iPhoneContentView: View {
     private var newSubCollectionSheet: some View {
         NavigationStack {
             Form {
-                TextField("Sub-Collection Name", text: $newSubCollectionName)
-                if let error = subCollectionError {
+                TextField("Sub-Collection Name", text: $sheets.newSubCollectionName)
+                if let error = sheets.subCollectionError {
                     Text(error)
                         .foregroundStyle(.red)
                         .font(.caption)
@@ -682,21 +646,21 @@ struct iPhoneContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingNewSubCollection = false }
+                    Button("Cancel") { sheets.showingNewSubCollection = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        let name = newSubCollectionName.trimmingCharacters(in: .whitespaces)
+                        let name = sheets.newSubCollectionName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }
                         do {
-                            try appState.createSubCollection(name: name, parentId: newSubCollectionParentId)
-                            showingNewSubCollection = false
+                            try appState.createSubCollection(name: name, parentId: sheets.newSubCollectionParentId)
+                            sheets.showingNewSubCollection = false
                         } catch {
                             print("[MahoNotes] iPhone: sub-collection error: \(error)")
-                            subCollectionError = error.localizedDescription
+                            sheets.subCollectionError = error.localizedDescription
                         }
                     }
-                    .disabled(newSubCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(sheets.newSubCollectionName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
