@@ -133,11 +133,14 @@ struct MarkdownEditorView: UIViewRepresentable {
 
         if textView.text != text {
             let selectedRange = textView.selectedRange
+            let contentOffset = textView.contentOffset
             textView.text = text
             // Restore selection if still valid
             if selectedRange.location + selectedRange.length <= (text as NSString).length {
                 textView.selectedRange = selectedRange
             }
+            // Preserve scroll position (prevents jumping to bottom on text sync)
+            textView.setContentOffset(contentOffset, animated: false)
         }
 
         let newFontSize = fontSize
@@ -246,10 +249,15 @@ struct MarkdownEditorView: UIViewRepresentable {
         private func applyAction(_ action: MarkdownToolbarAction) {
             guard let textView else { return }
             let selectedRange = textView.selectedRange
+            let contentOffset = textView.contentOffset
             if let result = MarkdownTextHelper.applyAction(action, text: textView.text, selectedRange: selectedRange) {
+                isUpdating = true
                 textView.text = result.text
                 parent.text = result.text
                 textView.selectedRange = result.selectedRange
+                // Preserve scroll position
+                textView.setContentOffset(contentOffset, animated: false)
+                isUpdating = false
                 parent.onSelectionChange?(result.selectedRange)
             }
         }

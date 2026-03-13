@@ -74,11 +74,11 @@ struct NoteContentView: View {
                 }
                 .font(.subheadline)
                 Spacer()
-                // Markdown formatting toolbar (macOS + iPad, editor/split mode only)
-                if appState.editorState.viewMode != .preview && !appState.editorState.isReadOnly {
+                // Markdown formatting toolbar (macOS + iPad landscape only, not iPhone portrait)
+                if appState.editorState.viewMode != .preview && !appState.editorState.isReadOnly && !isCompactWidth {
                     markdownToolbarButtons
                 }
-                if let actions = inlineActionButtons {
+                if appState.editorState.viewMode == .preview, let actions = inlineActionButtons {
                     actions
                 }
             }
