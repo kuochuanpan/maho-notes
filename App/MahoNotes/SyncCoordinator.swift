@@ -68,9 +68,10 @@ final class SyncCoordinator: @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    /// Resolve a GitHub auth token off-actor (may spawn a subprocess on macOS).
+    /// Resolve a GitHub auth token off-actor from stored config only.
+    /// Does NOT try `gh` CLI — subprocess spawning crashes in sandboxed apps.
     private nonisolated static func resolveToken() -> String? {
-        try? Auth().resolveToken().token
+        try? Auth().resolveStoredToken().token
     }
 
     /// Start sync for all vaults that have a `github` field, resolving the auth token

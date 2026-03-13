@@ -1270,7 +1270,10 @@ import MahoNotesKit
         // resolvedPath(for:) uses mahoConfigBase() for .github type.
         let vaultRoot = resolveVaultRoot(storage: .local)
 
-        let token = try Auth().resolveToken()
+        // Use resolveStoredToken() — resolveToken() tries to spawn `gh` CLI subprocess
+        // which crashes in a sandboxed app. The token is already stored in config.yaml
+        // after the user completed Device Flow authentication.
+        let token = try Auth().resolveStoredToken()
 
         let registeredName = try await importGitHubVaultViaAPI(
             repo: repo,
