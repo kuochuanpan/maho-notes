@@ -297,6 +297,11 @@ struct NavigatorView: View {
         }
         .tag(note.relativePath)
         .contentShape(Rectangle())
+        .listRowBackground(
+            MahoTheme.accent(for: colorScheme)
+                .opacity(appState.navigatorSelection.contains(note.relativePath) ? 0.25 : 0)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        )
     }
 
     // MARK: - New Collection Sheet

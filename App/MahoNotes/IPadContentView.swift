@@ -422,6 +422,7 @@ struct IPadContentView: View {
                 }
             }
         }
+        .tint(MahoTheme.accent(for: colorScheme))
     }
 
     // MARK: - Collections Section
@@ -564,6 +565,11 @@ struct IPadContentView: View {
             note: note,
             hasConflict: appState.conflict(for: note.relativePath) != nil,
             hasGitHubConflict: appState.githubConflictFile(for: note.relativePath) != nil
+        )
+        .listRowBackground(
+            MahoTheme.accent(for: colorScheme)
+                .opacity(selectedNotePath == note.relativePath ? 0.25 : 0)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {

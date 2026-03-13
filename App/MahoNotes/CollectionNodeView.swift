@@ -9,6 +9,7 @@ struct CollectionNodeView: View {
     let node: FileTreeNode
     let appState: AppState
     @ObservedObject var dragState: DragState
+    @Environment(\.colorScheme) private var colorScheme
     let isTopLevel: Bool
     let parentId: String?          // nil for top-level
     let siblingDirIds: [String]    // sibling dir IDs for reorder detection
@@ -235,6 +236,11 @@ struct CollectionNodeView: View {
         .tag(path)
         .padding(.leading, CGFloat(indentLevel + 1) * 14)
         .contentShape(Rectangle())
+        .listRowBackground(
+            MahoTheme.accent(for: colorScheme)
+                .opacity(appState.navigatorSelection.contains(path) ? 0.25 : 0)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        )
         #if os(macOS)
         .onTapGesture {
             // Explicit tap handler needed because .onDrag intercepts mouse-down,
