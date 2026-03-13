@@ -97,12 +97,14 @@ struct VaultRailView: View {
         }
         .frame(width: 48)
         .background(MahoTheme.vaultRailBackground)
+        #if os(macOS)
         .sheet(isPresented: $showingCreateSheet) {
             CreateVaultSheet()
         }
         .sheet(isPresented: $showingGitHubSheet) {
             GitHubImportSheet()
         }
+        #endif
         .alert("Rename Vault", isPresented: $showingRenameDialog) {
             TextField("Display name", text: $renameText)
             Button("Cancel", role: .cancel) {}
