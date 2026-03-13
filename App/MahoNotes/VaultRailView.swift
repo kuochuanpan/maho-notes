@@ -437,8 +437,7 @@ private struct GitHubImportSheet: View {
     @State private var githubVaultName = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
-    @State private var showingDeviceFlow = false
-    @State private var didInitiateAuth = false
+    
 
     var body: some View {
         VStack(spacing: 0) {
@@ -497,24 +496,17 @@ private struct GitHubImportSheet: View {
             .padding(16)
         }
         .frame(width: 340)
-        .onChange(of: appState.authManager.userCode) { _, newValue in
-            if didInitiateAuth {
-                showingDeviceFlow = newValue != nil
+        .sheet(isPresented: Binding(
+            get: { appState.authManager.showDeviceFlowSheet },
+            set: { newValue in
+                if !newValue {
+                    appState.authManager.showDeviceFlowSheet = false
+                    if !appState.authManager.isAuthenticated {
+                        isCreating = false
+                    }
+                }
             }
-        }
-        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated {
-                showingDeviceFlow = false
-                didInitiateAuth = false
-            }
-        }
-        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
-            didInitiateAuth = false
-            if !appState.authManager.isAuthenticated {
-                appState.authManager.cancelAuth()
-                isCreating = false
-            }
-        }) {
+        )) {
             DeviceFlowSheet(authManager: appState.authManager)
         }
     }
@@ -528,9 +520,7 @@ private struct GitHubImportSheet: View {
         Task { @MainActor in
             do {
                 if !appState.authManager.isAuthenticated {
-                    didInitiateAuth = true
                     try await appState.authManager.authenticate()
-                    didInitiateAuth = false
                     guard appState.authManager.isAuthenticated else {
                         isCreating = false
                         return

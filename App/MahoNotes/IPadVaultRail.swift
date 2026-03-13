@@ -8,7 +8,6 @@ struct IPadVaultRail: View {
     @Environment(AppState.self) private var appState
     @Binding var showingSettings: Bool
     @State private var showingAddVault = false
-    @State private var showingDeviceFlow = false
     @State private var showingRenameDialog = false
     @State private var renameTarget: VaultEntry?
     @State private var renameText = ""
@@ -79,17 +78,16 @@ struct IPadVaultRail: View {
         .sheet(isPresented: $showingAddVault) {
             IPadAddVaultSheet(isPresented: $showingAddVault)
         }
-        .onChange(of: appState.authManager.userCode) { _, newValue in
-            showingDeviceFlow = newValue != nil
-        }
-        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated { showingDeviceFlow = false }
-        }
-        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
-            if !appState.authManager.isAuthenticated {
-                appState.authManager.cancelAuth()
+        .sheet(isPresented: Binding(
+            get: { appState.authManager.showDeviceFlowSheet },
+            set: { newValue in
+                if !newValue {
+                    // User dismissed the sheet (swipe/tap outside) — just hide it,
+                    // don't cancel auth. Polling continues in background.
+                    appState.authManager.showDeviceFlowSheet = false
+                }
             }
-        }) {
+        )) {
             DeviceFlowSheet(authManager: appState.authManager)
         }
         .alert("Rename Vault", isPresented: $showingRenameDialog) {
