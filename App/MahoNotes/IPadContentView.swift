@@ -642,19 +642,31 @@ struct IPadContentView: View {
             searchResults = []
             return
         }
-        let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let provider: (any EmbeddingProvider)? = (mode != .text)
-                ? appState.searchManager.embeddingProviderForSearch()
-                : nil
-            let results = (try? await VaultSearchService.search(
-                query: trimmed, mode: mode, vaults: locations,
-                embeddingProvider: provider, limit: 20
-            )) ?? []
+
+            // Always try text search first (fast, reliable)
+            let textResults = try? await VaultSearchService.search(
+                query: trimmed, mode: .text, vaults: locations, limit: 20
+            )
+
+            // Then try semantic/hybrid if user selected it
+            let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
+            if mode != .text {
+                let provider = appState.searchManager.embeddingProviderForSearch()
+                if let semanticResults = try? await VaultSearchService.search(
+                    query: trimmed, mode: mode, vaults: locations,
+                    embeddingProvider: provider, limit: 20
+                ), !semanticResults.isEmpty {
+                    if !Task.isCancelled { searchResults = semanticResults }
+                    return
+                }
+            }
+
+            // Use text results (or empty)
             if !Task.isCancelled {
-                searchResults = results
+                searchResults = textResults ?? []
             }
         }
     }
