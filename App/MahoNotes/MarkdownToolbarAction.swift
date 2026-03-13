@@ -92,10 +92,14 @@ enum MarkdownToolbarAction: String, CaseIterable, Identifiable {
 
     // MARK: - Toolbar Groups
 
-    /// Actions shown in the macOS/iPad breadcrumb toolbar.
+    /// Primary actions shown directly in the macOS/iPad breadcrumb toolbar.
     static let breadcrumbActions: [MarkdownToolbarAction] = [
-        .bold, .italic, .strikethrough, .heading, .code, .quote, .bulletList, .checkbox,
-        .table, .insertPhoto, .insertFile
+        .bold, .italic, .strikethrough, .heading, .code, .quote, .bulletList, .checkbox
+    ]
+
+    /// Overflow actions shown in the breadcrumb toolbar "+" menu.
+    static let breadcrumbOverflowActions: [MarkdownToolbarAction] = [
+        .link, .ruby, .table, .insertPhoto, .insertFile
     ]
 
     /// Primary actions for iPhone keyboard accessory.

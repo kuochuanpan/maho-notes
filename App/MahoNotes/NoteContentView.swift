@@ -302,7 +302,7 @@ struct NoteContentView: View {
             onComplexAction: { action in
                 handleToolbarAction(action)
             },
-            showKeyboardAccessory: isCompactWidth
+            showKeyboardAccessory: true
         )
         .task(id: appState.editorState.editingBody) {
             // Debounced auto-save: 2s after last keystroke
@@ -327,26 +327,77 @@ struct NoteContentView: View {
 
     // MARK: - Markdown Toolbar Buttons
 
+    // TODO: Toolbar button state feedback — highlight active formatting (e.g. Bold when cursor is inside **text**).
+    // This requires parsing the markdown context around the cursor, which is complex. Deferred.
+
     @ViewBuilder
     private var markdownToolbarButtons: some View {
         HStack(spacing: 2) {
+            // Primary actions as individual buttons
             ForEach(MarkdownToolbarAction.breadcrumbActions) { action in
-                Button {
-                    handleToolbarAction(action)
-                } label: {
-                    Image(systemName: action.icon)
-                        .font(.system(size: 12))
-                        .frame(width: 26, height: 26)
+                toolbarButton(for: action)
+            }
+
+            // Overflow menu for less common actions
+            Menu {
+                ForEach(MarkdownToolbarAction.breadcrumbOverflowActions) { action in
+                    Button {
+                        handleToolbarAction(action)
+                    } label: {
+                        Label(action.label, systemImage: action.icon)
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .contentShape(Rectangle())
-                #if os(macOS)
-                .help(action.label)
-                #endif
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 12))
+                    .frame(width: 26, height: 26)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("More formatting options")
+
+            // Hidden buttons for keyboard shortcuts without visible toolbar buttons
+            ForEach(MarkdownToolbarAction.breadcrumbOverflowActions) { action in
+                if let shortcut = action.keyboardShortcut {
+                    Button {
+                        handleToolbarAction(action)
+                    } label: {
+                        EmptyView()
+                    }
+                    .keyboardShortcut(shortcut.key, modifiers: shortcut.modifiers)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                }
             }
         }
         .controlSize(.small)
+    }
+
+    private func toolbarButton(for action: MarkdownToolbarAction) -> some View {
+        let button = Button {
+            handleToolbarAction(action)
+        } label: {
+            Image(systemName: action.icon)
+                .font(.system(size: 12))
+                .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .contentShape(Rectangle())
+        .accessibilityLabel(action.label)
+        #if os(macOS)
+        .help(action.label)
+        #endif
+
+        return Group {
+            if let shortcut = action.keyboardShortcut {
+                button.keyboardShortcut(shortcut.key, modifiers: shortcut.modifiers)
+            } else {
+                button
+            }
+        }
     }
 
     /// Route toolbar actions — pickers for photo/file/table, normal applyToolbarAction for the rest.

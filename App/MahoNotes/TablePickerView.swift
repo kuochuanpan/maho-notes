@@ -71,6 +71,8 @@ struct TablePickerView: View {
                                     .strokeBorder(isSelected ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 1)
                             )
                             .frame(width: cellSize, height: cellSize)
+                            .accessibilityLabel("\(col) columns, \(row) rows")
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                     }
                 }
             }
