@@ -125,31 +125,47 @@ extension MarkdownWebView {
     </script>
     """
 
-    /// Replace relative `_assets/` paths with absolute `file://` URLs so WKWebView can load them.
+    /// Replace relative `_assets/` image paths with base64 `data:` URLs so WKWebView can display them.
+    /// Non-image `_assets/` links are converted to `file://` URLs (for "Open in..." via link click).
     private func resolveAssetPaths(in markdown: String, noteDirectoryURL: URL?) -> String {
         guard let dirURL = noteDirectoryURL else { return markdown }
-        // Match both ![...](_assets/...) and [...](_assets/...)
-        let pattern = #"(\!\[[^\]]*\]\()(_assets/[^)]+)(\))"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return markdown }
+
+        // Match image references: ![...](_assets/...)
+        let imgPattern = #"(\!\[[^\]]*\]\()(_assets/[^)]+)(\))"#
+        guard let imgRegex = try? NSRegularExpression(pattern: imgPattern) else { return markdown }
         var result = markdown
         let nsRange = NSRange(result.startIndex..., in: result)
-        let matches = regex.matches(in: result, range: nsRange)
-        for match in matches.reversed() {
+        let imgMatches = imgRegex.matches(in: result, range: nsRange)
+        for match in imgMatches.reversed() {
             guard let pathRange = Range(match.range(at: 2), in: result) else { continue }
             let relativePath = String(result[pathRange])
-            let absoluteURL = dirURL.appendingPathComponent(relativePath)
-            result.replaceSubrange(pathRange, with: absoluteURL.absoluteString)
+            let fileURL = dirURL.appendingPathComponent(relativePath)
+            // Convert to base64 data: URL for WKWebView compatibility
+            if let data = try? Data(contentsOf: fileURL) {
+                let ext = fileURL.pathExtension.lowercased()
+                let mime: String
+                switch ext {
+                case "png": mime = "image/png"
+                case "jpg", "jpeg": mime = "image/jpeg"
+                case "gif": mime = "image/gif"
+                case "webp": mime = "image/webp"
+                case "svg": mime = "image/svg+xml"
+                case "heic": mime = "image/heic"
+                default: mime = "application/octet-stream"
+                }
+                let b64 = data.base64EncodedString()
+                result.replaceSubrange(pathRange, with: "data:\(mime);base64,\(b64)")
+            }
         }
-        // Also handle non-image links: [text](_assets/file.pdf)
-        let linkPattern = #"(\[[^\]]*\]\()(_assets/[^)]+)(\))"#
+
+        // Non-image links: [text](_assets/file.pdf) → file:// URL
+        let linkPattern = #"(?<!\!)(\[[^\]]*\]\()(_assets/[^)]+)(\))"#
         guard let linkRegex = try? NSRegularExpression(pattern: linkPattern) else { return result }
         let nsRange2 = NSRange(result.startIndex..., in: result)
         let linkMatches = linkRegex.matches(in: result, range: nsRange2)
         for match in linkMatches.reversed() {
             guard let pathRange = Range(match.range(at: 2), in: result) else { continue }
             let relativePath = String(result[pathRange])
-            // Only replace if still a relative path (not already resolved by image pass)
-            guard !relativePath.hasPrefix("file://") else { continue }
             let absoluteURL = dirURL.appendingPathComponent(relativePath)
             result.replaceSubrange(pathRange, with: absoluteURL.absoluteString)
         }
