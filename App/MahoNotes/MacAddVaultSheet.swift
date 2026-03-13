@@ -211,39 +211,54 @@ struct MacAddVaultSheet: View {
     // MARK: - GitHub Import Form
 
     private var githubImportForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("GitHub Repository")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("user/repo", text: $githubRepo)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Vault Name (optional)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Defaults to repo name", text: $githubVaultName)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Spacer()
-                Button(isCreating ? "Cloning..." : "Import") {
-                    importFromGitHub()
+        ZStack {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("GitHub Repository")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("user/repo", text: $githubRepo)
+                        .textFieldStyle(.roundedBorder)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vault Name (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Defaults to repo name", text: $githubVaultName)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Import") {
+                        importFromGitHub()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                }
+            }
+            .padding(16)
+            .opacity(isCreating ? 0.3 : 1)
+            .allowsHitTesting(!isCreating)
+
+            if isCreating {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text("Cloning repository…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(16)
     }
 
     // MARK: - Actions

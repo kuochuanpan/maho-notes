@@ -156,24 +156,38 @@ struct IPadAddVaultSheet: View {
     // MARK: - GitHub Import Form
 
     private var githubImportForm: some View {
-        Form {
-            Section {
-                TextField("user/repo", text: $githubRepo)
-            } header: {
-                Text("GitHub Repository")
-            }
-
-            Section {
-                TextField("Defaults to repo name", text: $githubVaultName)
-            } header: {
-                Text("Vault Name (optional)")
-            }
-
-            if let error = errorMessage {
+        ZStack {
+            Form {
                 Section {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                    TextField("user/repo", text: $githubRepo)
+                } header: {
+                    Text("GitHub Repository")
+                }
+
+                Section {
+                    TextField("Defaults to repo name", text: $githubVaultName)
+                } header: {
+                    Text("Vault Name (optional)")
+                }
+
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                    }
+                }
+            }
+            .opacity(isCreating ? 0.3 : 1)
+            .allowsHitTesting(!isCreating)
+
+            if isCreating {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text("Cloning repository…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
