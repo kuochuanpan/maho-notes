@@ -5,34 +5,27 @@ import MahoNotesKit
 struct VaultRailView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAddPopover = false
-    @State private var addVaultMode: AddVaultMode?
-    @State private var newVaultName = ""
-    @State private var newVaultAuthor = ""
-    @State private var githubRepo = ""
-    @State private var githubVaultName = ""
-    @State private var isCreating = false
-    @State private var errorMessage: String?
-    @State private var showingDeviceFlow = false
-    @State private var didInitiateAuth = false
+    @State private var showingCreateSheet = false
+    @State private var showingGitHubSheet = false
     @State private var showingRenameDialog = false
     @State private var renameTarget: VaultEntry?
     @State private var renameText = ""
     @State private var showingColorPicker = false
     @State private var colorPickerTarget: VaultEntry?
 
-    private enum AddVaultMode: Identifiable {
-        case create, github
-        var id: Self { self }
-    }
+    private var hasGitHub: Bool { appState.authManager.isAuthenticated }
 
     var body: some View {
         VStack(spacing: 0) {
             // Add button
             Button {
-                showingAddPopover = true
-                // Skip mode picker if GitHub not authenticated — go straight to create
-                addVaultMode = appState.authManager.isAuthenticated ? nil : .create
-                resetForm()
+                if hasGitHub {
+                    // Show mode picker popover
+                    showingAddPopover = true
+                } else {
+                    // No GitHub auth — go straight to create sheet
+                    showingCreateSheet = true
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .medium))
@@ -53,7 +46,7 @@ struct VaultRailView: View {
                 radius: appState.vaults.isEmpty ? 8 : 0
             )
             .popover(isPresented: $showingAddPopover, arrowEdge: .trailing) {
-                addVaultPopover
+                addVaultModePicker
             }
 
             Divider()
@@ -104,25 +97,11 @@ struct VaultRailView: View {
         }
         .frame(width: 48)
         .background(MahoTheme.vaultRailBackground)
-        .onChange(of: appState.authManager.userCode) { _, newValue in
-            if didInitiateAuth {
-                showingDeviceFlow = newValue != nil
-            }
+        .sheet(isPresented: $showingCreateSheet) {
+            CreateVaultSheet()
         }
-        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
-            if authenticated {
-                showingDeviceFlow = false
-                didInitiateAuth = false
-            }
-        }
-        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
-            didInitiateAuth = false
-            if !appState.authManager.isAuthenticated {
-                appState.authManager.cancelAuth()
-                isCreating = false
-            }
-        }) {
-            DeviceFlowSheet(authManager: appState.authManager)
+        .sheet(isPresented: $showingGitHubSheet) {
+            GitHubImportSheet()
         }
         .alert("Rename Vault", isPresented: $showingRenameDialog) {
             TextField("Display name", text: $renameText)
@@ -140,28 +119,9 @@ struct VaultRailView: View {
         }
     }
 
-    // MARK: - Add Vault Popover
+    // MARK: - Add Vault Mode Picker (popover — static content, no resizing)
 
-    private var hasGitHub: Bool { appState.authManager.isAuthenticated }
-
-    @ViewBuilder
-    private var addVaultPopover: some View {
-        // Use a fixed width for all states to avoid NSPopover resize crashes.
-        VStack(spacing: 0) {
-            if addVaultMode == nil && hasGitHub {
-                modePicker
-            } else if addVaultMode == .create || (addVaultMode == nil && !hasGitHub) {
-                createVaultForm
-            } else if addVaultMode == .github {
-                githubImportForm
-            }
-        }
-        .frame(width: 300)
-    }
-
-    // MARK: - Mode Picker
-
-    private var modePicker: some View {
+    private var addVaultModePicker: some View {
         VStack(spacing: 2) {
             Text("Add Vault")
                 .font(.headline)
@@ -169,7 +129,11 @@ struct VaultRailView: View {
                 .padding(.bottom, 8)
 
             Button {
-                withAnimation { addVaultMode = .create }
+                showingAddPopover = false
+                // Small delay to let popover dismiss before presenting sheet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    showingCreateSheet = true
+                }
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
@@ -197,7 +161,10 @@ struct VaultRailView: View {
                 .padding(.horizontal, 12)
 
             Button {
-                withAnimation { addVaultMode = .github }
+                showingAddPopover = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    showingGitHubSheet = true
+                }
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.triangle.branch")
@@ -222,187 +189,7 @@ struct VaultRailView: View {
             .buttonStyle(.plain)
         }
         .padding(.bottom, 8)
-    }
-
-    // MARK: - Create Vault Form
-
-    private var createVaultForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                if hasGitHub {
-                    Button {
-                        withAnimation { addVaultMode = nil }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Text("Create New Vault")
-                    .font(.headline)
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Vault Name")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("e.g. personal, research", text: $newVaultName)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Author Name (optional)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Your name", text: $newVaultAuthor)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            HStack {
-                Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(appState.cloudSyncMode == .icloud ? "Will sync via iCloud" : "Stored on this device only")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Button("Cancel") {
-                    showingAddPopover = false
-                }
-                Spacer()
-                Button("Create") {
-                    createVault()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
-            }
-        }
-        .padding(16)
-    }
-
-    // MARK: - GitHub Import Form
-
-    private var githubImportForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Button {
-                    withAnimation { addVaultMode = nil }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-
-                Text("Import from GitHub")
-                    .font(.headline)
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("GitHub Repository")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("user/repo", text: $githubRepo)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Vault Name (optional)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Defaults to repo name", text: $githubVaultName)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Button("Cancel") {
-                    showingAddPopover = false
-                }
-                Spacer()
-                Button(isCreating ? "Cloning..." : "Import") {
-                    importFromGitHub()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
-            }
-        }
-        .padding(16)
-    }
-
-    // MARK: - Actions
-
-    private func resetForm() {
-        newVaultName = ""
-        newVaultAuthor = ""
-        githubRepo = ""
-        githubVaultName = ""
-        errorMessage = nil
-        isCreating = false
-    }
-
-    private func createVault() {
-        let name = newVaultName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
-
-        isCreating = true
-        errorMessage = nil
-
-        do {
-            try appState.createNewVault(name: name, authorName: newVaultAuthor.trimmingCharacters(in: .whitespaces))
-            showingAddPopover = false
-        } catch {
-            errorMessage = error.localizedDescription
-            isCreating = false
-        }
-    }
-
-    private func importFromGitHub() {
-        let repo = githubRepo.trimmingCharacters(in: .whitespaces)
-        guard !repo.isEmpty else { return }
-
-        isCreating = true
-        errorMessage = nil
-
-        Task { @MainActor in
-            do {
-                // Authenticate if token expired/revoked since popover opened.
-                if !appState.authManager.isAuthenticated {
-                    didInitiateAuth = true
-                    try await appState.authManager.authenticate()
-                    didInitiateAuth = false
-                    guard appState.authManager.isAuthenticated else {
-                        isCreating = false
-                        return
-                    }
-                }
-
-                let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
-                try await appState.importGitHubVault(
-                    repo: repo,
-                    name: vaultName.isEmpty ? nil : vaultName
-                )
-                showingAddPopover = false
-            } catch {
-                errorMessage = error.localizedDescription
-                isCreating = false
-            }
-        }
+        .frame(width: 260)
     }
 
     // MARK: - Vault Group
@@ -542,3 +329,223 @@ struct VaultRailView: View {
     }
 
 }
+
+// MARK: - Create Vault Sheet
+
+#if os(macOS)
+private struct CreateVaultSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @State private var newVaultName = ""
+    @State private var newVaultAuthor = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Title bar
+            HStack {
+                Text("Create New Vault")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vault Name")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g. personal, research", text: $newVaultName)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Author Name (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Your name", text: $newVaultAuthor)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                HStack {
+                    Image(systemName: appState.cloudSyncMode == .icloud ? "icloud" : "internaldrive")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(appState.cloudSyncMode == .icloud ? "Will sync via iCloud" : "Stored on this device only")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Create") {
+                        createVault()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newVaultName.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                }
+            }
+            .padding(16)
+        }
+        .frame(width: 340)
+    }
+
+    private func createVault() {
+        let name = newVaultName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        isCreating = true
+        errorMessage = nil
+        do {
+            try appState.createNewVault(name: name, authorName: newVaultAuthor.trimmingCharacters(in: .whitespaces))
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            isCreating = false
+        }
+    }
+}
+#endif
+
+// MARK: - GitHub Import Sheet
+
+#if os(macOS)
+private struct GitHubImportSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @State private var githubRepo = ""
+    @State private var githubVaultName = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+    @State private var showingDeviceFlow = false
+    @State private var didInitiateAuth = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Title bar
+            HStack {
+                Text("Import from GitHub")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("GitHub Repository")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("user/repo", text: $githubRepo)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vault Name (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Defaults to repo name", text: $githubVaultName)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button(isCreating ? "Cloning..." : "Import") {
+                        importFromGitHub()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(githubRepo.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
+                }
+            }
+            .padding(16)
+        }
+        .frame(width: 340)
+        .onChange(of: appState.authManager.userCode) { _, newValue in
+            if didInitiateAuth {
+                showingDeviceFlow = newValue != nil
+            }
+        }
+        .onChange(of: appState.authManager.isAuthenticated) { _, authenticated in
+            if authenticated {
+                showingDeviceFlow = false
+                didInitiateAuth = false
+            }
+        }
+        .sheet(isPresented: $showingDeviceFlow, onDismiss: {
+            didInitiateAuth = false
+            if !appState.authManager.isAuthenticated {
+                appState.authManager.cancelAuth()
+                isCreating = false
+            }
+        }) {
+            DeviceFlowSheet(authManager: appState.authManager)
+        }
+    }
+
+    private func importFromGitHub() {
+        let repo = githubRepo.trimmingCharacters(in: .whitespaces)
+        guard !repo.isEmpty else { return }
+        isCreating = true
+        errorMessage = nil
+
+        Task { @MainActor in
+            do {
+                if !appState.authManager.isAuthenticated {
+                    didInitiateAuth = true
+                    try await appState.authManager.authenticate()
+                    didInitiateAuth = false
+                    guard appState.authManager.isAuthenticated else {
+                        isCreating = false
+                        return
+                    }
+                }
+
+                let vaultName = githubVaultName.trimmingCharacters(in: .whitespaces)
+                try await appState.importGitHubVault(
+                    repo: repo,
+                    name: vaultName.isEmpty ? nil : vaultName
+                )
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                isCreating = false
+            }
+        }
+    }
+}
+#endif
