@@ -18,8 +18,9 @@ struct MarkdownWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
-        // Use bundle resource URL as base so KaTeX can resolve relative font paths
         let baseURL = Bundle.main.resourceURL
+        context.coordinator.lastHTML = html
+        context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
@@ -44,6 +45,8 @@ struct MarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
+        context.coordinator.lastHTML = html
+        context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
@@ -55,6 +58,10 @@ struct MarkdownWebView: UIViewRepresentable {
 
 extension MarkdownWebView {
     final class Coordinator: NSObject, WKNavigationDelegate {
+        /// Last-loaded HTML, used to restore content after web content process termination.
+        var lastHTML: String?
+        var lastBaseURL: URL?
+
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
@@ -70,6 +77,15 @@ extension MarkdownWebView {
                 decisionHandler(.cancel)
             } else {
                 decisionHandler(.allow)
+            }
+        }
+
+        /// iOS may terminate WKWebView's web content process while the app is suspended.
+        /// When the app resumes, the web view shows stale/blank content.
+        /// Reload the last HTML to restore the preview.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            if let html = lastHTML {
+                webView.loadHTMLString(html, baseURL: lastBaseURL)
             }
         }
     }
