@@ -19,6 +19,8 @@ struct MarkdownWebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
+        // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
+        guard html != context.coordinator.lastHTML else { return }
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)
@@ -45,6 +47,8 @@ struct MarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
+        // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
+        guard html != context.coordinator.lastHTML else { return }
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)

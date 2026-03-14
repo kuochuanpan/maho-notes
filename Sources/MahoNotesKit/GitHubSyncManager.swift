@@ -211,7 +211,7 @@ public actor GitHubSyncManager {
 
         // Already up to date?
         if remoteHeadSHA == manifest.lastCommitSHA {
-            return SyncResult(pulled: true, message: "Already up to date.")
+            return SyncResult(message: "Already up to date.")
         }
 
         // 2. Get remote tree
