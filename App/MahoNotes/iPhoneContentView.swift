@@ -477,7 +477,11 @@ struct iPhoneContentView: View {
                 }
             }
             .onAppear {
-                appState.selectNote(path: notePath)
+                // Skip selectNote if already selected (e.g. from createNote which
+                // sets viewMode = .editor — selectNote would reset it to .preview)
+                if appState.selectedNotePath != notePath {
+                    appState.selectNote(path: notePath)
+                }
             }
             .onDisappear {
                 // Auto-save when navigating back to B column

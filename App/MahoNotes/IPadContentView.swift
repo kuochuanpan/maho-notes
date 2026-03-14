@@ -101,7 +101,12 @@ struct IPadContentView: View {
             if oldValue != nil && oldValue != newValue && appState.editorState.hasUnsavedChanges {
                 appState.editorState.saveNote()
             }
-            appState.selectNote(path: newValue)
+            // Skip selectNote if AppState already points at this path
+            // (e.g. createNote sets selectedNotePath + viewMode = .editor;
+            //  calling selectNote again would reset viewMode to .preview)
+            if appState.selectedNotePath != newValue {
+                appState.selectNote(path: newValue)
+            }
         }
         .sheet(isPresented: $sheets.showingSettings) {
             iOSSettingsView(onDismiss: { sheets.showingSettings = false })
