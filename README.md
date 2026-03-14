@@ -12,8 +12,8 @@ A personal knowledge base for humans and AI agents.
 - **Hybrid search** — reciprocal rank fusion combining keyword + semantic results
 - **GitHub sync** — git-based sync with conflict resolution (device-name split)
 - **iCloud sync** — seamless cross-device sync via CloudDocuments
-- **Markdown editor** — formatting toolbar with 14 actions, ⌘K search, KaTeX math
-- **Static publishing** — generate a site from public notes
+- **Markdown editor** — formatting toolbar with 14 actions, ⌘K search, KaTeX math, ruby annotations `{漢字|ふりがな}`
+- **Static publishing** — generate a site from public notes (CLI only; app integration planned)
 - **AI-agent friendly** — `mn skill` outputs a comprehensive usage guide; all commands support `--json`
 
 ## Install
