@@ -82,13 +82,12 @@ struct IPadVaultRail: View {
             get: { appState.authManager.showDeviceFlowSheet },
             set: { newValue in
                 if !newValue {
-                    // User dismissed the sheet (swipe/tap outside) — just hide it,
-                    // don't cancel auth. Polling continues in background.
                     appState.authManager.showDeviceFlowSheet = false
                 }
             }
         )) {
             DeviceFlowSheet(authManager: appState.authManager)
+                .interactiveDismissDisabled(appState.authManager.isAuthenticating)
         }
         .alert("Rename Vault", isPresented: $showingRenameDialog) {
             TextField("Display name", text: $renameText)

@@ -80,6 +80,7 @@ struct MacAddVaultSheet: View {
             }
         )) {
             DeviceFlowSheet(authManager: appState.authManager)
+                .interactiveDismissDisabled(appState.authManager.isAuthenticating)
         }
     }
 

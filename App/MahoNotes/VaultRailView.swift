@@ -508,6 +508,7 @@ private struct GitHubImportSheet: View {
             }
         )) {
             DeviceFlowSheet(authManager: appState.authManager)
+                .interactiveDismissDisabled(appState.authManager.isAuthenticating)
         }
     }
 

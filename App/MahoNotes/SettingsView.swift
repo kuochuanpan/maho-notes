@@ -624,6 +624,7 @@ struct GitHubAccountGroupBox: View {
             }
         )) {
             DeviceFlowSheet(authManager: authManager)
+                .interactiveDismissDisabled(authManager.isAuthenticating)
         }
     }
 }

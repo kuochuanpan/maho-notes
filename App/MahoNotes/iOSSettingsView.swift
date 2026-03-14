@@ -326,18 +326,8 @@ struct iOSSettingsView: View {
                 .controlSize(.small)
             }
         }
-        .sheet(isPresented: Binding(
-            get: { appState.authManager.showDeviceFlowSheet },
-            set: { newValue in
-                if !newValue {
-                    // User dismissed the sheet (swipe/tap outside) — just hide it,
-                    // don't cancel auth. Polling continues in background.
-                    appState.authManager.showDeviceFlowSheet = false
-                }
-            }
-        )) {
-            DeviceFlowSheet(authManager: appState.authManager)
-        }
+        // DeviceFlow sheet is presented by IPadVaultRail (always in hierarchy)
+        // to avoid multiple .sheet bindings competing for the same boolean.
     }
 
     // MARK: - GitHub Sync Row (compact, vault-row style)
