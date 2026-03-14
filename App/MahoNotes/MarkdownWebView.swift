@@ -43,6 +43,7 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
     }
 
     func makeUIView(context: Context) -> WKWebView {
+        print("🔄 [WEBVIEW-iOS] makeUIView: CREATING new WKWebView (structural identity changed)")
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -56,7 +57,12 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
-        guard html != context.coordinator.lastHTML else { return }
+        if html == context.coordinator.lastHTML {
+            print("🔄 [WEBVIEW-iOS] updateUIView: HTML unchanged, SKIPPING loadHTMLString")
+            return
+        }
+        let oldLen = context.coordinator.lastHTML?.count ?? 0
+        print("🔄 [WEBVIEW-iOS] updateUIView: HTML CHANGED (\(oldLen) → \(html.count)), loading. markdown length=\(markdown.count)")
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)

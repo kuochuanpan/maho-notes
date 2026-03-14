@@ -222,6 +222,7 @@ final class SyncCoordinator: @unchecked Sendable {
         // reads the latest content and conflict detection is accurate.
         onBeforeSync?(vaultName)
 
+        print("🔄 [SYNC] runSync START for \(vaultName)")
         vaultSyncStatus[vaultName, default: VaultSyncStatus()].isSyncing = true
         do {
             let result = try await manager.sync()
@@ -232,8 +233,11 @@ final class SyncCoordinator: @unchecked Sendable {
             lastSyncError = nil  // Clear global error on success
             processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
 
+            print("🔄 [SYNC] runSync DONE for \(vaultName): pulled=\(result.pulled) pushed=\(result.pushed) cloned=\(result.cloned) msg=\(result.message)")
+
             // Notify AppState to reload UI if remote changes were pulled
             if result.pulled || result.cloned {
+                print("🔄 [SYNC] → triggering onSyncCompleted (reloadCurrentVault)")
                 onSyncCompleted?(vaultName)
             }
         } catch {

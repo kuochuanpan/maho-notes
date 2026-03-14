@@ -386,6 +386,9 @@ import os
 
     /// Reload the current vault's notes without changing selection.
     func reloadCurrentVault() {
+        // DEBUG: trace who calls reloadCurrentVault
+        let caller = Thread.callStackSymbols.prefix(6).joined(separator: "\n")
+        print("🔄 [RELOAD] reloadCurrentVault called. Stack:\n\(caller)")
         guard let entry = selectedVault else { return }
 
         let vaultPath = store.resolvedPath(for: entry)

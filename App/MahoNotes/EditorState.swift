@@ -118,10 +118,12 @@ import MahoNotesKit
 
             let newContent = frontmatterLines.joined(separator: "\n") + "\n" + editingBody
             try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+            print("🔄 [SAVE] saveNote wrote \(newContent.count) bytes to \(note.relativePath). editingBody length=\(editingBody.count)")
             appState.syncCoordinator.notifyContentChanged(vault: entry)
 
             // Reload the note in allNotes
             if let updated = try parseNote(at: filePath, relativeTo: vaultPath) {
+                print("🔄 [SAVE] updateNote: parsed body length=\(updated.body.count), updated=\(updated.updated)")
                 appState.updateNote(updated, replacing: note.relativePath)
 
                 // Background: re-embed the updated note for vector search
