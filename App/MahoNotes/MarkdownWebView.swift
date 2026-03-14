@@ -3,10 +3,14 @@ import WebKit
 import MahoNotesKit
 
 #if os(macOS)
-struct MarkdownWebView: NSViewRepresentable {
+struct MarkdownWebView: NSViewRepresentable, Equatable {
     let markdown: String
     /// Directory containing the note file — used to resolve relative `_assets/` paths.
     var noteDirectoryURL: URL?
+
+    nonisolated static func == (lhs: MarkdownWebView, rhs: MarkdownWebView) -> Bool {
+        lhs.markdown == rhs.markdown && lhs.noteDirectoryURL == rhs.noteDirectoryURL
+    }
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -29,10 +33,14 @@ struct MarkdownWebView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 }
 #else
-struct MarkdownWebView: UIViewRepresentable {
+struct MarkdownWebView: UIViewRepresentable, Equatable {
     let markdown: String
     /// Directory containing the note file — used to resolve relative `_assets/` paths.
     var noteDirectoryURL: URL?
+
+    nonisolated static func == (lhs: MarkdownWebView, rhs: MarkdownWebView) -> Bool {
+        lhs.markdown == rhs.markdown && lhs.noteDirectoryURL == rhs.noteDirectoryURL
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()

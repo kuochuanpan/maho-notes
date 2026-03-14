@@ -270,7 +270,11 @@ final class SyncCoordinator: @unchecked Sendable {
         for p in renamed where !combined.contains(p) {
             combined.append(p)
         }
-        githubConflictFiles[vaultName] = combined
+        // Only update if the list actually changed — avoid unnecessary @Observable notifications
+        // that cascade to NoteContentView and trigger MarkdownWebView re-renders.
+        if combined != (githubConflictFiles[vaultName] ?? []) {
+            githubConflictFiles[vaultName] = combined
+        }
     }
 
     /// Rename a `*.conflict-TIMESTAMP-local.*` file to `*.conflict-{deviceName}.*`.
