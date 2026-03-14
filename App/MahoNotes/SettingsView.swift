@@ -112,7 +112,7 @@ struct VaultsSettingsTab: View {
             HStack {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                Text("Use `mn vault add` from the CLI to add vaults.")
+                Text("Use the + button in the vault rail to add vaults.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

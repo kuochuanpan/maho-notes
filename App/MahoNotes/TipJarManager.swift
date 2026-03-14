@@ -7,6 +7,8 @@ import SwiftUI
 final class TipJarManager {
     /// Available tip products, sorted by price.
     var products: [Product] = []
+    /// Whether product loading has completed (regardless of result).
+    var didLoadProducts = false
     /// Currently processing purchase (product ID).
     var purchasing: String?
     /// Last error message.
@@ -29,6 +31,7 @@ final class TipJarManager {
         } catch {
             errorMessage = "Failed to load products: \(error.localizedDescription)"
         }
+        didLoadProducts = true
     }
 
     /// Purchase a tip product.

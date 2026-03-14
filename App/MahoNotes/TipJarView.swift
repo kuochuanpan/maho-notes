@@ -22,7 +22,7 @@ struct TipJarView: View {
                     .frame(width: 28)
             }
 
-            if tipJar.products.isEmpty {
+            if tipJar.products.isEmpty && !tipJar.didLoadProducts {
                 HStack {
                     Spacer()
                     ProgressView()
@@ -32,6 +32,10 @@ struct TipJarView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
+            } else if tipJar.products.isEmpty && tipJar.didLoadProducts {
+                Text("Tip jar is not available at the moment.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 8) {
                     ForEach(tipJar.products, id: \.id) { product in
