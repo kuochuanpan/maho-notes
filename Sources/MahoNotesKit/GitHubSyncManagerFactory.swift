@@ -16,7 +16,13 @@ extension GitHubSyncManager {
         guard parts.count == 2 else { return nil }
         let owner = String(parts[0])
         let repo = String(parts[1])
-        let client = GitHubClient(token: token)
+        // Use an ephemeral URLSession (no HTTP cache) to avoid stale refs
+        // after push. URLSession.shared caches GitHub API responses; when
+        // pull() immediately follows push(), the cached refs.get response
+        // returns the OLD commit SHA, causing pull to download stale files
+        // and overwrite the just-saved local content.
+        let session = URLSession(configuration: .ephemeral)
+        let client = GitHubClient(token: token, session: session)
         return GitHubSyncManager(
             client: client,
             owner: owner,
