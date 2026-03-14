@@ -222,6 +222,17 @@ struct iOSSettingsView: View {
                 }
             }
         }
+        .preferredColorScheme(themeColorScheme)
+    }
+
+    /// Resolve the current theme to a ColorScheme so the settings sheet
+    /// updates immediately when the user switches themes.
+    private var themeColorScheme: ColorScheme? {
+        switch appTheme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
     }
 
     private func vaultRow(_ entry: VaultEntry) -> some View {
