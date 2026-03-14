@@ -72,6 +72,15 @@ import os
         cloudSync.appState = self
         clipboard.appState = self
 
+        // Flush unsaved editor changes to disk before sync starts
+        syncCoordinator.onBeforeSync = { [weak self] vaultName in
+            guard let self else { return }
+            if self.selectedVault?.name == vaultName,
+               self.editorState.hasUnsavedChanges {
+                self.editorState.saveNote()
+            }
+        }
+
         // Reload UI after GitHub sync pulls remote changes
         syncCoordinator.onSyncCompleted = { [weak self] vaultName in
             guard let self else { return }

@@ -57,6 +57,10 @@ final class SyncCoordinator: @unchecked Sendable {
     /// Conflict files by vault name → list of relative conflict paths (device-name format).
     var githubConflictFiles: [String: [String]] = [:]
 
+    /// Called before sync starts for a vault.
+    /// Set by AppState to flush unsaved editor changes to disk.
+    var onBeforeSync: ((String) -> Void)?
+
     /// Called after a successful sync that pulled remote changes.
     /// Set by AppState to trigger `reloadCurrentVault()`.
     var onSyncCompleted: ((String) -> Void)?
@@ -213,6 +217,10 @@ final class SyncCoordinator: @unchecked Sendable {
         }
         syncInProgress.insert(vaultName)
         defer { syncInProgress.remove(vaultName) }
+
+        // Flush unsaved editor changes to disk before sync so push
+        // reads the latest content and conflict detection is accurate.
+        onBeforeSync?(vaultName)
 
         vaultSyncStatus[vaultName, default: VaultSyncStatus()].isSyncing = true
         do {
