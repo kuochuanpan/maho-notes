@@ -79,7 +79,12 @@ struct IPadVaultRail: View {
             IPadAddVaultSheet(isPresented: $showingAddVault)
         }
         .sheet(isPresented: Binding(
-            get: { appState.authManager.showDeviceFlowSheet },
+            get: {
+                // Only present from here when settings is NOT open.
+                // When settings IS open, iOSSettingsView presents the sheet
+                // (a view behind a sheet can't present another sheet in SwiftUI).
+                appState.authManager.showDeviceFlowSheet && !showingSettings
+            },
             set: { newValue in
                 if !newValue {
                     appState.authManager.showDeviceFlowSheet = false
