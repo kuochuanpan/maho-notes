@@ -206,7 +206,7 @@ struct NoteContentView: View {
                 MarkdownWebView(
                     markdown: note.body,
                     noteDirectoryURL: noteDirectoryURL(for: note),
-                    onCheckboxToggle: { index, checked in
+                    onCheckboxToggle: appState.editorState.isReadOnly ? nil : { index, checked in
                         appState.editorState.toggleCheckbox(at: index, checked: checked)
                     }
                 )

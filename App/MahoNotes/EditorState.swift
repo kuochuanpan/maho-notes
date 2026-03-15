@@ -10,8 +10,14 @@ import MahoNotesKit
     /// View mode for the content panel.
     enum ViewMode: String { case preview, editor, split }
 
-    /// Current view mode.
-    var viewMode: ViewMode = .preview
+    /// Current view mode. Forced to `.preview` for read-only vaults.
+    var viewMode: ViewMode = .preview {
+        didSet {
+            if isReadOnly && viewMode != .preview {
+                viewMode = .preview
+            }
+        }
+    }
 
     /// The current editing buffer (raw markdown body).
     var editingBody: String = ""

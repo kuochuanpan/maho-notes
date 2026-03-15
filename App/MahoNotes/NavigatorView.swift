@@ -247,21 +247,23 @@ struct NavigatorView: View {
             HStack {
                 Text("COLLECTIONS")
                 Spacer()
-                Button {
-                    newCollectionName = ""
-                    newCollectionIcon = "folder"
-                    collectionError = nil
-                    showingNewCollection = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
+                if appState.selectedVault?.access != .readOnly {
+                    Button {
+                        newCollectionName = ""
+                        newCollectionIcon = "folder"
+                        collectionError = nil
+                        showingNewCollection = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("New Collection")
+                    .padding(.trailing, 4)
                 }
-                .buttonStyle(.plain)
-                .help("New Collection")
-                .padding(.trailing, 4)
             }
         }
     }

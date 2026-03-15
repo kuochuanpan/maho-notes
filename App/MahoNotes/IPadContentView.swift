@@ -50,7 +50,7 @@ struct IPadContentView: View {
                             } label: {
                                 Label("New Note", systemImage: "square.and.pencil")
                             }
-                            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+                            .disabled(appState.selectedVault == nil || appState.collections.isEmpty || appState.selectedVault?.access == .readOnly)
 
                             Button {
                                 sheets.showingNewCollection = true
@@ -60,11 +60,11 @@ struct IPadContentView: View {
                             } label: {
                                 Label("New Collection", systemImage: "folder.badge.plus")
                             }
-                            .disabled(appState.selectedVault == nil)
+                            .disabled(appState.selectedVault == nil || appState.selectedVault?.access == .readOnly)
                         } label: {
                             Image(systemName: "plus")
                         }
-                        .disabled(appState.selectedVault == nil)
+                        .disabled(appState.selectedVault == nil || appState.selectedVault?.access == .readOnly)
                     }
                 }
         } detail: {
@@ -80,13 +80,13 @@ struct IPadContentView: View {
                     onCreateVault: {
                         sheets.showingAddVault = true
                     },
-                    onCreateCollection: {
+                    onCreateCollection: appState.selectedVault?.access == .readOnly ? nil : {
                         sheets.showingNewCollection = true
                         sheets.newCollectionName = ""
                         sheets.newCollectionIcon = "folder"
                         sheets.collectionError = nil
                     },
-                    onCreateNote: {
+                    onCreateNote: appState.selectedVault?.access == .readOnly ? nil : {
                         presentNewNote()
                     }
                 ))
@@ -204,7 +204,7 @@ struct IPadContentView: View {
             } label: {
                 Image(systemName: "square.and.pencil")
             }
-            .disabled(appState.selectedVault == nil || appState.collections.isEmpty)
+            .disabled(appState.selectedVault == nil || appState.collections.isEmpty || appState.selectedVault?.access == .readOnly)
 
             Button {
                 appState.syncCoordinator.syncNow()
@@ -226,7 +226,7 @@ struct IPadContentView: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
             }
-            .disabled(appState.selectedVault == nil)
+            .disabled(appState.selectedVault == nil || appState.selectedVault?.access == .readOnly)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)

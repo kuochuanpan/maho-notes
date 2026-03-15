@@ -168,12 +168,12 @@ struct iPhoneContentView: View {
     private var floatingToolbar: some View {
         HStack(spacing: 20) {
             floatingButton(icon: "square.and.pencil",
-                           disabled: appState.selectedVault == nil || appState.collections.isEmpty) {
+                           disabled: appState.selectedVault == nil || appState.collections.isEmpty || appState.selectedVault?.access == .readOnly) {
                 presentNewNote()
             }
 
             floatingButton(icon: "folder.badge.plus",
-                           disabled: appState.selectedVault == nil) {
+                           disabled: appState.selectedVault == nil || appState.selectedVault?.access == .readOnly) {
                 sheets.showingNewCollection = true
                 sheets.newCollectionName = ""
                 sheets.newCollectionIcon = "folder"
@@ -317,90 +317,96 @@ struct iPhoneContentView: View {
                     noteCount: noteChildren.count
                 )
                 .contextMenu {
-                    Button {
-                        sheets.newNoteCollectionId = node.id
-                        sheets.newNoteTitle = ""
-                        sheets.noteError = nil
-                        sheets.newNoteFromContextMenu = true
-                        sheets.showingNewNote = true
-                    } label: {
-                        Label("New Note", systemImage: "doc.badge.plus")
-                    }
-                    Button {
-                        sheets.newSubCollectionParentId = node.id
-                        sheets.newSubCollectionName = ""
-                        sheets.subCollectionError = nil
-                        sheets.showingNewSubCollection = true
-                    } label: {
-                        Label("New Sub-Collection", systemImage: "folder.badge.plus")
-                    }
-
-                    Divider()
-
-                    Button {
-                        appState.clipboard.pasteNotes(toCollection: node.id)
-                    } label: {
-                        if let entries = appState.clipboard.entries, entries.count > 1 {
-                            Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
-                        } else {
-                            Label("Paste Note", systemImage: "doc.on.clipboard")
-                        }
-                    }
-                    .disabled(appState.clipboard.entries == nil)
-
-                    Divider()
-
-                    Button {
-                        sheets.renameCollectionId = node.id
-                        sheets.renameCollectionName = node.name
-                        sheets.showingRenameCollection = true
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-
-                    if isTopLevel {
+                    if appState.selectedVault?.access != .readOnly {
                         Button {
-                            sheets.changeIconCollectionId = node.id
-                            sheets.changeIconValue = node.icon
-                            sheets.showingChangeIcon = true
+                            sheets.newNoteCollectionId = node.id
+                            sheets.newNoteTitle = ""
+                            sheets.noteError = nil
+                            sheets.newNoteFromContextMenu = true
+                            sheets.showingNewNote = true
                         } label: {
-                            Label("Change Icon", systemImage: "photo")
+                            Label("New Note", systemImage: "doc.badge.plus")
                         }
-                    }
+                        Button {
+                            sheets.newSubCollectionParentId = node.id
+                            sheets.newSubCollectionName = ""
+                            sheets.subCollectionError = nil
+                            sheets.showingNewSubCollection = true
+                        } label: {
+                            Label("New Sub-Collection", systemImage: "folder.badge.plus")
+                        }
 
-                    Divider()
+                        Divider()
 
-                    Button(role: .destructive) {
-                        sheets.deleteCollectionId = node.id
-                        sheets.deleteCollectionName = node.name
-                        sheets.deleteCollectionIsTopLevel = isTopLevel
-                        sheets.deleteCollectionHasContents = !node.children.isEmpty
-                        sheets.showingDeleteCollection = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                        Button {
+                            appState.clipboard.pasteNotes(toCollection: node.id)
+                        } label: {
+                            if let entries = appState.clipboard.entries, entries.count > 1 {
+                                Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
+                            } else {
+                                Label("Paste Note", systemImage: "doc.on.clipboard")
+                            }
+                        }
+                        .disabled(appState.clipboard.entries == nil)
+
+                        Divider()
+
+                        Button {
+                            sheets.renameCollectionId = node.id
+                            sheets.renameCollectionName = node.name
+                            sheets.showingRenameCollection = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+
+                        if isTopLevel {
+                            Button {
+                                sheets.changeIconCollectionId = node.id
+                                sheets.changeIconValue = node.icon
+                                sheets.showingChangeIcon = true
+                            } label: {
+                                Label("Change Icon", systemImage: "photo")
+                            }
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            sheets.deleteCollectionId = node.id
+                            sheets.deleteCollectionName = node.name
+                            sheets.deleteCollectionIsTopLevel = isTopLevel
+                            sheets.deleteCollectionHasContents = !node.children.isEmpty
+                            sheets.showingDeleteCollection = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
                 // Swipe actions on the label only — prevents leaking to child note rows
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        sheets.deleteCollectionId = node.id
-                        sheets.deleteCollectionName = node.name
-                        sheets.deleteCollectionIsTopLevel = isTopLevel
-                        sheets.deleteCollectionHasContents = !node.children.isEmpty
-                        sheets.showingDeleteCollection = true
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    if appState.selectedVault?.access != .readOnly {
+                        Button(role: .destructive) {
+                            sheets.deleteCollectionId = node.id
+                            sheets.deleteCollectionName = node.name
+                            sheets.deleteCollectionIsTopLevel = isTopLevel
+                            sheets.deleteCollectionHasContents = !node.children.isEmpty
+                            sheets.showingDeleteCollection = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button {
-                        sheets.renameCollectionId = node.id
-                        sheets.renameCollectionName = node.name
-                        sheets.showingRenameCollection = true
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
+                    if appState.selectedVault?.access != .readOnly {
+                        Button {
+                            sheets.renameCollectionId = node.id
+                            sheets.renameCollectionName = node.name
+                            sheets.showingRenameCollection = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        .tint(.orange)
                     }
-                    .tint(.orange)
                 }
             }
         )
@@ -417,23 +423,27 @@ struct iPhoneContentView: View {
             )
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                sheets.deleteNotePath = note.relativePath
-                sheets.deleteNoteTitle = note.title
-                sheets.showingDeleteNote = true
-            } label: {
-                Label("Delete", systemImage: "trash")
+            if appState.selectedVault?.access != .readOnly {
+                Button(role: .destructive) {
+                    sheets.deleteNotePath = note.relativePath
+                    sheets.deleteNoteTitle = note.title
+                    sheets.showingDeleteNote = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            Button {
-                sheets.renameNotePath = note.relativePath
-                sheets.renameNoteTitle = note.title
-                sheets.showingRenameNote = true
-            } label: {
-                Label("Rename", systemImage: "pencil")
+            if appState.selectedVault?.access != .readOnly {
+                Button {
+                    sheets.renameNotePath = note.relativePath
+                    sheets.renameNoteTitle = note.title
+                    sheets.showingRenameNote = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                .tint(.orange)
             }
-            .tint(.orange)
         }
         .contextMenu {
             Button {
@@ -442,20 +452,22 @@ struct iPhoneContentView: View {
             } label: {
                 Label("Copy Note", systemImage: "doc.on.doc")
             }
-            Button {
-                sheets.renameNotePath = note.relativePath
-                sheets.renameNoteTitle = note.title
-                sheets.showingRenameNote = true
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-            Divider()
-            Button(role: .destructive) {
-                sheets.deleteNotePath = note.relativePath
-                sheets.deleteNoteTitle = note.title
-                sheets.showingDeleteNote = true
-            } label: {
-                Label("Delete", systemImage: "trash")
+            if appState.selectedVault?.access != .readOnly {
+                Button {
+                    sheets.renameNotePath = note.relativePath
+                    sheets.renameNoteTitle = note.title
+                    sheets.showingRenameNote = true
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    sheets.deleteNotePath = note.relativePath
+                    sheets.deleteNoteTitle = note.title
+                    sheets.showingDeleteNote = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
     }
@@ -474,6 +486,7 @@ struct iPhoneContentView: View {
                     } label: {
                         Image(systemName: viewModeIcon)
                     }
+                    .disabled(appState.editorState.isReadOnly)
                 }
             }
             .onAppear {

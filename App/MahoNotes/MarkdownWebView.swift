@@ -142,10 +142,11 @@ extension MarkdownWebView {
                   let body = message.body as? [String: Any],
                   let index = body["index"] as? Int,
                   let checked = body["checked"] as? Bool else { return }
+            guard let onCheckboxToggle else { return }
             // The browser already toggled the checkbox visually — skip the next
             // HTML reload to avoid scroll-to-top.
             skipNextHTMLReload = true
-            onCheckboxToggle?(index, checked)
+            onCheckboxToggle(index, checked)
         }
     }
 

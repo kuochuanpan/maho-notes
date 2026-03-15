@@ -171,13 +171,13 @@ struct MacContentView: View {
                     // C — Content
                     NoteContentView()
                         .environment(\.emptyStateActions, EmptyStateActions(
-                            onCreateCollection: {
+                            onCreateCollection: appState.selectedVault?.access == .readOnly ? nil : {
                                 newCollectionName = ""
                                 newCollectionIcon = "folder"
                                 collectionError = nil
                                 showingNewCollection = true
                             },
-                            onCreateNote: {
+                            onCreateNote: appState.selectedVault?.access == .readOnly ? nil : {
                                 if let first = appState.collections.first {
                                     newNoteCollectionId = first.id
                                 }

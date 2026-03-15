@@ -73,62 +73,64 @@ struct CollectionNodeView: View {
                 : Color.clear
         )
         .contextMenu {
-            Button {
-                onNewNote(node.id)
-            } label: {
-                Label("New Note", systemImage: "doc.badge.plus")
-            }
-            Button {
-                onNewSubCollection(node.id)
-            } label: {
-                Label("New Sub-Collection", systemImage: "folder.badge.plus")
-            }
-
-            Divider()
-
-            Button {
-                appState.clipboard.pasteNotes(toCollection: node.id)
-            } label: {
-                if let entries = appState.clipboard.entries, entries.count > 1 {
-                    Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
-                } else {
-                    Label("Paste Note", systemImage: "doc.on.clipboard")
-                }
-            }
-            .disabled(appState.clipboard.entries == nil)
-
-            Divider()
-
-            Button {
-                onRenameCollection(node.id, node.name)
-            } label: {
-                Label("Rename Collection", systemImage: "pencil")
-            }
-
-            if isTopLevel {
+            if appState.selectedVault?.access != .readOnly {
                 Button {
-                    onChangeIcon(node.id, node.icon)
+                    onNewNote(node.id)
                 } label: {
-                    Label("Change Icon", systemImage: "photo")
+                    Label("New Note", systemImage: "doc.badge.plus")
                 }
-            }
+                Button {
+                    onNewSubCollection(node.id)
+                } label: {
+                    Label("New Sub-Collection", systemImage: "folder.badge.plus")
+                }
 
-            if !isTopLevel {
                 Divider()
+
                 Button {
-                    onPromoteToTopLevel(node.id)
+                    appState.clipboard.pasteNotes(toCollection: node.id)
                 } label: {
-                    Label("Move to Top Level", systemImage: "arrow.up.to.line")
+                    if let entries = appState.clipboard.entries, entries.count > 1 {
+                        Label("Paste \(entries.count) Notes", systemImage: "doc.on.clipboard")
+                    } else {
+                        Label("Paste Note", systemImage: "doc.on.clipboard")
+                    }
                 }
-            }
+                .disabled(appState.clipboard.entries == nil)
 
-            Divider()
+                Divider()
 
-            Button(role: .destructive) {
-                let hasContents = !node.children.isEmpty
-                onDeleteCollection(node.id, node.name, isTopLevel, hasContents)
-            } label: {
-                Label("Delete Collection", systemImage: "trash")
+                Button {
+                    onRenameCollection(node.id, node.name)
+                } label: {
+                    Label("Rename Collection", systemImage: "pencil")
+                }
+
+                if isTopLevel {
+                    Button {
+                        onChangeIcon(node.id, node.icon)
+                    } label: {
+                        Label("Change Icon", systemImage: "photo")
+                    }
+                }
+
+                if !isTopLevel {
+                    Divider()
+                    Button {
+                        onPromoteToTopLevel(node.id)
+                    } label: {
+                        Label("Move to Top Level", systemImage: "arrow.up.to.line")
+                    }
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    let hasContents = !node.children.isEmpty
+                    onDeleteCollection(node.id, node.name, isTopLevel, hasContents)
+                } label: {
+                    Label("Delete Collection", systemImage: "trash")
+                }
             }
         }
         .onDrag {
@@ -183,20 +185,22 @@ struct CollectionNodeView: View {
         }
 
         // "+ Add Note" button — rejects all drops
-        Button {
-            onNewNote(node.id)
-        } label: {
-            Label {
-                Text("Add Note")
-                    .foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: "plus.circle")
-                    .foregroundStyle(.secondary)
+        if appState.selectedVault?.access != .readOnly {
+            Button {
+                onNewNote(node.id)
+            } label: {
+                Label {
+                    Text("Add Note")
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(.secondary)
+                }
             }
+            .buttonStyle(.plain)
+            .padding(.leading, CGFloat(indentLevel + 1) * 14 + 16)
+            .onDrop(of: [UTType.text], delegate: RejectDropDelegate())
         }
-        .buttonStyle(.plain)
-        .padding(.leading, CGFloat(indentLevel + 1) * 14 + 16)
-        .onDrop(of: [UTType.text], delegate: RejectDropDelegate())
 
         // Notes
         ForEach(noteChildren, id: \.id) { child in
@@ -284,18 +288,20 @@ struct CollectionNodeView: View {
                 }
             }
 
-            Button {
-                onRenameNote(path, child.name)
-            } label: {
-                Label("Rename Note", systemImage: "pencil")
-            }
+            if appState.selectedVault?.access != .readOnly {
+                Button {
+                    onRenameNote(path, child.name)
+                } label: {
+                    Label("Rename Note", systemImage: "pencil")
+                }
 
-            Divider()
+                Divider()
 
-            Button(role: .destructive) {
-                onDeleteNote(path, child.name)
-            } label: {
-                Label("Delete Note", systemImage: "trash")
+                Button(role: .destructive) {
+                    onDeleteNote(path, child.name)
+                } label: {
+                    Label("Delete Note", systemImage: "trash")
+                }
             }
         }
         .onDrag {
