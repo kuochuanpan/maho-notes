@@ -1,0 +1,13 @@
+author:
+  name: Maho Notes
+  url: https://github.com/kuochuanpan/maho-notes
+collections:
+- description: "Tutorial \u2014 how to use Maho Notes (safe to delete)"
+  icon: lightbulb
+  id: getting-started
+  name: Getting Started
+- description: "Creative ways to use Maho Notes beyond basic note-taking"
+  icon: book
+  id: recipes
+  name: Recipes
+title: Getting Started

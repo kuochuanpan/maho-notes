@@ -438,6 +438,7 @@ import os
     /// Async implementation of loadRegistry.
     func loadRegistryAsync() async {
         wireManagers()
+        await GettingStartedBundler.installIfNeeded(store: store)
         do {
             let result: VaultRegistry? = try await store.loadRegistry()
 
