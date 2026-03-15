@@ -32,6 +32,12 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
         guard html != context.coordinator.lastHTML else { return }
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
+        // After a checkbox toggle the DOM already shows the correct state —
+        // just update lastHTML for future comparisons, skip loadHTMLString.
+        if context.coordinator.skipNextHTMLReload {
+            context.coordinator.skipNextHTMLReload = false
+            return
+        }
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
@@ -71,6 +77,12 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
         }
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
+        // After a checkbox toggle the DOM already shows the correct state —
+        // just update lastHTML for future comparisons, skip loadHTMLString.
+        if context.coordinator.skipNextHTMLReload {
+            context.coordinator.skipNextHTMLReload = false
+            return
+        }
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
@@ -115,6 +127,11 @@ extension MarkdownWebView {
             }
         }
 
+        /// When true, the next `updateNSView`/`updateUIView` will update `lastHTML`
+        /// but skip `loadHTMLString` — the DOM already reflects the correct state
+        /// (e.g. after a checkbox toggle handled natively by the browser).
+        var skipNextHTMLReload = false
+
         // MARK: - WKScriptMessageHandler
 
         func userContentController(
@@ -125,6 +142,9 @@ extension MarkdownWebView {
                   let body = message.body as? [String: Any],
                   let index = body["index"] as? Int,
                   let checked = body["checked"] as? Bool else { return }
+            // The browser already toggled the checkbox visually — skip the next
+            // HTML reload to avoid scroll-to-top.
+            skipNextHTMLReload = true
             onCheckboxToggle?(index, checked)
         }
     }

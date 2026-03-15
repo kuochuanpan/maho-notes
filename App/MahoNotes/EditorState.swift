@@ -226,10 +226,8 @@ import MahoNotesKit
             if let updated = try parseNote(at: filePath, relativeTo: vaultPath) {
                 appState.updateNote(updated, replacing: note.relativePath)
 
-                // If in editor/split mode, sync the editing buffer
-                if viewMode != .preview {
-                    editingBody = updated.body
-                }
+                // Always sync the editing buffer so startEditing() picks up the change
+                editingBody = updated.body
 
                 // Re-embed for vector search
                 reembedNoteInBackground(updated, vaultPath: vaultPath)
