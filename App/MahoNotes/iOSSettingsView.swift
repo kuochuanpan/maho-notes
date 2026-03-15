@@ -184,19 +184,19 @@ struct iOSSettingsView: View {
                     }
                 }
             }
-            .alert("Remove Vault", isPresented: Binding(
+            .alert("Delete Vault", isPresented: Binding(
                 get: { vaultToRemove != nil },
                 set: { if !$0 { vaultToRemove = nil } }
             )) {
                 Button("Cancel", role: .cancel) { vaultToRemove = nil }
-                Button("Remove", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     if let name = vaultToRemove {
                         appState.removeVault(name: name)
                     }
                     vaultToRemove = nil
                 }
             } message: {
-                Text("Remove \"\(vaultToRemove ?? "")\" from the registry? Files on disk will not be deleted.")
+                Text(removeVaultMessage)
             }
             // Cloud Sync Merge Sheet
             .sheet(isPresented: Binding(
@@ -383,6 +383,21 @@ struct iOSSettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
+        }
+    }
+
+    private var removeVaultMessage: String {
+        guard let name = vaultToRemove,
+              let entry = appState.vaults.first(where: { $0.name == name }) else {
+            return "Delete \"\(vaultToRemove ?? "")\"?"
+        }
+        switch entry.type {
+        case .icloud:
+            return "This will permanently delete all notes in \"\(name)\" from iCloud and all your devices."
+        case .github:
+            return "This will delete the local copy of \"\(name)\". Your notes are safe on GitHub and can be re-imported."
+        case .local, .device:
+            return "This will permanently delete all notes in \"\(name)\"."
         }
     }
 

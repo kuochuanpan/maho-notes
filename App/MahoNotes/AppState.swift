@@ -534,11 +534,37 @@ import os
 
     // MARK: - Vault Management
 
-    /// Remove a vault from the registry (does not delete files).
+    /// Remove a vault from the registry and delete its files from disk.
+    ///
+    /// - iCloud / GitHub / device vaults: permanently deleted (`removeItem`).
+    /// - Local vaults on macOS: moved to Trash (`trashItem`); on iOS: permanently deleted.
     func removeVault(name: String) {
         Task {
             do {
                 guard var registry = try await store.loadRegistry() else { return }
+
+                // Resolve the vault path and type before removing from registry
+                if let entry = registry.findVault(named: name) {
+                    let vaultPath = store.resolvedPath(for: entry)
+                    let fm = FileManager.default
+
+                    if fm.fileExists(atPath: vaultPath) {
+                        switch entry.type {
+                        case .icloud, .github, .device:
+                            // Permanently delete — iCloud needs removeItem for cross-device
+                            // consistency; GitHub/device vaults are local clones only
+                            try fm.removeItem(atPath: vaultPath)
+                        case .local:
+                            #if os(macOS)
+                            try fm.trashItem(at: URL(fileURLWithPath: vaultPath), resultingItemURL: nil)
+                            #else
+                            try fm.removeItem(atPath: vaultPath)
+                            #endif
+                        }
+                        logger.info("Deleted vault files at \(vaultPath) (type: \(entry.type.rawValue))")
+                    }
+                }
+
                 try registry.removeVault(named: name)
                 if registry.primary == name, let first = registry.vaults.first {
                     registry.primary = first.name
