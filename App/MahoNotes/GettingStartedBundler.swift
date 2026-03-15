@@ -17,11 +17,14 @@ enum GettingStartedBundler {
     /// Copies the bundled tutorial vault to the vaults directory and registers it.
     /// No-op if already installed. Errors are logged but never thrown.
     static func installIfNeeded(store: VaultStore) async {
-        guard !UserDefaults.standard.bool(forKey: hasInstalledKey) else { return }
+        let alreadyInstalled = UserDefaults.standard.bool(forKey: hasInstalledKey)
+        logger.info("GettingStartedBundler: hasInstalled=\(alreadyInstalled)")
+        guard !alreadyInstalled else { return }
 
         do {
             try await install(store: store)
             UserDefaults.standard.set(true, forKey: hasInstalledKey)
+            logger.info("GettingStartedBundler: install succeeded ✅")
         } catch {
             logger.warning("Failed to install getting-started vault: \(error.localizedDescription)")
         }
@@ -36,6 +39,8 @@ enum GettingStartedBundler {
             throw BundlerError.resourceNotFound
         }
 
+        logger.info("GettingStartedBundler: bundle found at \(bundleURL.path)")
+
         // Resolve the destination: device-type vault stored in the config vaults dir
         let entry = VaultEntry(
             name: vaultName,
@@ -46,8 +51,11 @@ enum GettingStartedBundler {
         let destPath = store.resolvedPath(for: entry)
         let fm = FileManager.default
 
+        logger.info("GettingStartedBundler: destPath=\(destPath)")
+
         // Skip if the vault directory already exists on disk
         if fm.fileExists(atPath: destPath) {
+            logger.info("GettingStartedBundler: destPath already exists, registering only")
             // Directory exists but wasn't registered — still mark as installed
             try? await store.registerVault(entry)
             return
@@ -55,8 +63,10 @@ enum GettingStartedBundler {
 
         // Copy bundle contents to destination
         try fm.createDirectory(atPath: destPath, withIntermediateDirectories: true)
+        logger.info("GettingStartedBundler: created directory")
 
         let contents = try fm.contentsOfDirectory(at: bundleURL, includingPropertiesForKeys: nil)
+        logger.info("GettingStartedBundler: bundle has \(contents.count) items: \(contents.map(\.lastPathComponent))")
         for item in contents {
             let destItem = URL(fileURLWithPath: destPath).appendingPathComponent(item.lastPathComponent)
             try fm.copyItem(at: item, to: destItem)
@@ -75,6 +85,8 @@ enum GettingStartedBundler {
         }
 
         // Register in the vault registry
+        logger.info("GettingStartedBundler: registering vault...")
         try await store.registerVault(entry)
+        logger.info("GettingStartedBundler: registered ✅")
     }
 }
