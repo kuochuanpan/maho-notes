@@ -53,7 +53,7 @@ struct InitCommand: AsyncParsableCommand {
             if !noTutorial {
                 let _ = try? cloneGitHubVault(
                     repo: "kuochuanpan/maho-getting-started", vaultRoot: vaultRoot,
-                    name: "getting-started", globalConfigDir: globalConfigDir, readOnly: true
+                    name: "getting-started", globalConfigDir: globalConfigDir, readOnly: false
                 )
             }
 
@@ -142,9 +142,9 @@ struct InitCommand: AsyncParsableCommand {
                     let _ = try cloneGitHubVault(
                         repo: "kuochuanpan/maho-getting-started", vaultRoot: vaultRoot,
                         name: "getting-started", globalConfigDir: globalConfigDir,
-                        readOnly: true
+                        readOnly: false
                     )
-                    print("Added getting-started tutorial vault (read-only)")
+                    print("Added getting-started tutorial vault")
                 } catch {
                     print("Warning: Could not clone tutorial: \(error)")
                     print("You can add it later with: mn vault add getting-started --github kuochuanpan/maho-getting-started --readonly")

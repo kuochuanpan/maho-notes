@@ -36,7 +36,7 @@ enum GettingStartedBundler {
         let entry = VaultEntry(
             name: vaultName,
             type: .device,
-            access: .readOnly,
+            access: .readWrite,
             displayName: "Getting Started"
         )
         let destPath = store.resolvedPath(for: entry)
