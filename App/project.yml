@@ -26,7 +26,13 @@ targets:
     sources:
       - MahoNotes
     resources:
-      - path: MahoNotes/Resources
+      - path: MahoNotes/Resources/highlight
+        buildPhase: resources
+      - path: MahoNotes/Resources/katex
+        buildPhase: resources
+      - path: MahoNotes/Resources/mermaid
+        buildPhase: resources
+      - path: MahoNotes/Resources/GettingStarted.bundle
         buildPhase: resources
     settings:
       base:

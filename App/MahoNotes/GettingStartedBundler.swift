@@ -26,8 +26,7 @@ enum GettingStartedBundler {
     private static func install(store: VaultStore) async throws {
         guard let bundleURL = Bundle.main.url(
             forResource: "GettingStarted",
-            withExtension: nil,
-            subdirectory: nil
+            withExtension: "bundle"
         ) else {
             logger.warning("GettingStarted bundle resource not found")
             return
