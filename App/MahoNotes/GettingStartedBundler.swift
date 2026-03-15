@@ -6,6 +6,10 @@ import os
 @MainActor
 enum GettingStartedBundler {
 
+    private enum BundlerError: Error {
+        case resourceNotFound
+    }
+
     private static let hasInstalledKey = "hasInstalledGettingStarted"
     private static let vaultName = "getting-started"
     private static let logger = Logger(subsystem: "dev.pcca.maho-notes", category: "bundler")
@@ -28,8 +32,8 @@ enum GettingStartedBundler {
             forResource: "GettingStarted",
             withExtension: "bundle"
         ) else {
-            logger.warning("GettingStarted bundle resource not found")
-            return
+            logger.warning("GettingStarted.bundle not found in app bundle — skipping (will retry next launch)")
+            throw BundlerError.resourceNotFound
         }
 
         // Resolve the destination: device-type vault stored in the config vaults dir
