@@ -203,7 +203,13 @@ struct NoteContentView: View {
         } else {
             switch appState.editorState.viewMode {
             case .preview:
-                MarkdownWebView(markdown: note.body, noteDirectoryURL: noteDirectoryURL(for: note))
+                MarkdownWebView(
+                    markdown: note.body,
+                    noteDirectoryURL: noteDirectoryURL(for: note),
+                    onCheckboxToggle: { index, checked in
+                        appState.editorState.toggleCheckbox(at: index, checked: checked)
+                    }
+                )
             case .editor:
                 editorView
                     .onAppear {
@@ -214,7 +220,13 @@ struct NoteContentView: View {
                 HStack(spacing: 0) {
                     editorView
                     Divider()
-                    MarkdownWebView(markdown: appState.editorState.editingBody, noteDirectoryURL: noteDirectoryURL(for: note))
+                    MarkdownWebView(
+                        markdown: appState.editorState.editingBody,
+                        noteDirectoryURL: noteDirectoryURL(for: note),
+                        onCheckboxToggle: { index, checked in
+                            appState.editorState.toggleCheckbox(at: index, checked: checked)
+                        }
+                    )
                 }
                 .onAppear {
                     appState.editorState.startEditing()

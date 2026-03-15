@@ -7,6 +7,8 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
     let markdown: String
     /// Directory containing the note file — used to resolve relative `_assets/` paths.
     var noteDirectoryURL: URL?
+    /// Called when a task-list checkbox is toggled in preview mode. (index, isChecked)
+    var onCheckboxToggle: ((Int, Bool) -> Void)?
 
     nonisolated static func == (lhs: MarkdownWebView, rhs: MarkdownWebView) -> Bool {
         lhs.markdown == rhs.markdown && lhs.noteDirectoryURL == rhs.noteDirectoryURL
@@ -14,6 +16,8 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "checkboxToggle")
+        context.coordinator.onCheckboxToggle = onCheckboxToggle
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
@@ -21,6 +25,7 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onCheckboxToggle = onCheckboxToggle
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
@@ -37,14 +42,17 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
     let markdown: String
     /// Directory containing the note file — used to resolve relative `_assets/` paths.
     var noteDirectoryURL: URL?
+    /// Called when a task-list checkbox is toggled in preview mode. (index, isChecked)
+    var onCheckboxToggle: ((Int, Bool) -> Void)?
 
     nonisolated static func == (lhs: MarkdownWebView, rhs: MarkdownWebView) -> Bool {
         lhs.markdown == rhs.markdown && lhs.noteDirectoryURL == rhs.noteDirectoryURL
     }
 
     func makeUIView(context: Context) -> WKWebView {
-        print("🔄 [WEBVIEW-iOS] makeUIView: CREATING new WKWebView (structural identity changed)")
         let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "checkboxToggle")
+        context.coordinator.onCheckboxToggle = onCheckboxToggle
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
@@ -54,15 +62,13 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onCheckboxToggle = onCheckboxToggle
         let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
         if html == context.coordinator.lastHTML {
-            print("🔄 [WEBVIEW-iOS] updateUIView: HTML unchanged, SKIPPING loadHTMLString")
             return
         }
-        let oldLen = context.coordinator.lastHTML?.count ?? 0
-        print("🔄 [WEBVIEW-iOS] updateUIView: HTML CHANGED (\(oldLen) → \(html.count)), loading. markdown length=\(markdown.count)")
         context.coordinator.lastHTML = html
         context.coordinator.lastBaseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)
@@ -75,10 +81,12 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
 // MARK: - Shared
 
 extension MarkdownWebView {
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         /// Last-loaded HTML, used to restore content after web content process termination.
         var lastHTML: String?
         var lastBaseURL: URL?
+        /// Callback for checkbox toggle events from JavaScript.
+        var onCheckboxToggle: ((Int, Bool) -> Void)?
 
         func webView(
             _ webView: WKWebView,
@@ -105,6 +113,19 @@ extension MarkdownWebView {
             if let html = lastHTML {
                 webView.loadHTMLString(html, baseURL: lastBaseURL)
             }
+        }
+
+        // MARK: - WKScriptMessageHandler
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == "checkboxToggle",
+                  let body = message.body as? [String: Any],
+                  let index = body["index"] as? Int,
+                  let checked = body["checked"] as? Bool else { return }
+            onCheckboxToggle?(index, checked)
         }
     }
 
@@ -155,6 +176,15 @@ extension MarkdownWebView {
                 throwOnError: false
             });
         }
+        // Interactive checkbox toggle — notify Swift when a task-list checkbox is clicked
+        document.addEventListener("change", function(e) {
+            if (e.target.type === "checkbox" && e.target.dataset.cbIndex !== undefined) {
+                window.webkit.messageHandlers.checkboxToggle.postMessage({
+                    index: parseInt(e.target.dataset.cbIndex),
+                    checked: e.target.checked
+                });
+            }
+        });
     });
     </script>
     """

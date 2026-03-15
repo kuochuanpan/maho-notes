@@ -105,6 +105,31 @@ public struct MarkdownHTMLRenderer: Sendable {
     }
 }
 
+// MARK: - Checkbox Toggle
+
+extension MarkdownHTMLRenderer {
+    /// Toggle the Nth task-list checkbox in a markdown string.
+    ///
+    /// Matches `- [ ]`, `- [x]`, `* [ ]`, `+ [x]`, `1. [ ]`, etc.
+    /// Returns the updated markdown, or the original string if the index is out of range.
+    public static func toggleCheckbox(at index: Int, checked: Bool, in markdown: String) -> String {
+        // Pattern: list marker followed by [ ] or [x]/[X]
+        let pattern = #"(?m)^(\s*(?:[-*+]|\d+[.)]) +)\[([ xX])\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return markdown }
+        let nsRange = NSRange(markdown.startIndex..., in: markdown)
+        let matches = regex.matches(in: markdown, range: nsRange)
+        guard index >= 0 && index < matches.count else { return markdown }
+
+        let match = matches[index]
+        // Range of the checkbox character (the space or x between [ and ])
+        guard let checkRange = Range(match.range(at: 2), in: markdown) else { return markdown }
+
+        var result = markdown
+        result.replaceSubrange(checkRange, with: checked ? "x" : " ")
+        return result
+    }
+}
+
 // MARK: - HTML Escaping
 
 func escapeHTML(_ text: String) -> String {
@@ -180,6 +205,9 @@ private struct HTMLVisitor: MarkupVisitor {
     // Track if we're inside a blockquote to detect admonitions
     private var insideBlockquote = false
     private var blockquoteContent = ""
+
+    /// Sequential index for task list checkboxes — used by interactive toggle in preview mode.
+    private var checkboxIndex = 0
 
     mutating func defaultVisit(_ markup: any Markup) -> String {
         markup.children.map { visit($0) }.joined()
@@ -325,8 +353,10 @@ private struct HTMLVisitor: MarkupVisitor {
     mutating func visitListItem(_ listItem: ListItem) -> String {
         let content = listItem.children.map { visit($0) }.joined()
         if let checkbox = listItem.checkbox {
-            let checked = checkbox == .checked ? " checked disabled" : " disabled"
-            return "<li class=\"task-item\"><input type=\"checkbox\"\(checked)> \(content)</li>\n"
+            let checked = checkbox == .checked ? " checked" : ""
+            let idx = checkboxIndex
+            checkboxIndex += 1
+            return "<li class=\"task-item\"><input type=\"checkbox\"\(checked) data-cb-index=\"\(idx)\"> \(content)</li>\n"
         }
         return "<li>\(content)</li>\n"
     }
