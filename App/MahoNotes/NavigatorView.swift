@@ -399,7 +399,7 @@ struct NavigatorView: View {
             Text("New Note")
                 .font(.headline)
 
-            Text("in \(newNoteCollectionId)")
+            Text("in \(appState.displayName(forCollectionId: newNoteCollectionId))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

@@ -736,6 +736,21 @@ import os
         reloadCurrentVault()
     }
 
+    // MARK: - Display Name Lookup
+
+    /// Resolve a collection ID (relative path) to its metadata display name.
+    /// Falls back to the last path component if the ID isn't found in the file tree.
+    func displayName(forCollectionId id: String) -> String {
+        func find(in nodes: [FileTreeNode]) -> String? {
+            for node in nodes where node.isDirectory {
+                if node.id == id { return node.name }
+                if let found = find(in: node.children) { return found }
+            }
+            return nil
+        }
+        return find(in: fileTree) ?? id.split(separator: "/").last.map(String.init) ?? id
+    }
+
     // MARK: - Rename & Icon
 
     /// Rename a collection (top-level: update maho.yaml; sub-collection: update _index.md title).

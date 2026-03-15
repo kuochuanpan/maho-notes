@@ -608,7 +608,7 @@ struct iPhoneContentView: View {
                     HStack {
                         Text("Location")
                         Spacer()
-                        Text(sheets.newNoteCollectionId.split(separator: "/").map(String.init).last ?? sheets.newNoteCollectionId)
+                        Text(appState.displayName(forCollectionId: sheets.newNoteCollectionId))
                             .foregroundStyle(.secondary)
                     }
                 } else if appState.collections.count > 1 {
