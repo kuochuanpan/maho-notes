@@ -209,10 +209,14 @@ public actor GitHubSyncManager {
         let ref = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
         let remoteHeadSHA = ref.object.sha
 
+        print("🔄 [PULL] remoteHEAD=\(remoteHeadSHA.prefix(8)) manifestCommit=\(manifest.lastCommitSHA.prefix(8)) match=\(remoteHeadSHA == manifest.lastCommitSHA)")
+
         // Already up to date?
         if remoteHeadSHA == manifest.lastCommitSHA {
             return SyncResult(message: "Already up to date.")
         }
+
+        print("🔄 [PULL] HEAD mismatch! Proceeding to download changes...")
 
         // 2. Get remote tree
         let commit = try await client.commits.get(owner: owner, repo: repo, sha: remoteHeadSHA)
@@ -242,6 +246,7 @@ public actor GitHubSyncManager {
             if manifestSHA == remoteSHA {
                 continue // No remote change
             }
+            print("🔄 [PULL] file differs: \(path) manifestSHA=\(manifestSHA?.prefix(8) ?? "nil") remoteSHA=\(remoteSHA.prefix(8))")
 
             let localPath = (vaultPath as NSString).appendingPathComponent(path)
 
@@ -398,11 +403,12 @@ public actor GitHubSyncManager {
 
         // 6. Update ref (force = true eliminates non-fast-forward errors;
         //    safe because full tree push is a complete snapshot of local state)
-        _ = try await client.refs.update(
+        let refResult = try await client.refs.update(
             owner: owner, repo: repo,
             ref: "heads/\(branch)",
             request: UpdateRefRequest(sha: newCommit.sha, force: true)
         )
+        print("🔄 [PUSH] ref updated: requested=\(newCommit.sha.prefix(8)) actual=\(refResult.object.sha.prefix(8)) tree=\(newTree.sha.prefix(8))")
 
         // 7. Update manifest with new file state
         manifest.files = newManifestFiles
@@ -410,6 +416,7 @@ public actor GitHubSyncManager {
         manifest.lastTreeSHA = newTree.sha
         manifest.lastSyncDate = Date()
         try manifest.save(vaultPath: vaultPath)
+        print("🔄 [PUSH] manifest saved: commitSHA=\(newCommit.sha.prefix(8)) files=\(newManifestFiles.count)")
 
         return SyncResult(
             pushed: true,
