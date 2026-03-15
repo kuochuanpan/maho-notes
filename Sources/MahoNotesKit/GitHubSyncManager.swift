@@ -444,6 +444,20 @@ public actor GitHubSyncManager {
         // This prevents pull from re-downloading files the user deleted locally.
         // Force-push ensures no non-fast-forward errors.
         let pushResult = try await push()
+
+        // If we pushed changes, skip pull for this cycle.
+        // Push creates a full tree snapshot — the remote is now in sync with local.
+        // Pulling immediately after push risks getting stale data due to GitHub API
+        // eventual consistency (refs.get returns the pre-push HEAD because the GET
+        // endpoint hasn't replicated the PATCH update yet). Remote changes from
+        // other devices will be caught on the next sync cycle (periodic/manual).
+        let pushedChanges = pushResult.pushed
+            && !pushResult.message.contains("Nothing to push")
+        if pushedChanges {
+            print("🔄 [SYNC] pushed changes — skipping pull (eventual consistency guard)")
+            return SyncResult(pushed: true, message: pushResult.message)
+        }
+
         let pullResult = try await pull()
 
         var message = pushResult.message
