@@ -159,7 +159,7 @@ extension MarkdownWebView {
         return ""
     }
 
-    /// <head> tags for KaTeX and highlight.js
+    /// <head> tags for KaTeX, highlight.js, and Mermaid
     static var vendorHead: String {
         let katexCSS = bundleURL("katex.min", ext: "css")
         let katexJS = bundleURL("katex.min", ext: "js")
@@ -167,6 +167,7 @@ extension MarkdownWebView {
         let hljsJS = bundleURL("highlight.min", ext: "js")
         let hljsLight = bundleURL("github.min", ext: "css")
         let hljsDark = bundleURL("github-dark.min", ext: "css")
+        let mermaidJS = bundleURL("mermaid.min", ext: "js")
 
         return """
         <link rel="stylesheet" href="\(katexCSS)">
@@ -175,6 +176,7 @@ extension MarkdownWebView {
         <link rel="stylesheet" href="\(hljsLight)" media="(prefers-color-scheme: light)">
         <link rel="stylesheet" href="\(hljsDark)" media="(prefers-color-scheme: dark)">
         <script defer src="\(hljsJS)"></script>
+        <script defer src="\(mermaidJS)"></script>
         """
     }
 
@@ -194,6 +196,15 @@ extension MarkdownWebView {
                     {left: "$", right: "$", display: false}
                 ],
                 throwOnError: false
+            });
+        }
+        // Mermaid diagram rendering
+        if (typeof mermaid !== "undefined") {
+            var isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: isDark ? "dark" : "default",
+                securityLevel: "loose"
             });
         }
         // Interactive checkbox toggle — notify Swift when a task-list checkbox is clicked
@@ -468,6 +479,38 @@ extension MarkdownWebView {
         .math-inline {
             font-family: "SF Mono", SFMono-Regular, Menlo, Monaco, monospace;
             font-size: 0.9em;
+        }
+        /* Footnotes */
+        .footnotes {
+            font-size: 0.88em;
+            color: var(--fg-secondary);
+            margin-top: 2em;
+        }
+        .footnotes hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin-bottom: 1em;
+        }
+        .footnotes ol {
+            padding-left: 1.5em;
+        }
+        .footnotes li {
+            margin: 0.4em 0;
+        }
+        .footnote-ref a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .footnote-backref {
+            color: var(--accent);
+            text-decoration: none;
+            margin-left: 0.3em;
+        }
+        /* Mermaid diagrams */
+        .mermaid {
+            text-align: center;
+            margin: 1em 0;
         }
         /* highlight.js overrides */
         pre code.hljs {

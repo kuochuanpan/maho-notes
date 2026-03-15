@@ -7,10 +7,12 @@ public struct MarkdownHTMLRenderer: Sendable {
 
     public func render(_ markdown: String) -> String {
         let withRubyPlaceholders = preprocessRubyAnnotations(markdown)
-        let preprocessed = preprocessMath(withRubyPlaceholders)
+        let withFootnotes = preprocessFootnotes(withRubyPlaceholders)
+        let preprocessed = preprocessMath(withFootnotes.body)
         let document = Document(parsing: preprocessed, options: [.parseBlockDirectives, .parseSymbolLinks])
         var visitor = HTMLVisitor()
-        return visitor.visit(document)
+        let html = visitor.visit(document)
+        return postprocessFootnotes(html, definitions: withFootnotes.definitions)
     }
 
     /// Replace ruby annotations {base|reading} with placeholders before markdown parsing.
@@ -59,6 +61,141 @@ public struct MarkdownHTMLRenderer: Sendable {
             let content = String(result[contentRange])
             let encoded = encodeMathContent(content)
             result.replaceSubrange(range, with: "<!--MATH_INLINE:\(encoded)-->")
+        }
+
+        return result
+    }
+
+    /// Result of footnote preprocessing — body with placeholders + collected definitions.
+    struct FootnoteResult {
+        let body: String
+        let definitions: [(id: String, content: String)]
+    }
+
+    /// Extract footnote definitions `[^id]: content` and replace references `[^id]` with placeholders.
+    /// Definitions are removed from the body and collected for postprocessing.
+    private func preprocessFootnotes(_ text: String) -> FootnoteResult {
+        var lines = text.components(separatedBy: "\n")
+        var definitions: [(id: String, content: String)] = []
+        var definitionIds: Set<String> = []
+
+        // Pass 1: Extract footnote definitions (lines starting with [^id]: )
+        // Also handle multi-line definitions (continuation lines indented with 2+ spaces)
+        let defPattern = try! NSRegularExpression(pattern: #"^\[\^([^\]]+)\]:\s*(.*)$"#, options: [])
+        var filteredLines: [String] = []
+        var currentDefId: String? = nil
+        var currentDefContent: String = ""
+
+        for line in lines {
+            let nsRange = NSRange(line.startIndex..., in: line)
+            if let match = defPattern.firstMatch(in: line, range: nsRange),
+               let idRange = Range(match.range(at: 1), in: line),
+               let contentRange = Range(match.range(at: 2), in: line) {
+                // Save previous definition if any
+                if let prevId = currentDefId {
+                    definitions.append((id: prevId, content: currentDefContent.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    definitionIds.insert(prevId)
+                }
+                currentDefId = String(line[idRange])
+                currentDefContent = String(line[contentRange])
+            } else if currentDefId != nil && (line.hasPrefix("  ") || line.hasPrefix("\t")) {
+                // Continuation line for multi-line footnote
+                currentDefContent += "\n" + line.trimmingCharacters(in: .init(charactersIn: " \t"))
+            } else {
+                // Save previous definition if any
+                if let prevId = currentDefId {
+                    definitions.append((id: prevId, content: currentDefContent.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    definitionIds.insert(prevId)
+                    currentDefId = nil
+                    currentDefContent = ""
+                }
+                filteredLines.append(line)
+            }
+        }
+        // Don't forget the last definition
+        if let prevId = currentDefId {
+            definitions.append((id: prevId, content: currentDefContent.trimmingCharacters(in: .whitespacesAndNewlines)))
+            definitionIds.insert(prevId)
+        }
+
+        guard !definitions.isEmpty else {
+            return FootnoteResult(body: text, definitions: [])
+        }
+
+        // Pass 2: Replace footnote references [^id] with placeholders
+        var body = filteredLines.joined(separator: "\n")
+        let refPattern = try! NSRegularExpression(pattern: #"\[\^([^\]]+)\]"#, options: [])
+        let nsRange = NSRange(body.startIndex..., in: body)
+        let matches = refPattern.matches(in: body, range: nsRange)
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: body),
+                  let idRange = Range(match.range(at: 1), in: body) else { continue }
+            let id = String(body[idRange])
+            // Only replace if this id has a definition
+            if definitionIds.contains(id) {
+                let encoded = Data(id.utf8).base64EncodedString()
+                body.replaceSubrange(range, with: "<!--FNREF:\(encoded)-->")
+            }
+        }
+
+        return FootnoteResult(body: body, definitions: definitions)
+    }
+
+    /// Post-process HTML to convert footnote placeholders into proper HTML footnotes.
+    private func postprocessFootnotes(_ html: String, definitions: [(id: String, content: String)]) -> String {
+        guard !definitions.isEmpty else { return html }
+
+        var result = html
+        // Build ordered list of referenced footnotes (in order of appearance)
+        var orderedIds: [String] = []
+        var idToNumber: [String: Int] = [:]
+
+        // Find all FNREF placeholders in order and assign numbers
+        let refPattern = try! NSRegularExpression(
+            pattern: "(?:&lt;!--|<!--)FNREF:([A-Za-z0-9+/=]+)(?:--&gt;|-->)",
+            options: []
+        )
+        let nsRange = NSRange(result.startIndex..., in: result)
+        let matches = refPattern.matches(in: result, range: nsRange)
+
+        for match in matches {
+            guard let encodedRange = Range(match.range(at: 1), in: result) else { continue }
+            let encoded = String(result[encodedRange])
+            guard let data = Data(base64Encoded: encoded),
+                  let id = String(data: data, encoding: .utf8) else { continue }
+            if idToNumber[id] == nil {
+                orderedIds.append(id)
+                idToNumber[id] = orderedIds.count
+            }
+        }
+
+        // Replace FNREF placeholders with superscript links
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result),
+                  let encodedRange = Range(match.range(at: 1), in: result) else { continue }
+            let encoded = String(result[encodedRange])
+            guard let data = Data(base64Encoded: encoded),
+                  let id = String(data: data, encoding: .utf8),
+                  let num = idToNumber[id] else { continue }
+            let sup = "<sup class=\"footnote-ref\"><a href=\"#fn-\(escapeHTML(id))\" id=\"fnref-\(escapeHTML(id))\">\(num)</a></sup>"
+            result.replaceSubrange(range, with: sup)
+        }
+
+        // Build footnotes section at the end
+        let defMap = Dictionary(definitions.map { ($0.id, $0.content) }, uniquingKeysWith: { first, _ in first })
+        var footnotesHTML = "<section class=\"footnotes\"><hr><ol>\n"
+        for id in orderedIds {
+            let content = defMap[id] ?? ""
+            let renderedContent = escapeHTML(content)
+            footnotesHTML += "<li id=\"fn-\(escapeHTML(id))\">\(renderedContent) <a href=\"#fnref-\(escapeHTML(id))\" class=\"footnote-backref\">↩</a></li>\n"
+        }
+        footnotesHTML += "</ol></section>\n"
+
+        // Insert before </body> if present, otherwise append
+        if let bodyEnd = result.range(of: "</body>") {
+            result.insert(contentsOf: footnotesHTML, at: bodyEnd.lowerBound)
+        } else {
+            result += footnotesHTML
         }
 
         return result
