@@ -6,13 +6,70 @@ public struct MarkdownHTMLRenderer: Sendable {
     public init() {}
 
     public func render(_ markdown: String) -> String {
-        let withRubyPlaceholders = preprocessRubyAnnotations(markdown)
+        // Mask code blocks and inline code before preprocessing to avoid
+        // transforming syntax examples (e.g. ruby, footnotes inside ```markdown blocks)
+        let (masked, codeSlots) = maskCodeRegions(markdown)
+        let withRubyPlaceholders = preprocessRubyAnnotations(masked)
         let withFootnotes = preprocessFootnotes(withRubyPlaceholders)
-        let preprocessed = preprocessMath(withFootnotes.body)
+        let withMath = preprocessMath(withFootnotes.body)
+        // Restore code regions before passing to the markdown parser
+        let preprocessed = unmaskCodeRegions(withMath, slots: codeSlots)
         let document = Document(parsing: preprocessed, options: [.parseBlockDirectives, .parseSymbolLinks])
         var visitor = HTMLVisitor()
         let html = visitor.visit(document)
         return postprocessFootnotes(html, definitions: withFootnotes.definitions)
+    }
+
+    /// Replace fenced code blocks and inline code with placeholders so that preprocessors
+    /// (ruby, footnotes, math) do not transform syntax examples inside code.
+    /// Returns the masked text and an array of original code fragments to restore later.
+    private func maskCodeRegions(_ text: String) -> (String, [String]) {
+        var slots: [String] = []
+        var result = text
+
+        // 1. Fenced code blocks: ```...``` or ~~~...~~~
+        //    Match opening fence (3+ backticks or tildes), content, closing fence
+        let fencedPattern = try! NSRegularExpression(
+            pattern: #"(?m)^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\s*$"#,
+            options: [.anchorsMatchLines]
+        )
+        var nsRange = NSRange(result.startIndex..., in: result)
+        var matches = fencedPattern.matches(in: result, range: nsRange)
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result) else { continue }
+            let original = String(result[range])
+            let index = slots.count
+            slots.append(original)
+            result.replaceSubrange(range, with: "<!--CODE_SLOT:\(index)-->")
+        }
+
+        // 2. Inline code: `...` (but not inside already-masked regions)
+        let inlinePattern = try! NSRegularExpression(
+            pattern: #"(?<!`)(`+)(?!`)([\s\S]*?[^`])\1(?!`)"#,
+            options: []
+        )
+        nsRange = NSRange(result.startIndex..., in: result)
+        matches = inlinePattern.matches(in: result, range: nsRange)
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: result) else { continue }
+            let original = String(result[range])
+            let index = slots.count
+            slots.append(original)
+            result.replaceSubrange(range, with: "<!--CODE_SLOT:\(index)-->")
+        }
+
+        return (result, slots)
+    }
+
+    /// Restore code regions from their placeholders.
+    private func unmaskCodeRegions(_ text: String, slots: [String]) -> String {
+        guard !slots.isEmpty else { return text }
+        var result = text
+        // Replace in reverse order to maintain correct indices
+        for i in (0..<slots.count).reversed() {
+            result = result.replacingOccurrences(of: "<!--CODE_SLOT:\(i)-->", with: slots[i])
+        }
+        return result
     }
 
     /// Replace ruby annotations {base|reading} with placeholders before markdown parsing.

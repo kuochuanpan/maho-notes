@@ -78,6 +78,52 @@ struct MarkdownRenderTests {
         #expect(html.contains("<rt>かんじ</rt>"))
     }
 
+    // MARK: - Code block protection
+
+    @Test func rubyInsideCodeBlockNotTransformed() {
+        let md = """
+        ```markdown
+        {漢字|かんじ}
+        ```
+        """
+        let html = renderer.render(md)
+        // Should NOT contain <ruby> — it's inside a code block
+        #expect(!html.contains("<ruby>"))
+        // The raw text should appear as-is (escaped)
+        #expect(html.contains("漢字") || html.contains("かんじ"))
+    }
+
+    @Test func footnoteInsideCodeBlockNotTransformed() {
+        let md = """
+        ```markdown
+        Text with a footnote[^1].
+
+        [^1]: This is a footnote.
+        ```
+        """
+        let html = renderer.render(md)
+        // Should NOT contain footnote HTML
+        #expect(!html.contains("class=\"footnotes\""))
+        #expect(!html.contains("fnref-"))
+    }
+
+    @Test func rubyInsideInlineCodeNotTransformed() {
+        let md = "Use `{漢字|かんじ}` for furigana."
+        let html = renderer.render(md)
+        // The inline code should preserve the raw syntax
+        #expect(!html.contains("<ruby>"))
+    }
+
+    @Test func mathInsideCodeBlockNotTransformed() {
+        let md = """
+        ```
+        $E = mc^2$
+        ```
+        """
+        let html = renderer.render(md)
+        #expect(!html.contains("math-inline"))
+    }
+
     // MARK: - Math
 
     @Test func inlineMath() {
