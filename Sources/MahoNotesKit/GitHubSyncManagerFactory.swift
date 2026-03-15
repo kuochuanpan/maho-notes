@@ -16,12 +16,16 @@ extension GitHubSyncManager {
         guard parts.count == 2 else { return nil }
         let owner = String(parts[0])
         let repo = String(parts[1])
-        // Use an ephemeral URLSession (no HTTP cache) to avoid stale refs
-        // after push. URLSession.shared caches GitHub API responses; when
-        // pull() immediately follows push(), the cached refs.get response
-        // returns the OLD commit SHA, causing pull to download stale files
-        // and overwrite the just-saved local content.
-        let session = URLSession(configuration: .ephemeral)
+        // Disable ALL HTTP caching to avoid stale refs after push.
+        // Even ephemeral sessions maintain an in-memory cache within the
+        // session lifetime. Since push's refs.get() and pull's refs.get()
+        // hit the same URL within one sync cycle, the in-memory cache
+        // returns the stale pre-push HEAD, causing pull to download old
+        // file content and overwrite the user's edits.
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        let session = URLSession(configuration: config)
         let client = GitHubClient(token: token, session: session)
         return GitHubSyncManager(
             client: client,
