@@ -174,6 +174,9 @@ struct iOSSettingsView: View {
 
                     Link("GitHub", destination: URL(string: "https://github.com/kuochuanpan/maho-notes")!)
                     Link("Documentation", destination: URL(string: "https://github.com/kuochuanpan/maho-notes/blob/main/docs/DESIGN.md")!)
+                    NavigationLink("Acknowledgments") {
+                        AcknowledgmentsView()
+                    }
                 }
             }
             .navigationTitle("Settings")

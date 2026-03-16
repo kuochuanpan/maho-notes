@@ -798,6 +798,8 @@ struct GitHubSyncGroupBox: View {
 // MARK: - About Tab
 
 struct AboutSettingsTab: View {
+    @State private var showAcknowledgments = false
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -821,6 +823,22 @@ struct AboutSettingsTab: View {
                 Link("Documentation", destination: URL(string: "https://github.com/kuochuanpan/maho-notes/blob/main/docs/DESIGN.md")!)
             }
             .font(.callout)
+
+            Button("Acknowledgments") {
+                showAcknowledgments = true
+            }
+            .font(.callout)
+            .sheet(isPresented: $showAcknowledgments) {
+                NavigationStack {
+                    AcknowledgmentsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showAcknowledgments = false }
+                            }
+                        }
+                }
+                .frame(width: 500, height: 450)
+            }
 
             // Tip Jar
             GroupBox {
