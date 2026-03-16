@@ -25,7 +25,7 @@ struct SkillCommand: ParsableCommand {
             .replacingOccurrences(of: "\n", with: "\\n")
             .replacingOccurrences(of: "\t", with: "\\t")
         print("""
-        {"name":"maho-notes","version":"0.6.0","skill":"\(escaped)"}
+        {"name":"maho-notes","version":"0.6.1","skill":"\(escaped)"}
         """)
     }
 }
