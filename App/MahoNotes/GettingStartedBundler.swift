@@ -15,11 +15,37 @@ enum GettingStartedBundler {
     private static let logger = Logger(subsystem: "dev.pcca.maho-notes", category: "bundler")
 
     /// Copies the bundled tutorial vault to the vaults directory and registers it.
-    /// No-op if already installed. Errors are logged but never thrown.
-    static func installIfNeeded(store: VaultStore) async {
+    /// No-op if already installed or if iCloud already has vaults from another device.
+    /// Errors are logged but never thrown.
+    ///
+    /// Returns `true` if iCloud vaults were adopted (caller should reload with cloud mode).
+    static func installIfNeeded(store: VaultStore) async -> Bool {
         let alreadyInstalled = UserDefaults.standard.bool(forKey: hasInstalledKey)
         logger.info("GettingStartedBundler: hasInstalled=\(alreadyInstalled)")
-        guard !alreadyInstalled else { return }
+        guard !alreadyInstalled else { return false }
+
+        // Check if iCloud already has vaults from another device.
+        // If so, skip the tutorial vault and adopt the iCloud registry directly.
+        let cloudCheck = await store.checkCloudRegistryExists()
+        if case .cloudRegistryExists(let cloudRegistry) = cloudCheck,
+           !cloudRegistry.vaults.isEmpty {
+            logger.info("GettingStartedBundler: iCloud registry found with \(cloudRegistry.vaults.count) vault(s) — adopting instead of installing tutorial")
+            do {
+                try await store.setCloudSyncMode(.icloud)
+                // The iCloud registry will be picked up by loadRegistry() since cloud mode is now ON.
+                // Trigger downloads for iCloud vaults that may not be on this device yet.
+                let fm = FileManager.default
+                for entry in cloudRegistry.vaults where entry.type == .icloud {
+                    let path = store.resolvedPath(for: entry)
+                    try? fm.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: path))
+                }
+                UserDefaults.standard.set(true, forKey: hasInstalledKey)
+                logger.info("GettingStartedBundler: iCloud adoption complete ✅")
+                return true
+            } catch {
+                logger.warning("GettingStartedBundler: failed to adopt iCloud registry: \(error.localizedDescription), falling back to tutorial install")
+            }
+        }
 
         do {
             try await install(store: store)
@@ -28,6 +54,7 @@ enum GettingStartedBundler {
         } catch {
             logger.warning("Failed to install getting-started vault: \(error.localizedDescription)")
         }
+        return false
     }
 
     private static func install(store: VaultStore) async throws {

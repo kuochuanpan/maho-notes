@@ -447,7 +447,7 @@ import os
         defer { isReloading = false }
 
         wireManagers()
-        await GettingStartedBundler.installIfNeeded(store: store)
+        let adoptedICloud = await GettingStartedBundler.installIfNeeded(store: store)
         do {
             let result: VaultRegistry? = try await store.loadRegistry()
 
@@ -468,6 +468,12 @@ import os
             self.isLoaded = true
             let mode = await store.cloudSyncMode()
             self.cloudSync.cloudSyncMode = mode
+
+            // If we just adopted iCloud vaults on first launch, write the local cache
+            // so offline access works immediately.
+            if adoptedICloud, let registry = result {
+                try? await store.saveRegistry(registry)
+            }
             loadSelectedVault()
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
