@@ -47,7 +47,7 @@ private let currentVecSchemaVersion = 1
 
 /// Vector embedding index backed by sqlite-vec, stored in the same index.db as SearchIndex.
 public final class VectorIndex: @unchecked Sendable {
-    private let db: Database
+    private var db: Database
     private let vaultPath: String
     private let dimensions: Int
     private let skipDimensionCheck: Bool
@@ -66,16 +66,22 @@ public final class VectorIndex: @unchecked Sendable {
 
         let dbPath = (mahoDir as NSString).appendingPathComponent("index.db")
 
-        do {
-            self.db = try Database(path: dbPath)
-        } catch {
-            try? fm.removeItem(atPath: dbPath)
-            self.db = try Database(path: dbPath)
-        }
+        self.db = try Self.openWithRecovery(dbPath: dbPath, fm: fm)
 
         try db.execute("PRAGMA journal_mode=WAL")
 
-        try ensureSchema()
+        // If ensureSchema fails (e.g. corrupt DB from a previous crashed build),
+        // nuke the file and retry with a fresh database.
+        do {
+            try ensureSchema()
+        } catch let schemaError {
+            // Only recover from I/O or corruption errors — propagate others (e.g. dimension mismatch)
+            if schemaError is VectorIndexError { throw schemaError }
+            try Self.nukeDatabase(dbPath: dbPath, fm: fm)
+            self.db = try Self.openWithRecovery(dbPath: dbPath, fm: fm)
+            try self.db.execute("PRAGMA journal_mode=WAL")
+            try ensureSchema()
+        }
     }
 
     /// Initialize with an explicit Database instance (for testing).
@@ -468,6 +474,24 @@ public final class VectorIndex: @unchecked Sendable {
 
     private func escapeSQLString(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "''")
+    }
+
+    /// Open a database with recovery: if open fails, delete and retry once.
+    private static func openWithRecovery(dbPath: String, fm: FileManager) throws -> Database {
+        do {
+            return try Database(path: dbPath)
+        } catch {
+            try nukeDatabase(dbPath: dbPath, fm: fm)
+            return try Database(path: dbPath)
+        }
+    }
+
+    /// Delete the database file and its WAL/SHM sidecars.
+    private static func nukeDatabase(dbPath: String, fm: FileManager) throws {
+        // Close any open connections by removing the file — ARC will close the handle on dealloc.
+        try? fm.removeItem(atPath: dbPath)
+        try? fm.removeItem(atPath: dbPath + "-wal")
+        try? fm.removeItem(atPath: dbPath + "-shm")
     }
 
     private static func fileMtime(atPath path: String) -> Double {

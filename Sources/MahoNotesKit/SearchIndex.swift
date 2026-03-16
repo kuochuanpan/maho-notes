@@ -43,7 +43,7 @@ private let currentSchemaVersion = 1
 
 /// Full-text search index backed by SQLite FTS5 with CJK tokenizer.
 public final class SearchIndex: @unchecked Sendable {
-    private let db: Database
+    private var db: Database
     private let vaultPath: String
 
     /// Open or create the search index at `.maho/index.db` inside the vault.
@@ -59,17 +59,20 @@ public final class SearchIndex: @unchecked Sendable {
         let dbPath = (mahoDir as NSString).appendingPathComponent("index.db")
 
         // Try to open; if corrupt, delete and retry
-        do {
-            self.db = try Database(path: dbPath)
-        } catch {
-            // Remove corrupt DB and retry once
-            try? fm.removeItem(atPath: dbPath)
-            self.db = try Database(path: dbPath)
-        }
+        self.db = try Self.openWithRecovery(dbPath: dbPath, fm: fm)
 
         try db.execute("PRAGMA journal_mode=WAL")
 
-        try ensureSchema()
+        // If ensureSchema fails (e.g. corrupt DB from a previous crashed build),
+        // nuke the file and retry with a fresh database.
+        do {
+            try ensureSchema()
+        } catch {
+            try Self.nukeDatabase(dbPath: dbPath, fm: fm)
+            self.db = try Self.openWithRecovery(dbPath: dbPath, fm: fm)
+            try self.db.execute("PRAGMA journal_mode=WAL")
+            try ensureSchema()
+        }
     }
 
     /// Initialize with an explicit Database instance (for testing).
@@ -342,6 +345,23 @@ public final class SearchIndex: @unchecked Sendable {
             }
         }
         return ""
+    }
+
+    /// Open a database with recovery: if open fails, delete and retry once.
+    private static func openWithRecovery(dbPath: String, fm: FileManager) throws -> Database {
+        do {
+            return try Database(path: dbPath)
+        } catch {
+            try nukeDatabase(dbPath: dbPath, fm: fm)
+            return try Database(path: dbPath)
+        }
+    }
+
+    /// Delete the database file and its WAL/SHM sidecars.
+    private static func nukeDatabase(dbPath: String, fm: FileManager) throws {
+        try? fm.removeItem(atPath: dbPath)
+        try? fm.removeItem(atPath: dbPath + "-wal")
+        try? fm.removeItem(atPath: dbPath + "-shm")
     }
 
     private static func fileMtime(atPath path: String) -> Double {
