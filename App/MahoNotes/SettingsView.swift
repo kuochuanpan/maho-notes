@@ -468,6 +468,44 @@ struct SearchSettingsTab: View {
             try await provider.embedBatch(texts)
         }
 
+        // Try building; if it fails with corruption, nuke the DB and retry once
+        do {
+            return try await attemptBuildVectorIndex(
+                vaultPath: vaultPath, notes: notes, model: model,
+                embedder: embedder, onStatus: onStatus
+            )
+        } catch {
+            let desc = error.localizedDescription
+            let isCorrupt = desc.contains("malformed") || desc.contains("I/O error")
+                || desc.contains("disk") || desc.contains("corrupt")
+            guard isCorrupt else { throw error }
+
+            // Nuclear recovery: delete the entire index.db and rebuild from scratch
+            onStatus("Index corrupt — rebuilding from scratch...")
+            let mahoDir = (vaultPath as NSString).appendingPathComponent(".maho")
+            let dbPath = (mahoDir as NSString).appendingPathComponent("index.db")
+            let fm = FileManager.default
+            try? fm.removeItem(atPath: dbPath)
+            try? fm.removeItem(atPath: dbPath + "-wal")
+            try? fm.removeItem(atPath: dbPath + "-shm")
+
+            let searchIndex = try SearchIndex(vaultPath: vaultPath)
+            let _ = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+
+            return try await attemptBuildVectorIndex(
+                vaultPath: vaultPath, notes: notes, model: model,
+                embedder: embedder, onStatus: onStatus
+            )
+        }
+    }
+
+    private nonisolated static func attemptBuildVectorIndex(
+        vaultPath: String,
+        notes: [Note],
+        model: EmbeddingModel,
+        embedder: @Sendable @escaping ([String]) async throws -> [[Float]],
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> Int {
         let vecIndex: VectorIndex
         do {
             vecIndex = try VectorIndex(vaultPath: vaultPath, dimensions: model.dimensions)

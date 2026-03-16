@@ -81,10 +81,12 @@ public final class VectorIndex: @unchecked Sendable {
         } catch let schemaError {
             // Only recover from I/O or corruption errors — propagate others (e.g. dimension mismatch)
             if schemaError is VectorIndexError { throw schemaError }
+            Log.search.warning("VectorIndex ensureSchema failed: \(schemaError.localizedDescription) — nuking DB and retrying")
             try Self.nukeDatabase(dbPath: dbPath, fm: fm)
             self.db = try Self.openWithRecovery(dbPath: dbPath, fm: fm)
             try self.db.execute("PRAGMA journal_mode=WAL")
             try ensureSchema()
+            Log.search.info("VectorIndex recovery succeeded — fresh DB created")
         }
     }
 
@@ -185,6 +187,7 @@ public final class VectorIndex: @unchecked Sendable {
             try db.execute("DROP TABLE IF EXISTS vec_chunks")
         } catch {
             // vec0's xDestroy failed (corrupt shadow tables).
+            Log.search.warning("DROP TABLE vec_chunks failed: \(error.localizedDescription) — manually dropping shadow tables")
             // Manually drop all shadow tables that vec0 creates.
             try db.execute("DROP TABLE IF EXISTS vec_chunks_chunks")
             try db.execute("DROP TABLE IF EXISTS vec_chunks_rowids")
@@ -192,6 +195,7 @@ public final class VectorIndex: @unchecked Sendable {
             try db.execute("DROP TABLE IF EXISTS vec_chunks_vector_chunks00")
             // Also remove from sqlite_master if the virtual table entry remains
             try? db.execute("DROP TABLE IF EXISTS vec_chunks")
+            Log.search.info("Shadow tables dropped manually — recovery succeeded")
         }
     }
 
