@@ -119,6 +119,13 @@ import MahoNotesKit
 
             var (merged, conflicts) = await store.mergeRegistries(local: localRegistry, cloud: cloudRegistry)
 
+            // Rename actual vault directories on disk to match conflict-resolved names.
+            // mergeRegistries() only renames registry entries; the filesystem must follow.
+            if !conflicts.isEmpty {
+                migrationStatus = "Renaming conflicted vaults…"
+                try? renameConflictedVaultDirectories(conflicts)
+            }
+
             // Activate cloud sync, then migrate device vaults to iCloud and save
             migrationStatus = "Migrating vaults to iCloud…"
             await applyCloudSyncMode(.icloud)

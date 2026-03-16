@@ -283,6 +283,53 @@ public struct VaultNameConflict: Sendable {
     public let originalName: String
     public let localRenamed: String
     public let cloudRenamed: String
+    /// The vault type of the local entry before rename (needed for directory rename).
+    public let localType: VaultType
+    /// The vault type of the cloud entry before rename (needed for directory rename).
+    public let cloudType: VaultType
+}
+
+/// Renames vault directories on disk to match conflict-resolved names.
+///
+/// `mergeRegistries()` only renames registry entries (metadata). This function
+/// performs the corresponding filesystem renames so that `resolvedPath(for:)`
+/// finds the actual data after the merge.
+public func renameConflictedVaultDirectories(_ conflicts: [VaultNameConflict]) throws {
+    let fm = FileManager.default
+
+    for conflict in conflicts {
+        // Rename local vault directory
+        let oldLocalEntry = VaultEntry(name: conflict.originalName, type: conflict.localType,
+                                       access: .readWrite)
+        let newLocalEntry = VaultEntry(name: conflict.localRenamed, type: conflict.localType,
+                                       access: .readWrite)
+        let oldLocalPath = resolvedPath(for: oldLocalEntry).trimmingSuffix("/")
+        let newLocalPath = resolvedPath(for: newLocalEntry).trimmingSuffix("/")
+
+        if fm.fileExists(atPath: oldLocalPath) && !fm.fileExists(atPath: newLocalPath) {
+            try fm.moveItem(atPath: oldLocalPath, toPath: newLocalPath)
+        }
+
+        // Rename iCloud vault directory
+        let oldCloudEntry = VaultEntry(name: conflict.originalName, type: conflict.cloudType,
+                                        access: .readWrite)
+        let newCloudEntry = VaultEntry(name: conflict.cloudRenamed, type: conflict.cloudType,
+                                        access: .readWrite)
+        let oldCloudPath = resolvedPath(for: oldCloudEntry).trimmingSuffix("/")
+        let newCloudPath = resolvedPath(for: newCloudEntry).trimmingSuffix("/")
+
+        if fm.fileExists(atPath: oldCloudPath) && !fm.fileExists(atPath: newCloudPath) {
+            try fm.moveItem(atPath: oldCloudPath, toPath: newCloudPath)
+        }
+    }
+}
+
+private extension String {
+    func trimmingSuffix(_ suffix: Character) -> String {
+        var s = self
+        while s.hasSuffix(String(suffix)) { s.removeLast() }
+        return s
+    }
 }
 
 /// Merges a local registry with a cloud registry.
@@ -340,7 +387,9 @@ func mergeRegistries(
                 conflicts.append(VaultNameConflict(
                     originalName: localEntry.name,
                     localRenamed: localRenamed,
-                    cloudRenamed: cloudRenamed
+                    cloudRenamed: cloudRenamed,
+                    localType: localEntry.type,
+                    cloudType: cloudEntry.type
                 ))
             }
         } else {
