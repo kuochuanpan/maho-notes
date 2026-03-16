@@ -93,8 +93,13 @@ struct IPadContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)
+        .overlay {
+            if appState.isAdoptingICloud {
+                iCloudAdoptionOverlay
+            }
+        }
         .overlay(alignment: .top) {
-            if appState.isReloading {
+            if appState.isReloading && !appState.isAdoptingICloud {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -268,6 +273,46 @@ struct IPadContentView: View {
             }
         default: columnVisibility = .all
         }
+    }
+
+    // MARK: - iCloud Adoption Overlay
+
+    private var iCloudAdoptionOverlay: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Spacer()
+
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+                    .symbolEffect(.pulse, options: .repeating)
+
+                Text("Syncing from iCloud…")
+                    .font(.title2.bold())
+
+                if appState.adoptedVaultCount > 0 {
+                    Text("Found \(appState.adoptedVaultCount) vault\(appState.adoptedVaultCount == 1 ? "" : "s") from your other devices.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+
+                ProgressView()
+                    .controlSize(.regular)
+                    .padding(.top, 8)
+
+                Text("This usually takes a few seconds")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.5), value: appState.isAdoptingICloud)
     }
 
     // MARK: - New Note

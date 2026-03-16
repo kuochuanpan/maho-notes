@@ -195,8 +195,13 @@ struct MacContentView: View {
                 }
             }
 
+            // First-launch iCloud adoption overlay
+            if appState.isAdoptingICloud {
+                iCloudAdoptionOverlay
+            }
+
             // Reloading indicator — subtle overlay when registry refreshes from iCloud
-            if appState.isReloading {
+            if appState.isReloading && !appState.isAdoptingICloud {
                 VStack {
                     HStack(spacing: 8) {
                         ProgressView()
@@ -355,6 +360,47 @@ struct MacContentView: View {
         }
         .padding(20)
         .frame(width: 320)
+    }
+
+    // MARK: - iCloud Adoption Overlay
+
+    /// Full-screen welcome overlay shown during first-launch iCloud vault adoption.
+    private var iCloudAdoptionOverlay: some View {
+        ZStack {
+            Color(.windowBackgroundColor)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Spacer()
+
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.blue)
+                    .symbolEffect(.pulse, options: .repeating)
+
+                Text("Syncing from iCloud…")
+                    .font(.title2.bold())
+
+                if appState.adoptedVaultCount > 0 {
+                    Text("Found \(appState.adoptedVaultCount) vault\(appState.adoptedVaultCount == 1 ? "" : "s") from your other devices.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+
+                ProgressView()
+                    .controlSize(.regular)
+                    .padding(.top, 8)
+
+                Text("This usually takes a few seconds")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.5), value: appState.isAdoptingICloud)
     }
 
     // MARK: - Search Overlay

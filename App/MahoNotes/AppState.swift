@@ -33,6 +33,12 @@ import os
     /// Whether a registry reload is in progress (for loading indicator after initial load).
     private(set) var isReloading: Bool = false
 
+    /// Whether the app just adopted iCloud vaults on first launch and is waiting for downloads.
+    private(set) var isAdoptingICloud: Bool = false
+
+    /// Number of iCloud vaults found during adoption (for display).
+    private(set) var adoptedVaultCount: Int = 0
+
     /// Monitors the vault registry file for external changes.
     private var registryPresenter: VaultRegistryPresenter?
 
@@ -387,6 +393,80 @@ import os
         iCloudManager.checkForConflicts(in: vaultURL)
     }
 
+    /// Task that monitors iCloud download progress during first-launch adoption.
+    private var adoptionMonitorTask: Task<Void, Never>?
+
+    /// Starts monitoring iCloud downloads after adopting vaults from another device.
+    /// Polls the iCloud container until all placeholder files are downloaded, then
+    /// dismisses the adoption overlay and reloads vaults.
+    private func startICloudAdoptionMonitoring() {
+        adoptionMonitorTask?.cancel()
+
+        // Start iCloudManager to monitor the iCloud Documents root
+        if let docsURL = iCloudSyncManager.iCloudDocumentsURL() {
+            iCloudManager.startMonitoring(containerURL: docsURL) { [weak self] in
+                Task { @MainActor in
+                    self?.checkAdoptionComplete()
+                }
+            }
+        }
+
+        // Also poll periodically in case NSMetadataQuery misses the transition
+        adoptionMonitorTask = Task { [weak self] in
+            // Give iCloud a moment to start downloading
+            try? await Task.sleep(for: .seconds(2))
+            while !Task.isCancelled {
+                guard let self else { return }
+                await MainActor.run {
+                    self.checkAdoptionComplete()
+                }
+                if await !MainActor.run(body: { self.isAdoptingICloud }) { return }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    /// Check if iCloud downloads are done and dismiss the adoption overlay.
+    private func checkAdoptionComplete() {
+        guard isAdoptingICloud else { return }
+
+        // Check if any iCloud vaults still have placeholder files
+        var hasPlaceholders = false
+        for entry in vaults where entry.type == .icloud {
+            let path = store.resolvedPath(for: entry)
+            let url = URL(fileURLWithPath: path)
+            if hasICloudPlaceholders(in: url) {
+                hasPlaceholders = true
+                break
+            }
+        }
+
+        if !hasPlaceholders {
+            isAdoptingICloud = false
+            adoptedVaultCount = 0
+            adoptionMonitorTask?.cancel()
+            adoptionMonitorTask = nil
+            // Reload to pick up downloaded content
+            reloadCurrentVault()
+        }
+    }
+
+    /// Checks if a directory contains any .icloud placeholder files (not yet downloaded).
+    private func hasICloudPlaceholders(in directory: URL) -> Bool {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsPackageDescendants]
+        ) else { return false }
+
+        while let fileURL = enumerator.nextObject() as? URL {
+            if iCloudSyncManager.isCloudPlaceholder(at: fileURL) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Reload the current vault's notes without changing selection.
     func reloadCurrentVault() {
         // DEBUG: trace who calls reloadCurrentVault
@@ -469,10 +549,13 @@ import os
             let mode = await store.cloudSyncMode()
             self.cloudSync.cloudSyncMode = mode
 
-            // If we just adopted iCloud vaults on first launch, write the local cache
-            // so offline access works immediately.
+            // If we just adopted iCloud vaults on first launch, write the local cache,
+            // show the adoption overlay, and start monitoring for download completion.
             if adoptedICloud, let registry = result {
                 try? await store.saveRegistry(registry)
+                self.adoptedVaultCount = registry.vaults.filter { $0.type == .icloud }.count
+                self.isAdoptingICloud = true
+                startICloudAdoptionMonitoring()
             }
             loadSelectedVault()
             syncCoordinator.startResolving(vaults: self.vaults)
