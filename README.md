@@ -1,5 +1,11 @@
 # Maho Notes
 
+[![Version](https://img.shields.io/badge/version-0.7.0-blue)](https://github.com/kuochuanpan/maho-notes/releases)
+[![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0-green)](LICENSE)
+[![Swift](https://img.shields.io/badge/Swift-6.0-orange?logo=swift)](https://swift.org)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20iOS%20%7C%20iPadOS-lightgrey?logo=apple)](https://github.com/kuochuanpan/maho-notes)
+[![TestFlight](https://img.shields.io/badge/TestFlight-available-blue?logo=apple)](https://testflight.apple.com/join/placeholder)
+
 A personal knowledge base for humans and AI agents.
 
 **Multi-platform native app** (macOS + iPadOS + iOS) with a powerful **CLI** (`mn`) — built in Swift.
