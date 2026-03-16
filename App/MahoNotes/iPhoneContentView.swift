@@ -75,6 +75,24 @@ struct iPhoneContentView: View {
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(newValue)
         }
+        .overlay(alignment: .top) {
+            if appState.isReloading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Syncing vaults…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+                .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(.easeInOut(duration: 0.3), value: appState.isReloading)
+            }
+        }
         .sheet(isPresented: $sheets.showingAddVault) {
             IPadAddVaultSheet(isPresented: $sheets.showingAddVault)
         }

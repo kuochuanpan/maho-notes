@@ -195,6 +195,28 @@ struct MacContentView: View {
                 }
             }
 
+            // Reloading indicator — subtle overlay when registry refreshes from iCloud
+            if appState.isReloading {
+                VStack {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Syncing vaults…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+                    .padding(.top, 8)
+
+                    Spacer()
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(.easeInOut(duration: 0.3), value: appState.isReloading)
+            }
+
             // Search panel overlay — drops down from top center when active
             if appState.searchManager.showSearchPanel {
                 searchOverlay

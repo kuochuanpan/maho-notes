@@ -30,6 +30,9 @@ import os
     /// Whether the initial load has completed.
     private(set) var isLoaded: Bool = false
 
+    /// Whether a registry reload is in progress (for loading indicator after initial load).
+    private(set) var isReloading: Bool = false
+
     /// Monitors the vault registry file for external changes.
     private var registryPresenter: VaultRegistryPresenter?
 
@@ -437,6 +440,12 @@ import os
 
     /// Async implementation of loadRegistry.
     func loadRegistryAsync() async {
+        // Show reloading indicator on subsequent loads (not the initial one)
+        if isLoaded {
+            isReloading = true
+        }
+        defer { isReloading = false }
+
         wireManagers()
         await GettingStartedBundler.installIfNeeded(store: store)
         do {
@@ -473,6 +482,16 @@ import os
                     }
                 })
                 registryPresenter?.startMonitoring()
+            }
+
+            // When cloud sync is ON, also monitor the iCloud registry for
+            // changes pushed from other devices.
+            if mode == .icloud {
+                let iCloudRegistryPath = iCloudDocumentsBasePath() + "/config/vaults.yaml"
+                let iCloudURL = URL(fileURLWithPath: iCloudRegistryPath)
+                registryPresenter?.startMonitoringICloudRegistry(at: iCloudURL)
+            } else {
+                registryPresenter?.stopMonitoringICloudRegistry()
             }
         } catch {
             self.errorMessage = "Failed to load vault registry: \(error.localizedDescription)"
