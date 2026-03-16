@@ -55,6 +55,8 @@ public final class SearchIndex: @unchecked Sendable {
         if !fm.fileExists(atPath: mahoDir) {
             try fm.createDirectory(atPath: mahoDir, withIntermediateDirectories: true)
         }
+        // Exclude .maho/ from iCloud Drive sync — index.db is device-local
+        Self.excludeFromiCloudSync(path: mahoDir)
 
         let dbPath = (mahoDir as NSString).appendingPathComponent("index.db")
 
@@ -345,6 +347,14 @@ public final class SearchIndex: @unchecked Sendable {
             }
         }
         return ""
+    }
+
+    /// Exclude a directory from iCloud Drive sync by setting the backup exclusion resource value.
+    private static func excludeFromiCloudSync(path: String) {
+        var url = URL(fileURLWithPath: path)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     /// Open a database with recovery: if open fails, delete and retry once.

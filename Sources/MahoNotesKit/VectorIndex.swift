@@ -63,6 +63,10 @@ public final class VectorIndex: @unchecked Sendable {
         if !fm.fileExists(atPath: mahoDir) {
             try fm.createDirectory(atPath: mahoDir, withIntermediateDirectories: true)
         }
+        // Exclude .maho/ from iCloud Drive sync — index.db is device-local
+        // and should never be synced (corrupt shadow tables from one device
+        // break vec0 on another).
+        Self.excludeFromiCloudSync(path: mahoDir)
 
         let dbPath = (mahoDir as NSString).appendingPathComponent("index.db")
 
@@ -169,9 +173,26 @@ public final class VectorIndex: @unchecked Sendable {
     }
 
     private func dropVecTables() throws {
-        try db.execute("DROP TABLE IF EXISTS vec_chunks")
+        try resilientDropVecChunks()
         try db.execute("DROP TABLE IF EXISTS chunks")
         try db.execute("DROP TABLE IF EXISTS _vec_schema")
+    }
+
+    /// Drop the vec_chunks virtual table, falling back to manual shadow table removal
+    /// if the virtual table is corrupt (e.g. synced from another device with bad data).
+    private func resilientDropVecChunks() throws {
+        do {
+            try db.execute("DROP TABLE IF EXISTS vec_chunks")
+        } catch {
+            // vec0's xDestroy failed (corrupt shadow tables).
+            // Manually drop all shadow tables that vec0 creates.
+            try db.execute("DROP TABLE IF EXISTS vec_chunks_chunks")
+            try db.execute("DROP TABLE IF EXISTS vec_chunks_rowids")
+            try db.execute("DROP TABLE IF EXISTS vec_chunks_info")
+            try db.execute("DROP TABLE IF EXISTS vec_chunks_vector_chunks00")
+            // Also remove from sqlite_master if the virtual table entry remains
+            try? db.execute("DROP TABLE IF EXISTS vec_chunks")
+        }
     }
 
     // MARK: - Indexing
@@ -234,10 +255,8 @@ public final class VectorIndex: @unchecked Sendable {
 
         if fullRebuild {
             try db.execute("DELETE FROM chunks")
-            // vec0 tables: delete all vectors by selecting all rowids
-            let allRows = try db.query("SELECT id FROM chunks")
-            // After deleting chunks, vec_chunks may still have rows — drop and recreate
-            try db.execute("DROP TABLE IF EXISTS vec_chunks")
+            // Drop and recreate vec0 table (resilient to corrupt shadow tables)
+            try resilientDropVecChunks()
             try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
         }
 
@@ -313,7 +332,8 @@ public final class VectorIndex: @unchecked Sendable {
 
         if fullRebuild {
             try db.execute("DELETE FROM chunks")
-            try db.execute("DROP TABLE IF EXISTS vec_chunks")
+            // Drop and recreate vec0 table (resilient to corrupt shadow tables)
+            try resilientDropVecChunks()
             try db.createVecTable(name: "vec_chunks", dimensions: dimensions)
         }
 
@@ -474,6 +494,15 @@ public final class VectorIndex: @unchecked Sendable {
 
     private func escapeSQLString(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "''")
+    }
+
+    /// Exclude a directory from iCloud Drive sync by setting the backup exclusion resource value.
+    /// Best-effort: failures are silently ignored.
+    private static func excludeFromiCloudSync(path: String) {
+        var url = URL(fileURLWithPath: path)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     /// Open a database with recovery: if open fails, delete and retry once.
