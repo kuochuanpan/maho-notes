@@ -240,7 +240,13 @@ public struct GitSync: Sendable {
             return []
         } catch {
             // Merge conflict — resolve by splitting
-            return try resolveConflicts()
+            do {
+                return try resolveConflicts()
+            } catch {
+                // Conflict resolution failed — abort merge to avoid leaving repo in broken state
+                _ = try? runGit(["merge", "--abort"], in: vaultPath, label: "merge --abort (cleanup)")
+                throw error
+            }
         }
     }
 
@@ -282,13 +288,13 @@ public struct GitSync: Sendable {
                 continue
             }
 
-            // Build conflict filename
-            let pathURL = URL(fileURLWithPath: file)
-            let baseName = pathURL.deletingPathExtension().lastPathComponent
-            let dir = pathURL.deletingLastPathComponent().path
+            // Build conflict filename (use NSString to avoid URL resolving against cwd)
+            let fileNS = file as NSString
+            let baseName = (fileNS.lastPathComponent as NSString).deletingPathExtension
+            let dir = fileNS.deletingLastPathComponent
             let conflictName = "\(baseName).conflict-\(timestamp)-local.md"
             let conflictRelPath: String
-            if dir == "." || dir.isEmpty {
+            if dir == "." || dir.isEmpty || dir == "/" {
                 conflictRelPath = conflictName
             } else {
                 conflictRelPath = "\(dir)/\(conflictName)"
