@@ -89,12 +89,16 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
 
     public func embed(_ text: String) async throws -> [Float] {
         try await ensureLoaded()
-        let tensor: MLTensor
-        switch model {
-        case .minilm:
-            tensor = try bertBundle!.encode(text, maxLength: 512)
-        case .e5small, .e5large:
-            tensor = try xlmBundle!.encode(text, maxLength: 512)
+        // Wrap in cpuAndGPU compute policy to avoid EXC_BAD_ACCESS in
+        // BNNS.BroadcastMatrixMultiplyLayer during attention matmul.
+        // See: https://github.com/jkrukowski/swift-embeddings/pull/18
+        let tensor: MLTensor = try withMLTensorComputePolicy(.cpuAndGPU) {
+            switch model {
+            case .minilm:
+                return try bertBundle!.encode(text, maxLength: 512)
+            case .e5small, .e5large:
+                return try xlmBundle!.encode(text, maxLength: 512)
+            }
         }
         return await tensor.cast(to: Float.self).shapedArray(of: Float.self).scalars
     }
