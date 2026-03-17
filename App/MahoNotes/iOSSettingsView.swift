@@ -531,6 +531,9 @@ struct iOSSettingsView: View {
 
                     let prefix = entries.count > 1 ? "[\(entry.name)] " : ""
 
+                    // Nuke corrupted index.db before full rebuild
+                    VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
                     // 1. Build FTS index
                     await MainActor.run { buildStatus = "\(prefix)Building text index..." }
                     let searchIndex = try SearchIndex(vaultPath: vaultPath)

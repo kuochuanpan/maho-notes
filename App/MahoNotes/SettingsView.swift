@@ -565,6 +565,9 @@ struct SearchSettingsTab: View {
                     let vault = Vault(path: vaultPath)
                     let notes = try vault.allNotes()
 
+                    // Nuke corrupted index.db before full rebuild
+                    VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
                     // FTS
                     await MainActor.run {
                         buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building text index..."

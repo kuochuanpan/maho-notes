@@ -518,6 +518,16 @@ public final class VectorIndex: @unchecked Sendable {
         }
     }
 
+    /// Delete the index.db and sidecars for a vault. Call before full rebuild to ensure clean state.
+    public static func nukeIndexDatabase(vaultPath: String) {
+        let expanded = (vaultPath as NSString).expandingTildeInPath
+        let dbPath = (expanded as NSString).appendingPathComponent(".maho/index.db")
+        let fm = FileManager.default
+        try? fm.removeItem(atPath: dbPath)
+        try? fm.removeItem(atPath: dbPath + "-wal")
+        try? fm.removeItem(atPath: dbPath + "-shm")
+    }
+
     /// Delete the database file and its WAL/SHM sidecars.
     private static func nukeDatabase(dbPath: String, fm: FileManager) throws {
         // Close any open connections by removing the file — ARC will close the handle on dealloc.
