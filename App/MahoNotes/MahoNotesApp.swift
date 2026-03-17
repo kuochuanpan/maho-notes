@@ -30,7 +30,7 @@ struct MahoNotesApp: App {
                 // If deep-link processing is needed in the future, add .onOpenURL here.
         }
         #if os(macOS)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         #endif
         #if os(macOS)
         .commands {

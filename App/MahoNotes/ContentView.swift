@@ -76,7 +76,7 @@ struct TitleBarSearchField: NSViewRepresentable {
         field.delegate = context.coordinator
         field.focusRingType = .none
         field.bezelStyle = .roundedBezel
-        field.controlSize = .regular
+        field.controlSize = .small
         field.sendsWholeSearchString = false
         field.sendsSearchStringImmediately = true
         field.translatesAutoresizingMaskIntoConstraints = false
