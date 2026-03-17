@@ -543,6 +543,9 @@ struct SearchSettingsTab: View {
         isBuilding = true
         buildStatus = nil
 
+        // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
+        cleanModelMetadataCache()
+
         Task {
             guard let model = EmbeddingModel(rawValue: embeddingModel) else {
                 await MainActor.run {

@@ -516,6 +516,9 @@ struct iOSSettingsView: View {
         isBuilding = true
         buildStatus = nil
 
+        // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
+        cleanModelMetadataCache()
+
         Task {
             do {
                 var totalNotes = 0

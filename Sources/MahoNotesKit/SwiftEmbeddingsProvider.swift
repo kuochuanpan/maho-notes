@@ -47,6 +47,20 @@ public let defaultModelCacheDir: String = {
     return (base as NSString).appendingPathComponent("models")
 }()
 
+/// Clean corrupted HubApi metadata cache that can block model downloads.
+///
+/// `swift-transformers` HubApi stores `.metadata` files alongside downloaded model files.
+/// If these become corrupted (e.g. interrupted download, crash), HubApi throws
+/// `invalidMetadataError` and cannot self-recover when it lacks delete permission.
+/// This function removes the entire metadata cache directory, forcing a clean re-download.
+public func cleanModelMetadataCache() {
+    let metadataDir = (defaultModelCacheDir as NSString).appendingPathComponent(".cache/huggingface/download")
+    if FileManager.default.fileExists(atPath: metadataDir) {
+        try? FileManager.default.removeItem(atPath: metadataDir)
+        Log.search.info("Cleaned model metadata cache at \(metadataDir)")
+    }
+}
+
 /// Wraps swift-embeddings for text embedding using Bert or XLMRoberta models.
 @available(macOS 15.0, *)
 public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendable {
