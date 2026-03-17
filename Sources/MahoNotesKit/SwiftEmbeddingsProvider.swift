@@ -39,6 +39,15 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         case .e5large: return "~2.2 GB"
         }
     }
+
+    /// Whether this model requires "query: " / "passage: " instruction prefixes.
+    /// E5 models use asymmetric encoding and need these prefixes for proper cross-lingual matching.
+    public var requiresPrefix: Bool {
+        switch self {
+        case .minilm: return false
+        case .e5small, .e5large: return true
+        }
+    }
 }
 
 /// Default directory for cached embedding models (device-local, not synced to iCloud).
@@ -71,6 +80,7 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
 
     public var dimensions: Int { model.dimensions }
     public var modelIdentifier: String { model.rawValue }
+    public var requiresPrefix: Bool { model.requiresPrefix }
 
     public init(model: EmbeddingModel = .minilm) {
         self.model = model

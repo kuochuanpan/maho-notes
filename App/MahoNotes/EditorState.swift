@@ -161,7 +161,7 @@ import MahoNotesKit
                 }
 
                 let texts = chunks.map { $0.text }
-                let vectors = try await provider.embedBatch(texts)
+                let vectors = try await provider.embedPassageBatch(texts)
 
                 let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
                 let mtime = (try? FileManager.default.attributesOfItem(atPath: filePath))?[.modificationDate]

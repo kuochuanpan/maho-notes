@@ -428,7 +428,7 @@ struct iOSSettingsView: View {
     ) async throws -> Int {
         let provider = SwiftEmbeddingsProvider(model: model)
         let embedder: @Sendable ([String]) async throws -> [[Float]] = { texts in
-            try await provider.embedBatch(texts)
+            try await provider.embedPassageBatch(texts)
         }
 
         // Try building; if it fails with corruption, nuke the DB and retry once

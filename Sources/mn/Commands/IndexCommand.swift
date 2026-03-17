@@ -81,7 +81,7 @@ struct IndexCommand: AsyncParsableCommand {
                 try idx.resetSchema()
                 let stats = try await idx.buildIndex(
                     notes: notes,
-                    asyncEmbedder: { texts in try await provider.embedBatch(texts) },
+                    asyncEmbedder: { texts in try await provider.embedPassageBatch(texts) },
                     model: modelName,
                     fullRebuild: true
                 )
@@ -96,7 +96,7 @@ struct IndexCommand: AsyncParsableCommand {
         let vecStats = try await vecIndex.buildIndex(
             notes: notes,
             asyncEmbedder: { texts in
-                try await provider.embedBatch(texts)
+                try await provider.embedPassageBatch(texts)
             },
             model: modelName,
             fullRebuild: full

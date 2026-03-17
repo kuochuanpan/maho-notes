@@ -122,7 +122,7 @@ public struct VaultSearchService: Sendable {
 
         let queryVector: [Float]
         do {
-            queryVector = try await provider.embed(query)
+            queryVector = try await provider.embedQuery(query)
         } catch {
             throw SearchError.embeddingFailed(error.localizedDescription)
         }
@@ -162,7 +162,7 @@ public struct VaultSearchService: Sendable {
 
         let queryVector: [Float]
         do {
-            queryVector = try await provider.embed(query)
+            queryVector = try await provider.embedQuery(query)
         } catch {
             // Fall back to FTS on embedding failure
             Log.search.warning("Embedding failed, falling back to FTS: \(error)")
