@@ -76,7 +76,7 @@ struct TitleBarSearchField: NSViewRepresentable {
         field.delegate = context.coordinator
         field.focusRingType = .none
         field.bezelStyle = .roundedBezel
-        field.controlSize = .large
+        field.controlSize = .regular
         field.sendsWholeSearchString = false
         field.sendsSearchStringImmediately = true
         field.translatesAutoresizingMaskIntoConstraints = false
@@ -241,6 +241,7 @@ struct MacContentView: View {
                 } label: {
                     Image(systemName: "sidebar.left")
                 }
+                .controlSize(.small)
                 .help("Toggle Navigator (⌘⇧B)")
             }
 
@@ -255,12 +256,6 @@ struct MacContentView: View {
                     }
                 )
                 .frame(minWidth: 300, idealWidth: 500, maxWidth: 600)
-                .padding(.vertical, 2)
-                .padding(.horizontal, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white.opacity(0.15))
-                )
             }
         }
         } // NavigationStack
