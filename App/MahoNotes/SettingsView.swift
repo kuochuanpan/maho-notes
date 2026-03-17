@@ -457,6 +457,43 @@ struct SearchSettingsTab: View {
     }
 
     /// Build vector index in a nonisolated context to avoid Sendable issues.
+    /// Build FTS + vector index for a single vault, fully isolated.
+    private nonisolated static func buildSingleVault(
+        entry: VaultEntry,
+        store: VaultStore,
+        model: EmbeddingModel,
+        vaultIndex: Int,
+        vaultCount: Int,
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> (notes: Int, chunks: Int) {
+        let vaultPath = store.resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let notes = try vault.allNotes()
+        let label = "[\(vaultIndex+1)/\(vaultCount)] \(entry.name)"
+
+        // Nuke corrupted index.db before full rebuild
+        VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
+        // 1. FTS
+        onStatus("\(label): building text index...")
+        let ftsNoteCount: Int
+        do {
+            let searchIndex = try SearchIndex(vaultPath: vaultPath)
+            let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+            ftsNoteCount = ftsStats.total
+        }
+
+        // 2. Vector
+        onStatus("\(label): building vector index...")
+        let vecChunks = try await buildVectorIndex(
+            vaultPath: vaultPath,
+            notes: notes,
+            model: model,
+            onStatus: { status in onStatus("\(label): \(status)") }
+        )
+        return (notes: ftsNoteCount, chunks: vecChunks)
+    }
+
     private nonisolated static func buildVectorIndex(
         vaultPath: String,
         notes: [Note],
@@ -562,34 +599,21 @@ struct SearchSettingsTab: View {
 
             do {
                 for (i, entry) in appState.vaults.enumerated() {
-                    let vaultPath = appState.store.resolvedPath(for: entry)
-                    let vault = Vault(path: vaultPath)
-                    let notes = try vault.allNotes()
-
-                    // Nuke corrupted index.db before full rebuild
-                    VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
-
-                    // FTS
-                    await MainActor.run {
-                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building text index..."
-                    }
-                    let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                    let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
-                    totalNotes += ftsStats.total
-
-                    // Vector
-                    await MainActor.run {
-                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building vector index..."
-                    }
-                    let chunks = try await Self.buildVectorIndex(
-                        vaultPath: vaultPath,
-                        notes: notes,
+                    // Each vault processed in isolated static function so all memory
+                    // (notes bodies, SearchIndex DB, VectorIndex DB) is released
+                    // before the next vault starts.
+                    let (nNotes, nChunks) = try await Self.buildSingleVault(
+                        entry: entry,
+                        store: appState.store,
                         model: model,
+                        vaultIndex: i,
+                        vaultCount: vaultCount,
                         onStatus: { status in
-                            Task { @MainActor in buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): \(status)" }
+                            Task { @MainActor in buildStatus = status }
                         }
                     )
-                    totalChunks += chunks
+                    totalNotes += nNotes
+                    totalChunks += nChunks
                 }
 
                 await MainActor.run {

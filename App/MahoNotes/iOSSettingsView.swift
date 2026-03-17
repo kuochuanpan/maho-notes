@@ -526,45 +526,22 @@ struct iOSSettingsView: View {
                 var totalChunks = 0
 
                 for (idx, entry) in entries.enumerated() {
-                    let vaultPath = appState.store.resolvedPath(for: entry)
-                    let vault = Vault(path: vaultPath)
-                    let notes = try vault.allNotes()
-
-                    let prefix = entries.count > 1 ? "[\(entry.name)] " : ""
-
-                    // Nuke corrupted index.db before full rebuild
-                    VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
-
-                    // 1. Build FTS index
-                    await MainActor.run { buildStatus = "\(prefix)Building text index..." }
-                    let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                    let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
-                    totalNotes += ftsStats.total
-
-                    // 2. Build vector index
-                    guard let model = EmbeddingModel(rawValue: embeddingModel) else {
-                        await MainActor.run {
-                            buildStatus = "\(prefix)FTS: \(ftsStats.total) notes. Unknown embedding model."
-                            isBuilding = false
-                        }
-                        return
-                    }
-
-                    if idx == 0 {
-                        await MainActor.run {
-                            buildStatus = "\(prefix)Downloading \(model.displayName) (\(model.approximateSize))..."
-                        }
-                    }
-
-                    let vecChunks = try await Self.buildVectorIndex(
-                        vaultPath: vaultPath,
-                        notes: notes,
-                        model: model,
+                    // Each vault is processed in its own scope so that notes,
+                    // SearchIndex, and VectorIndex are released before the next
+                    // vault starts. This prevents memory from accumulating across
+                    // vaults (Note.body strings are the biggest offender).
+                    let (nNotes, nChunks) = try await Self.buildSingleVault(
+                        entry: entry,
+                        store: appState.store,
+                        embeddingModel: embeddingModel,
+                        vaultIndex: idx,
+                        vaultCount: entries.count,
                         onStatus: { status in
-                            Task { @MainActor in buildStatus = "\(prefix)\(status)" }
+                            Task { @MainActor in buildStatus = status }
                         }
                     )
-                    totalChunks += vecChunks
+                    totalNotes += nNotes
+                    totalChunks += nChunks
                 }
 
                 await MainActor.run {
@@ -578,6 +555,52 @@ struct iOSSettingsView: View {
                 }
             }
         }
+    }
+
+    /// Build FTS + vector index for a single vault, fully isolated so all memory
+    /// (notes, SearchIndex, VectorIndex, model) is released when this returns.
+    private nonisolated static func buildSingleVault(
+        entry: VaultEntry,
+        store: VaultStore,
+        embeddingModel: String,
+        vaultIndex: Int,
+        vaultCount: Int,
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> (notes: Int, chunks: Int) {
+        let vaultPath = store.resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let notes = try vault.allNotes()
+        let prefix = vaultCount > 1 ? "[\(entry.name)] " : ""
+
+        // Nuke corrupted index.db before full rebuild
+        VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
+        // 1. Build FTS index
+        onStatus("\(prefix)Building text index...")
+        let ftsNoteCount: Int
+        do {
+            let searchIndex = try SearchIndex(vaultPath: vaultPath)
+            let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+            ftsNoteCount = ftsStats.total
+        }  // searchIndex + its Database released here
+
+        // 2. Build vector index
+        guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+            return (notes: ftsNoteCount, chunks: 0)
+        }
+
+        if vaultIndex == 0 {
+            onStatus("\(prefix)Downloading \(model.displayName) (\(model.approximateSize))...")
+        }
+
+        let vecChunks = try await buildVectorIndex(
+            vaultPath: vaultPath,
+            notes: notes,
+            model: model,
+            onStatus: { status in onStatus("\(prefix)\(status)") }
+        )
+        // notes, vault all released when this function returns
+        return (notes: ftsNoteCount, chunks: vecChunks)
     }
 
     private var appVersion: String {
