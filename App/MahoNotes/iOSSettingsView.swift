@@ -9,6 +9,7 @@ struct iOSSettingsView: View {
     @AppStorage("appTheme") private var appTheme: String = "system"
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @AppStorage("searchMode") private var searchMode: String = "text"
+    @AppStorage("searchScope") private var searchScope: String = "thisVault"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
     @State private var isBuilding = false
@@ -95,6 +96,12 @@ struct iOSSettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Picker("Search Scope", selection: $searchScope) {
+                        Text("This Vault").tag("thisVault")
+                        Text("All Vaults").tag("allVaults")
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("Embedding Model", selection: $embeddingModel) {
                         ForEach(EmbeddingModel.allCases, id: \.rawValue) { model in
                             Text("\(model.displayName) (\(model.approximateSize))")
@@ -128,7 +135,7 @@ struct iOSSettingsView: View {
                             }
                         }
                     }
-                    .disabled(isBuilding || appState.selectedVault == nil)
+                    .disabled(isBuilding || (searchScope != "allVaults" && appState.selectedVault == nil))
 
                     if let status = buildStatus {
                         Text(status)
@@ -497,47 +504,64 @@ struct iOSSettingsView: View {
     }
 
     private func rebuildIndex() {
-        guard let entry = appState.selectedVault else { return }
+        let entries: [VaultEntry]
+        if searchScope == "allVaults" {
+            entries = appState.vaults
+        } else if let entry = appState.selectedVault {
+            entries = [entry]
+        } else {
+            return
+        }
+        guard !entries.isEmpty else { return }
         isBuilding = true
         buildStatus = nil
 
         Task {
-            let vaultPath = appState.store.resolvedPath(for: entry)
-            let vault = Vault(path: vaultPath)
-
             do {
-                let notes = try vault.allNotes()
+                var totalNotes = 0
+                var totalChunks = 0
 
-                // 1. Build FTS index
-                await MainActor.run { buildStatus = "Building text index..." }
-                let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+                for (idx, entry) in entries.enumerated() {
+                    let vaultPath = appState.store.resolvedPath(for: entry)
+                    let vault = Vault(path: vaultPath)
+                    let notes = try vault.allNotes()
 
-                // 2. Build vector index
-                guard let model = EmbeddingModel(rawValue: embeddingModel) else {
-                    await MainActor.run {
-                        buildStatus = "FTS: \(ftsStats.total) notes. Unknown embedding model."
-                        isBuilding = false
+                    let prefix = entries.count > 1 ? "[\(entry.name)] " : ""
+
+                    // 1. Build FTS index
+                    await MainActor.run { buildStatus = "\(prefix)Building text index..." }
+                    let searchIndex = try SearchIndex(vaultPath: vaultPath)
+                    let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+                    totalNotes += ftsStats.total
+
+                    // 2. Build vector index
+                    guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+                        await MainActor.run {
+                            buildStatus = "\(prefix)FTS: \(ftsStats.total) notes. Unknown embedding model."
+                            isBuilding = false
+                        }
+                        return
                     }
-                    return
+
+                    if idx == 0 {
+                        await MainActor.run {
+                            buildStatus = "\(prefix)Downloading \(model.displayName) (\(model.approximateSize))..."
+                        }
+                    }
+
+                    let vecChunks = try await Self.buildVectorIndex(
+                        vaultPath: vaultPath,
+                        notes: notes,
+                        model: model,
+                        onStatus: { status in
+                            Task { @MainActor in buildStatus = "\(prefix)\(status)" }
+                        }
+                    )
+                    totalChunks += vecChunks
                 }
 
                 await MainActor.run {
-                    buildStatus = "Downloading \(model.displayName) (\(model.approximateSize))..."
-                }
-
-                let totalNotes = ftsStats.total
-                let vecChunks = try await Self.buildVectorIndex(
-                    vaultPath: vaultPath,
-                    notes: notes,
-                    model: model,
-                    onStatus: { status in
-                        Task { @MainActor in buildStatus = status }
-                    }
-                )
-
-                await MainActor.run {
-                    buildStatus = "Done: \(totalNotes) notes, \(vecChunks) chunks"
+                    buildStatus = "Done: \(totalNotes) notes, \(totalChunks) chunks"
                     isBuilding = false
                 }
             } catch {
