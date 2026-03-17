@@ -154,12 +154,27 @@ import MahoNotesKit
 
     /// Select a note from search results and dismiss the panel.
     func selectSearchResult(_ note: Note) {
-        appState?.selectedNotePath = note.relativePath
-        appState?.navigatorSelection = [note.relativePath]
         showSearchPanel = false
         searchQuery = ""
         searchResults = []
         searchError = nil
+
+        // If the result is from a different vault, switch vault first
+        if let vaultName = note.vaultName,
+           let appState,
+           appState.selectedVaultName != vaultName {
+            appState.selectedVaultName = vaultName
+            // Delay note selection until vault switch completes (onChange triggers loadSelectedVault)
+            let path = note.relativePath
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                appState.selectedNotePath = path
+                appState.navigatorSelection = [path]
+            }
+        } else {
+            appState?.selectedNotePath = note.relativePath
+            appState?.navigatorSelection = [note.relativePath]
+        }
     }
 
     /// Check if vector index exists for a given vault path.

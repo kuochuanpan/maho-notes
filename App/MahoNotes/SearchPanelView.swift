@@ -139,10 +139,21 @@ struct SearchPanelView: View {
                     .font(.body)
                     .fontWeight(.medium)
                     .lineLimit(1)
-                Text(note.collection)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let vaultName = note.vaultName,
+                       appState.searchManager.searchScope == "allVaults" {
+                        Text(vaultName)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    Text(note.collection)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
