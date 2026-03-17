@@ -353,6 +353,7 @@ public final class VectorIndex: @unchecked Sendable {
         }
 
         var added = 0, updated = 0, deleted = 0
+        var processedSinceFlush = 0
 
         for note in notes {
             let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
@@ -365,6 +366,7 @@ public final class VectorIndex: @unchecked Sendable {
                         let texts = chunks.map { $0.text }
                         let vectors = try await asyncEmbedder(texts)
                         try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
+                        processedSinceFlush += texts.count
                     }
                     updated += 1
                 }
@@ -374,8 +376,16 @@ public final class VectorIndex: @unchecked Sendable {
                     let texts = chunks.map { $0.text }
                     let vectors = try await asyncEmbedder(texts)
                     try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
+                    processedSinceFlush += texts.count
                 }
                 added += 1
+            }
+
+            // Periodically yield to let ARC release intermediate CoreML buffers.
+            // Critical on iOS where memory limits are ~1.5 GB.
+            if processedSinceFlush >= 20 {
+                processedSinceFlush = 0
+                try await Task.sleep(for: .milliseconds(10))
             }
         }
 
