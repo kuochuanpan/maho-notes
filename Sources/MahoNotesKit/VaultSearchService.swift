@@ -70,7 +70,8 @@ public struct VaultSearchService: Sendable {
     private static func ftsSearchMultiVault(query: String, vaults: [VaultLocation], limit: Int) -> [Note] {
         var merged: [Note] = []
         for loc in vaults {
-            merged.append(contentsOf: ftsSearchSingleVault(query: query, vaultPath: loc.path))
+            let results = ftsSearchSingleVault(query: query, vaultPath: loc.path)
+            merged.append(contentsOf: results.map { $0.withVaultName(loc.name) })
         }
         return Array(merged.prefix(limit))
     }
@@ -134,7 +135,7 @@ public struct VaultSearchService: Sendable {
 
             for r in vecResults {
                 if let note = notes.first(where: { $0.relativePath == r.path }) {
-                    scoredNotes.append((score: r.score, note: note))
+                    scoredNotes.append((score: r.score, note: note.withVaultName(loc.name)))
                 }
             }
         }
@@ -178,7 +179,7 @@ public struct VaultSearchService: Sendable {
 
             let vaultPrefix = loc.name + "::"
             for note in notes {
-                notesByPrefixedPath[vaultPrefix + note.relativePath] = note
+                notesByPrefixedPath[vaultPrefix + note.relativePath] = note.withVaultName(loc.name)
             }
 
             let fts = ftsSearchResults(query: query, vaultPath: loc.path)
