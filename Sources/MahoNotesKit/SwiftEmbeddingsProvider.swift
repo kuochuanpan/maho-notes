@@ -116,27 +116,34 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         // Wrap in cpuAndGPU compute policy to avoid EXC_BAD_ACCESS in
         // BNNS.BroadcastMatrixMultiplyLayer during attention matmul.
         // See: https://github.com/jkrukowski/swift-embeddings/pull/18
-        //
-        // Use autoreleasepool around the synchronous CoreML encode to prevent
-        // intermediate tensor buffers from accumulating in memory during batch
-        // processing (critical on iOS where memory limits are strict).
-        let tensor: MLTensor = try autoreleasepool {
-            try withMLTensorComputePolicy(.cpuAndGPU) {
-                switch model {
-                case .minilm:
-                    return try bertBundle!.encode(text, maxLength: 512)
-                case .e5small, .e5large:
-                    return try xlmBundle!.encode(text, maxLength: 512)
-                }
+        let tensor: MLTensor = try withMLTensorComputePolicy(.cpuAndGPU) {
+            switch model {
+            case .minilm:
+                return try bertBundle!.encode(text, maxLength: 512)
+            case .e5small, .e5large:
+                return try xlmBundle!.encode(text, maxLength: 512)
             }
         }
-        return await tensor.cast(to: Float.self).shapedArray(of: Float.self).scalars
+        // Force eager evaluation and copy scalars into a plain Array<Float>.
+        // The MLTensor graph can then be released by ARC.
+        let shaped = await tensor.cast(to: Float.self).shapedArray(of: Float.self)
+        return Array(shaped.scalars)
     }
 
+    /// Embed multiple texts with aggressive memory management.
+    ///
+    /// Each embedding is computed in an isolated context to prevent MLTensor
+    /// computation graphs from accumulating across the batch. This is critical
+    /// on iOS where the memory limit is ~1.5 GB and E5 models use ~500 MB.
     public func embedBatch(_ texts: [String]) async throws -> [[Float]] {
         var results: [[Float]] = []
+        results.reserveCapacity(texts.count)
         for text in texts {
-            try await results.append(embed(text))
+            // Embed in isolation: the local `vec` Array<Float> is the only
+            // thing that survives; all MLTensor intermediates become eligible
+            // for ARC release.
+            let vec = try await embed(text)
+            results.append(vec)
         }
         return results
     }
