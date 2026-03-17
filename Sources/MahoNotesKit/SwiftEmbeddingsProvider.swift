@@ -48,6 +48,15 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         case .e5small, .e5large: return true
         }
     }
+
+    /// Whether this model is suitable for iOS (memory-constrained devices).
+    /// E5 Large uses ~2.2 GB base + inference buffers, exceeding iOS limits.
+    public var availableOnIOS: Bool {
+        switch self {
+        case .minilm, .e5small: return true
+        case .e5large: return false
+        }
+    }
 }
 
 /// Default directory for cached embedding models (device-local, not synced to iCloud).
@@ -84,6 +93,14 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
 
     public init(model: EmbeddingModel = .minilm) {
         self.model = model
+    }
+
+    /// Release model weights from memory. Call after batch operations to free RAM.
+    /// The model will be re-loaded on the next `embed()` call.
+    public func unloadModel() {
+        bertBundle = nil
+        xlmBundle = nil
+        loaded = false
     }
 
     private func ensureLoaded() async throws {
@@ -130,20 +147,32 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         return Array(shaped.scalars)
     }
 
-    /// Embed multiple texts with aggressive memory management.
-    ///
-    /// Each embedding is computed in an isolated context to prevent MLTensor
-    /// computation graphs from accumulating across the batch. This is critical
-    /// on iOS where the memory limit is ~1.5 GB and E5 models use ~500 MB.
     public func embedBatch(_ texts: [String]) async throws -> [[Float]] {
+        // Delegate to memory-managed version with default flush interval
+        return try await embedBatchWithFlush(texts)
+    }
+
+    /// Embed multiple texts with periodic model unload to cap memory.
+    ///
+    /// MLTensor's internal memory pools grow during inference and don't shrink
+    /// within a process. To prevent unbounded growth (3+ GB for E5 Small on iOS),
+    /// we unload the model every `flushInterval` embeddings, forcing CoreML to
+    /// release all intermediate buffers. The model is re-loaded on the next call.
+    ///
+    /// - Parameter flushInterval: Unload model every N embeddings (default 25).
+    public func embedBatchWithFlush(_ texts: [String], flushInterval: Int = 25) async throws -> [[Float]] {
         var results: [[Float]] = []
         results.reserveCapacity(texts.count)
-        for text in texts {
-            // Embed in isolation: the local `vec` Array<Float> is the only
-            // thing that survives; all MLTensor intermediates become eligible
-            // for ARC release.
+        for (i, text) in texts.enumerated() {
             let vec = try await embed(text)
             results.append(vec)
+
+            // Periodically unload model to force CoreML to release memory.
+            // Re-loading from disk cache is fast (~0.5s) and prevents OOM.
+            if (i + 1) % flushInterval == 0 && i + 1 < texts.count {
+                unloadModel()
+                try await Task.sleep(for: .milliseconds(100))
+            }
         }
         return results
     }
