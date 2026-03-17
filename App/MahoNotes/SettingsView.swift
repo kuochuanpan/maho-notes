@@ -614,6 +614,13 @@ struct SearchSettingsTab: View {
                     )
                     totalNotes += nNotes
                     totalChunks += nChunks
+
+                    // Pause between vaults to let ARC + autorelease pools fully drain.
+                    // CoreML/MLTensor ObjC buffers from the previous vault's inference
+                    // need time to be reclaimed before starting the next vault.
+                    if i < vaultCount - 1 {
+                        try await Task.sleep(for: .milliseconds(500))
+                    }
                 }
 
                 await MainActor.run {

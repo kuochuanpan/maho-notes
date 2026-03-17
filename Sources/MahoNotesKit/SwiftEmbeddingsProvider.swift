@@ -89,7 +89,8 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     /// Tracks total embed() calls for periodic memory flush.
     private var embedCallCount = 0
     /// Flush model every N embed() calls to release CoreML memory pools.
-    private var flushInterval = 25
+    /// Lower = more frequent reloads (~0.5s each) but tighter memory envelope.
+    private var flushInterval = 10
 
     public var dimensions: Int { model.dimensions }
     public var modelIdentifier: String { model.rawValue }
@@ -144,21 +145,39 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         }
 
         try await ensureLoaded()
-        // Wrap in cpuAndGPU compute policy to avoid EXC_BAD_ACCESS in
-        // BNNS.BroadcastMatrixMultiplyLayer during attention matmul.
-        // See: https://github.com/jkrukowski/swift-embeddings/pull/18
-        let tensor: MLTensor = try withMLTensorComputePolicy(.cpuAndGPU) {
-            switch model {
-            case .minilm:
-                return try bertBundle!.encode(text, maxLength: 512)
-            case .e5small, .e5large:
-                return try xlmBundle!.encode(text, maxLength: 512)
+
+        // CoreML inference produces ObjC autorelease buffers (attention matmul,
+        // layer norms, etc.) that accumulate in Swift async contexts because
+        // there's no implicit autorelease pool drain between await points.
+        // Without this, memory grows ~50-100 MB per embed() call and never
+        // shrinks until the entire Task completes — causing ~800 MB residual
+        // after building a vault and OOM crashes with multiple vaults.
+        //
+        // Strategy: run the synchronous encode() inside autoreleasepool to
+        // drain ObjC intermediates, then await the MLTensor → Float conversion
+        // in a second autoreleasepool.
+
+        // Phase 1: synchronous model inference (produces MLTensor graph + ObjC buffers)
+        let tensor: MLTensor = try autoreleasepool {
+            try withMLTensorComputePolicy(.cpuAndGPU) {
+                switch model {
+                case .minilm:
+                    return try bertBundle!.encode(text, maxLength: 512)
+                case .e5small, .e5large:
+                    return try xlmBundle!.encode(text, maxLength: 512)
+                }
             }
         }
-        // Force eager evaluation: copy scalars into a standalone Array<Float>
-        // so the MLTensor computation graph can be released.
+
+        // Phase 2: async eager evaluation (shapedArray triggers actual compute).
+        // cast() is synchronous (builds lazy graph), shapedArray is async (runs compute).
         let shaped = await tensor.cast(to: Float.self).shapedArray(of: Float.self)
-        return Array(shaped.scalars)
+
+        // Phase 3: copy scalars out and drain any remaining ObjC buffers from evaluation.
+        let scalars: [Float] = autoreleasepool {
+            Array(shaped.scalars)
+        }
+        return scalars
     }
 
     public func embedBatch(_ texts: [String]) async throws -> [[Float]] {

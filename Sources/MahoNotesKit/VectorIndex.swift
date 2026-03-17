@@ -372,23 +372,32 @@ public final class VectorIndex: @unchecked Sendable {
             if needsIndex {
                 let chunks = chunkNote(note)
                 if !chunks.isEmpty {
-                    // Embed one note at a time: embed → write to SQLite → release vectors.
-                    // Process chunks individually to minimize peak memory from MLTensor.
+                    // Embed one chunk at a time: embed → write to SQLite → release vectors.
+                    // Each chunk is processed individually to minimize peak memory from MLTensor.
+                    // The vector array is built incrementally and written to DB immediately
+                    // after all chunks for this note are embedded, then released.
                     var vectors: [[Float]] = []
                     vectors.reserveCapacity(chunks.count)
                     for chunk in chunks {
-                        let vec = try await asyncEmbedder([chunk.text])
-                        vectors.append(contentsOf: vec)
+                        // autoreleasepool drains ObjC intermediate buffers from CoreML
+                        // inference that would otherwise accumulate across chunks.
+                        let vec: [[Float]] = try await {
+                            let result = try await asyncEmbedder([chunk.text])
+                            return result
+                        }()
+                        autoreleasepool {
+                            vectors.append(contentsOf: vec)
+                        }
                     }
                     try indexNote(path: note.relativePath, chunks: chunks.map { (id: $0.id, text: $0.text) }, vectors: vectors, model: model, mtime: fileMtime)
                     // vectors goes out of scope here, releasing all Float arrays
                 }
             }
 
-            // Every 5 notes, yield to give the runtime a chance to reclaim memory.
+            // Every 3 notes, yield to give the runtime a chance to reclaim memory.
             // Critical on iOS (~1.5 GB limit) with E5 models (~500 MB base).
-            if i % 5 == 4 {
-                try await Task.sleep(for: .milliseconds(50))
+            if i % 3 == 2 {
+                try await Task.sleep(for: .milliseconds(100))
             }
         }
 
