@@ -86,6 +86,10 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     private var bertBundle: Bert.ModelBundle?
     private var xlmBundle: XLMRoberta.ModelBundle?
     private var loaded = false
+    /// Tracks total embed() calls for periodic memory flush.
+    private var embedCallCount = 0
+    /// Flush model every N embed() calls to release CoreML memory pools.
+    private var flushInterval = 25
 
     public var dimensions: Int { model.dimensions }
     public var modelIdentifier: String { model.rawValue }
@@ -129,6 +133,16 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     }
 
     public func embed(_ text: String) async throws -> [Float] {
+        // Periodically unload model to force CoreML to release internal memory pools.
+        // MLTensor buffers grow during inference and never shrink — this is the only
+        // way to reclaim memory. Re-load is fast (~0.5s from disk cache).
+        embedCallCount += 1
+        if embedCallCount > flushInterval {
+            unloadModel()
+            embedCallCount = 0
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
         try await ensureLoaded()
         // Wrap in cpuAndGPU compute policy to avoid EXC_BAD_ACCESS in
         // BNNS.BroadcastMatrixMultiplyLayer during attention matmul.
@@ -141,38 +155,18 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
                 return try xlmBundle!.encode(text, maxLength: 512)
             }
         }
-        // Force eager evaluation and copy scalars into a plain Array<Float>.
-        // The MLTensor graph can then be released by ARC.
+        // Force eager evaluation: copy scalars into a standalone Array<Float>
+        // so the MLTensor computation graph can be released.
         let shaped = await tensor.cast(to: Float.self).shapedArray(of: Float.self)
         return Array(shaped.scalars)
     }
 
     public func embedBatch(_ texts: [String]) async throws -> [[Float]] {
-        // Delegate to memory-managed version with default flush interval
-        return try await embedBatchWithFlush(texts)
-    }
-
-    /// Embed multiple texts with periodic model unload to cap memory.
-    ///
-    /// MLTensor's internal memory pools grow during inference and don't shrink
-    /// within a process. To prevent unbounded growth (3+ GB for E5 Small on iOS),
-    /// we unload the model every `flushInterval` embeddings, forcing CoreML to
-    /// release all intermediate buffers. The model is re-loaded on the next call.
-    ///
-    /// - Parameter flushInterval: Unload model every N embeddings (default 25).
-    public func embedBatchWithFlush(_ texts: [String], flushInterval: Int = 25) async throws -> [[Float]] {
         var results: [[Float]] = []
         results.reserveCapacity(texts.count)
-        for (i, text) in texts.enumerated() {
+        for text in texts {
             let vec = try await embed(text)
             results.append(vec)
-
-            // Periodically unload model to force CoreML to release memory.
-            // Re-loading from disk cache is fast (~0.5s) and prevents OOM.
-            if (i + 1) % flushInterval == 0 && i + 1 < texts.count {
-                unloadModel()
-                try await Task.sleep(for: .milliseconds(100))
-            }
         }
         return results
     }

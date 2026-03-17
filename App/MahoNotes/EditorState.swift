@@ -162,6 +162,7 @@ import MahoNotesKit
 
                 let texts = chunks.map { $0.text }
                 let vectors = try await provider.embedPassageBatch(texts)
+                provider.unloadModel()  // Release CoreML memory immediately
 
                 let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
                 let mtime = (try? FileManager.default.attributesOfItem(atPath: filePath))?[.modificationDate]

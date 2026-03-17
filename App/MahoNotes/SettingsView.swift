@@ -469,6 +469,7 @@ struct SearchSettingsTab: View {
         }
 
         // Try building; if it fails with corruption, nuke the DB and retry once
+        defer { provider.unloadModel() }  // Always release model memory when done
         do {
             return try await attemptBuildVectorIndex(
                 vaultPath: vaultPath, notes: notes, model: model,

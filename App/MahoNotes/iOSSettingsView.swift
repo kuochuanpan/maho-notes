@@ -426,14 +426,13 @@ struct iOSSettingsView: View {
         model: EmbeddingModel,
         onStatus: @Sendable (String) -> Void
     ) async throws -> Int {
-        // Create a fresh provider for each vault build to avoid accumulating
-        // CoreML internal memory pools across multiple vault builds.
         let provider = SwiftEmbeddingsProvider(model: model)
         let embedder: @Sendable ([String]) async throws -> [[Float]] = { texts in
             try await provider.embedPassageBatch(texts)
         }
 
         // Try building; if it fails with corruption, nuke the DB and retry once
+        defer { provider.unloadModel() }  // Always release model memory when done
         do {
             return try await attemptBuildVectorIndex(
                 vaultPath: vaultPath, notes: notes, model: model,
