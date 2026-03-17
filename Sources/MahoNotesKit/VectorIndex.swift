@@ -396,12 +396,11 @@ public final class VectorIndex: @unchecked Sendable {
 
     /// Default minimum cosine similarity score for vector search results.
     /// Results below this threshold are considered irrelevant and filtered out.
-    /// 0.35 is a reasonable default for sentence-transformers / E5 models:
     /// - >0.7: very similar
     /// - 0.5-0.7: related
-    /// - 0.35-0.5: loosely related
-    /// - <0.35: likely irrelevant
-    public static let defaultMinScore: Double = 0.35
+    /// - 0.4-0.5: loosely related
+    /// - <0.4: likely irrelevant / noise
+    public static let defaultMinScore: Double = 0.4
 
     /// Search for notes matching the query vector. Returns results aggregated by note path (best chunk score per note).
     /// - Parameters:
