@@ -597,9 +597,64 @@ struct iPhoneContentView: View {
         } else {
             Section("Results") {
                 ForEach(searchResults, id: \.relativePath) { note in
-                    noteNavigationRow(note)
+                    searchResultRow(note)
                 }
             }
+        }
+    }
+
+    /// Search result row that handles cross-vault navigation.
+    /// Unlike `noteNavigationRow` (which is a NavigationLink for in-vault notes),
+    /// this switches vault first if the result is from a different vault, then navigates.
+    private func searchResultRow(_ note: Note) -> some View {
+        Button {
+            selectSearchResult(note)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(note.title)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let vaultName = note.vaultName,
+                       appState.searchManager.searchScope == "allVaults" {
+                        Text(vaultName)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    Text(note.collection)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .foregroundStyle(.primary)
+    }
+
+    /// Handle search result selection with cross-vault support.
+    private func selectSearchResult(_ note: Note) {
+        searchQuery = ""
+        searchResults = []
+        isSearching = false
+
+        if let vaultName = note.vaultName,
+           appState.selectedVaultName != vaultName {
+            // Switch vault first, then navigate after vault loads
+            appState.selectedVaultName = vaultName
+            let path = note.relativePath
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                appState.selectedNotePath = path
+                appState.navigatorSelection = [path]
+                navigationPath.append(path)
+            }
+        } else {
+            appState.selectedNotePath = note.relativePath
+            appState.navigatorSelection = [note.relativePath]
+            navigationPath.append(note.relativePath)
         }
     }
 
@@ -825,23 +880,30 @@ struct iOSSearchView: View {
         NavigationStack {
             List {
                 ForEach(results, id: \.relativePath) { note in
-                    NavigationLink {
-                        NoteContentView()
-                            .navigationTitle(note.title)
-                            .navigationBarTitleDisplayMode(.inline)
-                            .onAppear {
-                                appState.selectNote(path: note.relativePath)
-                            }
+                    Button {
+                        selectSearchResult(note)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(note.title)
                                 .fontWeight(.medium)
                                 .lineLimit(1)
-                            Text(note.collection)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 4) {
+                                if let vaultName = note.vaultName,
+                                   appState.searchManager.searchScope == "allVaults" {
+                                    Text(vaultName)
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(.quaternary, in: Capsule())
+                                }
+                                Text(note.collection)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .foregroundStyle(.primary)
                 }
 
                 if isSearching {
@@ -912,6 +974,26 @@ struct iOSSearchView: View {
                 results = textResults ?? []
                 isSearching = false
             }
+        }
+    }
+
+    /// Handle search result selection with cross-vault support.
+    private func selectSearchResult(_ note: Note) {
+        query = ""
+        results = []
+        isSearching = false
+
+        if let vaultName = note.vaultName,
+           appState.selectedVaultName != vaultName {
+            appState.selectedVaultName = vaultName
+            let path = note.relativePath
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                appState.selectedNotePath = path
+                appState.navigatorSelection = [path]
+            }
+        } else {
+            appState.selectNote(path: note.relativePath)
         }
     }
 }
