@@ -90,6 +90,9 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     private var xlmBundle: XLMRoberta.ModelBundle?
     private var loaded = false
 
+    /// Tracks embed() calls for periodic model flush (E5 Large only, uses cpuAndGPU).
+    private var embedCallCount = 0
+
     public var dimensions: Int { model.dimensions }
     public var modelIdentifier: String { model.rawValue }
     public var requiresPrefix: Bool { model.requiresPrefix }
@@ -104,34 +107,67 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         bertBundle = nil
         xlmBundle = nil
         loaded = false
+        loadTask = nil
     }
+
+    /// In-flight model load task. Shared across callers so concurrent embed()
+    /// calls wait for the same download rather than starting duplicates.
+    /// Uses Task.detached to survive parent Task cancellation (e.g. search debounce).
+    private var loadTask: Task<Void, Error>?
 
     private func ensureLoaded() async throws {
         guard !loaded else { return }
-        let cacheURL = URL(fileURLWithPath: defaultModelCacheDir)
-        switch model {
-        case .minilm:
-            bertBundle = try await Bert.loadModelBundle(
-                from: model.huggingFaceId,
-                downloadBase: cacheURL
-            )
-        case .e5small:
-            xlmBundle = try await XLMRoberta.loadModelBundle(
-                from: model.huggingFaceId,
-                downloadBase: cacheURL,
-                loadConfig: .init()
-            )
-        case .e5large:
-            xlmBundle = try await XLMRoberta.loadModelBundle(
-                from: model.huggingFaceId,
-                downloadBase: cacheURL,
-                loadConfig: .init()
-            )
+
+        // If there's already a load in progress, wait for it.
+        if let existing = loadTask {
+            try await existing.value
+            return
         }
-        loaded = true
+
+        // Start loading in a detached task so that cancelling the parent
+        // (e.g. when the user types another character during search debounce)
+        // doesn't abort the model download. First download can take 30s+ over
+        // cellular; subsequent loads use the disk cache (~0.3s).
+        let modelId = model.huggingFaceId
+        let modelType = model
+        let cacheURL = URL(fileURLWithPath: defaultModelCacheDir)
+
+        let task = Task.detached { [weak self] in
+            switch modelType {
+            case .minilm:
+                let bundle = try await Bert.loadModelBundle(
+                    from: modelId,
+                    downloadBase: cacheURL
+                )
+                self?.bertBundle = bundle
+            case .e5small, .e5large:
+                let bundle = try await XLMRoberta.loadModelBundle(
+                    from: modelId,
+                    downloadBase: cacheURL,
+                    loadConfig: .init()
+                )
+                self?.xlmBundle = bundle
+            }
+            self?.loaded = true
+            self?.loadTask = nil
+        }
+        loadTask = task
+        try await task.value
     }
 
     public func embed(_ text: String) async throws -> [Float] {
+        // E5 Large uses cpuAndGPU (cpuOnly SIGSEGV), so periodically flush
+        // the model to cap Metal memory pool accumulation (~7 MB/call).
+        // Re-load from disk cache is ~1s for E5 Large.
+        if model == .e5large {
+            embedCallCount += 1
+            if embedCallCount > 15 {
+                unloadModel()
+                embedCallCount = 0
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
         try await ensureLoaded()
 
         // Use CPU-only compute policy to avoid Metal GPU memory pool leaks.
@@ -150,8 +186,13 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         //   E5 Small: grows to 1.4 GB+, causes EXC_RESOURCE on iOS
         //
         // CPU inference is fast enough: MiniLM ~15ms/chunk, E5 Small ~40ms/chunk.
+        //
+        // Exception: E5 Large crashes with SIGSEGV in MLTensor's CPU matmul backend
+        // (confirmed on M4). Use cpuAndGPU for E5 Large only — it leaks ~7 MB/call
+        // in Metal pool but at least doesn't crash. E5 Large is macOS-only anyway.
+        let computePolicy: MLComputePolicy = (model == .e5large) ? .cpuAndGPU : .cpuOnly
         let tensor: MLTensor = try autoreleasepool {
-            try withMLTensorComputePolicy(.cpuOnly) {
+            try withMLTensorComputePolicy(computePolicy) {
                 switch model {
                 case .minilm:
                     return try bertBundle!.encode(text, maxLength: 512)
