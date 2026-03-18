@@ -101,6 +101,13 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
         self.model = model
     }
 
+    /// Pre-load the model into memory without performing an actual embedding.
+    /// Call on app launch (background thread) so the first real search is fast.
+    /// Safe to call multiple times — subsequent calls are no-ops if already loaded.
+    public func warmup() async throws {
+        try await ensureLoaded()
+    }
+
     /// Release model weights from memory. Call after batch operations to free RAM.
     /// The model will be re-loaded on the next `embed()` call.
     public func unloadModel() {

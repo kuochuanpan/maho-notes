@@ -11,6 +11,7 @@ struct iPhoneContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var searchQuery = ""
     @State private var searchResults: [Note] = []
+    @State private var isSearching = false
     @State private var debounceTask: Task<Void, Never>?
     @State private var navigationPath = NavigationPath()
     @State private var showSidebar = false
@@ -579,7 +580,16 @@ struct iPhoneContentView: View {
 
     @ViewBuilder
     private var searchResultsSection: some View {
-        if searchResults.isEmpty {
+        if isSearching {
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Searching…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else if searchResults.isEmpty {
             Section {
                 Text("No results found")
                     .foregroundStyle(.secondary)
@@ -600,13 +610,16 @@ struct iPhoneContentView: View {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
             searchResults = []
+            isSearching = false
             return
         }
         let locations = resolveSearchLocations()
         guard !locations.isEmpty else {
             searchResults = []
+            isSearching = false
             return
         }
+        isSearching = true
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
@@ -626,7 +639,10 @@ struct iPhoneContentView: View {
                         embeddingProvider: provider, limit: 20
                     )
                     if !semanticResults.isEmpty {
-                        if !Task.isCancelled { searchResults = semanticResults }
+                        if !Task.isCancelled {
+                            searchResults = semanticResults
+                            isSearching = false
+                        }
                         return
                     }
                 } catch {
@@ -637,6 +653,7 @@ struct iPhoneContentView: View {
             // Use text results (or empty)
             if !Task.isCancelled {
                 searchResults = textResults ?? []
+                isSearching = false
             }
         }
     }
@@ -801,6 +818,7 @@ struct iOSSearchView: View {
     @Environment(AppState.self) private var appState
     @State private var query = ""
     @State private var results: [Note] = []
+    @State private var isSearching = false
     @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
@@ -826,7 +844,14 @@ struct iOSSearchView: View {
                     }
                 }
 
-                if results.isEmpty && !query.isEmpty {
+                if isSearching {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Searching…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if results.isEmpty && !query.isEmpty {
                     Text("No results found")
                         .foregroundStyle(.secondary)
                 }
@@ -844,6 +869,7 @@ struct iOSSearchView: View {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
             results = []
+            isSearching = false
             return
         }
         let store = appState.store
@@ -852,7 +878,8 @@ struct iOSSearchView: View {
             ? appState.vaults
             : (appState.selectedVault.map { [$0] } ?? [])
         let locations = entries.map { VaultLocation(name: $0.name, path: store.resolvedPath(for: $0)) }
-        guard !locations.isEmpty else { results = []; return }
+        guard !locations.isEmpty else { results = []; isSearching = false; return }
+        isSearching = true
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
@@ -870,7 +897,10 @@ struct iOSSearchView: View {
                         embeddingProvider: provider, limit: 20
                     )
                     if !semanticResults.isEmpty {
-                        if !Task.isCancelled { results = semanticResults }
+                        if !Task.isCancelled {
+                            results = semanticResults
+                            isSearching = false
+                        }
                         return
                     }
                 } catch {
@@ -878,7 +908,10 @@ struct iOSSearchView: View {
                 }
             }
 
-            if !Task.isCancelled { results = textResults ?? [] }
+            if !Task.isCancelled {
+                results = textResults ?? []
+                isSearching = false
+            }
         }
     }
 }

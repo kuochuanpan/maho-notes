@@ -115,6 +115,8 @@ struct SearchPanelView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(20)
+            } else if appState.searchManager.isSearching {
+                searchingIndicator
             } else if appState.searchManager.searchResults.isEmpty {
                 noResults
             } else {
@@ -164,6 +166,18 @@ struct SearchPanelView: View {
         .background {
             Rectangle().fill(Color.primary.opacity(0.001))
         }
+    }
+
+    private var searchingIndicator: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Searching…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
     }
 
     private var noResults: some View {

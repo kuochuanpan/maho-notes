@@ -572,6 +572,9 @@ import os
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
 
+            // Pre-load embedding model in background so the first search is fast
+            searchManager.warmupEmbeddingsIfNeeded()
+
             // Start monitoring registry for external changes
             if registryPresenter == nil {
                 let path = store.localRegistryPath

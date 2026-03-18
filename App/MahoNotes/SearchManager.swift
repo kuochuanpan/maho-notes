@@ -41,6 +41,9 @@ import MahoNotesKit
     /// Error message from search (e.g., vector index not built).
     private(set) var searchError: String?
 
+    /// Whether a search is currently in progress.
+    private(set) var isSearching: Bool = false
+
     /// Whether a search index build is in progress.
     var isIndexBuilding: Bool = false
 
@@ -95,12 +98,25 @@ import MahoNotesKit
         return entries.map { VaultLocation(name: $0.name, path: store.resolvedPath(for: $0)) }
     }
 
+    /// Pre-load the embedding model in the background so the first search is fast.
+    /// Call once after app launch. Only warms up if the user's search mode uses embeddings.
+    func warmupEmbeddingsIfNeeded() {
+        let mode = searchMode
+        guard mode == "semantic" || mode == "hybrid" else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let provider = await MainActor.run { self.getEmbeddingProvider() }
+            try? await provider.warmup()
+        }
+    }
+
     /// Perform search (async — supports FTS, semantic, and hybrid modes).
     func performSearch() {
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
             searchResults = []
             searchError = nil
+            isSearching = false
             return
         }
 
@@ -111,10 +127,13 @@ import MahoNotesKit
             return
         }
 
+        isSearching = true
+
         if mode == .text {
             // Synchronous FTS
             searchError = nil
             Task {
+                defer { isSearching = false }
                 do {
                     searchResults = try await VaultSearchService.search(
                         query: query, mode: .text, vaults: locations, limit: 20
@@ -125,6 +144,7 @@ import MahoNotesKit
             }
         } else {
             Task {
+                defer { isSearching = false }
                 do {
                     let provider = getEmbeddingProvider()
                     searchResults = try await VaultSearchService.search(
@@ -150,6 +170,7 @@ import MahoNotesKit
         searchQuery = ""
         searchResults = []
         searchError = nil
+        isSearching = false
     }
 
     /// Select a note from search results and dismiss the panel.

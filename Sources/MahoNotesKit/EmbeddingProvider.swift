@@ -8,6 +8,17 @@ public protocol EmbeddingProvider: Sendable {
     var requiresPrefix: Bool { get }
     func embed(_ text: String) async throws -> [Float]
     func embedBatch(_ texts: [String]) async throws -> [[Float]]
+
+    /// Pre-load the model into memory so the first search is fast.
+    /// Default implementation is a no-op.
+    func warmup() async throws
+}
+
+public extension EmbeddingProvider {
+    func warmup() async throws {
+        // Default: no-op. Providers that have expensive initialization
+        // (e.g. CoreML model loading) should override this.
+    }
 }
 
 extension EmbeddingProvider {
