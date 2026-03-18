@@ -620,12 +620,17 @@ struct iPhoneContentView: View {
             let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
             if mode != .text {
                 let provider = appState.searchManager.embeddingProviderForSearch()
-                if let semanticResults = try? await VaultSearchService.search(
-                    query: trimmed, mode: mode, vaults: locations,
-                    embeddingProvider: provider, limit: 20
-                ), !semanticResults.isEmpty {
-                    if !Task.isCancelled { searchResults = semanticResults }
-                    return
+                do {
+                    let semanticResults = try await VaultSearchService.search(
+                        query: trimmed, mode: mode, vaults: locations,
+                        embeddingProvider: provider, limit: 20
+                    )
+                    if !semanticResults.isEmpty {
+                        if !Task.isCancelled { searchResults = semanticResults }
+                        return
+                    }
+                } catch {
+                    Log.search.error("iOS semantic search failed: \(error.localizedDescription)")
                 }
             }
 
@@ -859,12 +864,17 @@ struct iOSSearchView: View {
             let mode = VaultSearchService.Mode(rawValue: appState.searchManager.searchMode) ?? .text
             if mode != .text {
                 let provider = appState.searchManager.embeddingProviderForSearch()
-                if let semanticResults = try? await VaultSearchService.search(
-                    query: trimmed, mode: mode, vaults: locations,
-                    embeddingProvider: provider, limit: 20
-                ), !semanticResults.isEmpty {
-                    if !Task.isCancelled { results = semanticResults }
-                    return
+                do {
+                    let semanticResults = try await VaultSearchService.search(
+                        query: trimmed, mode: mode, vaults: locations,
+                        embeddingProvider: provider, limit: 20
+                    )
+                    if !semanticResults.isEmpty {
+                        if !Task.isCancelled { results = semanticResults }
+                        return
+                    }
+                } catch {
+                    Log.search.error("iOS search (iOSSearchView) failed: \(error.localizedDescription)")
                 }
             }
 
