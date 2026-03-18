@@ -115,6 +115,8 @@ struct SearchPanelView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(20)
+            } else if appState.searchManager.isSearching {
+                searchingIndicator
             } else if appState.searchManager.searchResults.isEmpty {
                 noResults
             } else {
@@ -139,10 +141,21 @@ struct SearchPanelView: View {
                     .font(.body)
                     .fontWeight(.medium)
                     .lineLimit(1)
-                Text(note.collection)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let vaultName = note.vaultName,
+                       appState.searchManager.searchScope == "allVaults" {
+                        Text(vaultName)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    Text(note.collection)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -153,6 +166,18 @@ struct SearchPanelView: View {
         .background {
             Rectangle().fill(Color.primary.opacity(0.001))
         }
+    }
+
+    private var searchingIndicator: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Searching…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
     }
 
     private var noResults: some View {

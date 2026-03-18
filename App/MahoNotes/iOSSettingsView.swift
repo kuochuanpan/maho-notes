@@ -9,10 +9,12 @@ struct iOSSettingsView: View {
     @AppStorage("appTheme") private var appTheme: String = "system"
     @AppStorage("editorFontSize") private var editorFontSize: Double = 14
     @AppStorage("searchMode") private var searchMode: String = "text"
+    @AppStorage("searchScope") private var searchScope: String = "thisVault"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
-    @State private var isBuilding = false
-    @State private var buildStatus: String?
+    // Build state lives in AppState so it survives settings panel dismiss.
+    private var isBuilding: Bool { appState.isIndexBuilding }
+    private var buildStatus: String? { appState.indexBuildStatus }
     
 
     var body: some View {
@@ -95,8 +97,14 @@ struct iOSSettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Picker("Search Scope", selection: $searchScope) {
+                        Text("This Vault").tag("thisVault")
+                        Text("All Vaults").tag("allVaults")
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("Embedding Model", selection: $embeddingModel) {
-                        ForEach(EmbeddingModel.allCases, id: \.rawValue) { model in
+                        ForEach(EmbeddingModel.allCases.filter(\.availableOnIOS), id: \.rawValue) { model in
                             Text("\(model.displayName) (\(model.approximateSize))")
                                 .tag(model.rawValue)
                         }
@@ -128,7 +136,7 @@ struct iOSSettingsView: View {
                             }
                         }
                     }
-                    .disabled(isBuilding || appState.selectedVault == nil)
+                    .disabled(isBuilding || (searchScope != "allVaults" && appState.selectedVault == nil))
 
                     if let status = buildStatus {
                         Text(status)
@@ -421,10 +429,11 @@ struct iOSSettingsView: View {
     ) async throws -> Int {
         let provider = SwiftEmbeddingsProvider(model: model)
         let embedder: @Sendable ([String]) async throws -> [[Float]] = { texts in
-            try await provider.embedBatch(texts)
+            try await provider.embedPassageBatch(texts)
         }
 
         // Try building; if it fails with corruption, nuke the DB and retry once
+        defer { provider.unloadModel() }  // Always release model memory when done
         do {
             return try await attemptBuildVectorIndex(
                 vaultPath: vaultPath, notes: notes, model: model,
@@ -497,56 +506,99 @@ struct iOSSettingsView: View {
     }
 
     private func rebuildIndex() {
-        guard let entry = appState.selectedVault else { return }
-        isBuilding = true
-        buildStatus = nil
+        let entries: [VaultEntry]
+        if searchScope == "allVaults" {
+            entries = appState.vaults
+        } else if let entry = appState.selectedVault {
+            entries = [entry]
+        } else {
+            return
+        }
+        guard !entries.isEmpty else { return }
+        appState.isIndexBuilding = true
+        appState.indexBuildStatus = nil
 
-        Task {
-            let vaultPath = appState.store.resolvedPath(for: entry)
-            let vault = Vault(path: vaultPath)
+        // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
+        cleanModelMetadataCache()
 
+        // Store task in AppState so it survives settings panel dismiss.
+        appState.indexBuildTask = Task {
             do {
-                let notes = try vault.allNotes()
+                var totalNotes = 0
+                var totalChunks = 0
 
-                // 1. Build FTS index
-                await MainActor.run { buildStatus = "Building text index..." }
-                let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
-
-                // 2. Build vector index
-                guard let model = EmbeddingModel(rawValue: embeddingModel) else {
-                    await MainActor.run {
-                        buildStatus = "FTS: \(ftsStats.total) notes. Unknown embedding model."
-                        isBuilding = false
-                    }
-                    return
+                for (idx, entry) in entries.enumerated() {
+                    let (nNotes, nChunks) = try await Self.buildSingleVault(
+                        entry: entry,
+                        store: appState.store,
+                        embeddingModel: embeddingModel,
+                        vaultIndex: idx,
+                        vaultCount: entries.count,
+                        onStatus: { status in
+                            Task { @MainActor in appState.indexBuildStatus = status }
+                        }
+                    )
+                    totalNotes += nNotes
+                    totalChunks += nChunks
                 }
 
                 await MainActor.run {
-                    buildStatus = "Downloading \(model.displayName) (\(model.approximateSize))..."
-                }
-
-                let totalNotes = ftsStats.total
-                let vecChunks = try await Self.buildVectorIndex(
-                    vaultPath: vaultPath,
-                    notes: notes,
-                    model: model,
-                    onStatus: { status in
-                        Task { @MainActor in buildStatus = status }
-                    }
-                )
-
-                await MainActor.run {
-                    buildStatus = "Done: \(totalNotes) notes, \(vecChunks) chunks"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Done: \(totalNotes) notes, \(totalChunks) chunks"
+                    appState.isIndexBuilding = false
                 }
             } catch {
                 await MainActor.run {
-                    buildStatus = "Error: \(error.localizedDescription)"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Error: \(error.localizedDescription)"
+                    appState.isIndexBuilding = false
                 }
             }
         }
+    }
+
+    /// Build FTS + vector index for a single vault, fully isolated so all memory
+    /// (notes, SearchIndex, VectorIndex, model) is released when this returns.
+    private nonisolated static func buildSingleVault(
+        entry: VaultEntry,
+        store: VaultStore,
+        embeddingModel: String,
+        vaultIndex: Int,
+        vaultCount: Int,
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> (notes: Int, chunks: Int) {
+        let vaultPath = store.resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let notes = try vault.allNotes()
+        let prefix = vaultCount > 1 ? "[\(entry.name)] " : ""
+
+        // Nuke corrupted index.db before full rebuild
+        VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
+        // 1. Build FTS index
+        onStatus("\(prefix)Building text index...")
+        let ftsNoteCount: Int
+        do {
+            let searchIndex = try SearchIndex(vaultPath: vaultPath)
+            let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+            ftsNoteCount = ftsStats.total
+        }  // searchIndex + its Database released here
+
+        // 2. Build vector index
+        guard let model = EmbeddingModel(rawValue: embeddingModel) else {
+            return (notes: ftsNoteCount, chunks: 0)
+        }
+
+        if vaultIndex == 0 {
+            onStatus("\(prefix)Downloading \(model.displayName) (\(model.approximateSize))...")
+        }
+
+        let vecChunks = try await buildVectorIndex(
+            vaultPath: vaultPath,
+            notes: notes,
+            model: model,
+            onStatus: { status in onStatus("\(prefix)\(status)") }
+        )
+        // notes, vault all released when this function returns
+        return (notes: ftsNoteCount, chunks: vecChunks)
     }
 
     private var appVersion: String {

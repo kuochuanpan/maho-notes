@@ -67,6 +67,17 @@ import os
     /// All notes flat list.
     private(set) var allNotes: [Note] = []
 
+    // MARK: - Index Build State (persists across settings panel open/close)
+
+    /// Whether a vector/FTS index build is in progress.
+    var isIndexBuilding: Bool = false
+
+    /// Human-readable status message from the current or last build.
+    var indexBuildStatus: String?
+
+    /// The running build task, if any. Stored here so closing settings doesn't cancel it.
+    var indexBuildTask: Task<Void, Never>?
+
     // MARK: - Managers
 
     let searchManager = SearchManager()
@@ -560,6 +571,9 @@ import os
             loadSelectedVault()
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
+
+            // Pre-load embedding model in background so the first search is fast
+            searchManager.warmupEmbeddingsIfNeeded()
 
             // Start monitoring registry for external changes
             if registryPresenter == nil {

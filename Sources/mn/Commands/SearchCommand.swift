@@ -87,7 +87,7 @@ struct SearchCommand: AsyncParsableCommand {
                let modelName = (try? vecIndex.currentModel()) ?? nil,
                let embeddingModel = EmbeddingModel(rawValue: modelName) {
                 let provider = SwiftEmbeddingsProvider(model: embeddingModel)
-                let queryVector = try await provider.embed(query)
+                let queryVector = try await provider.embedQuery(query)
                 let vecResults = try vecIndex.search(queryVector: queryVector, limit: 50)
                 let ftsTop50 = Array(ftsResults.prefix(50))
                 let merged = HybridSearch.merge(ftsResults: ftsTop50, vectorResults: vecResults, limit: limit)
@@ -113,7 +113,7 @@ struct SearchCommand: AsyncParsableCommand {
         }
 
         let provider = SwiftEmbeddingsProvider(model: embeddingModel)
-        let queryVector = try await provider.embed(query)
+        let queryVector = try await provider.embedQuery(query)
         let results = try vecIndex.search(queryVector: queryVector, limit: limit)
         outputVectorResults(results)
     }

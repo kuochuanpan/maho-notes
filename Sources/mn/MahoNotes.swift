@@ -25,6 +25,7 @@ struct MahoNotes: AsyncParsableCommand {
             PublishCommand.self,
             UnpublishCommand.self,
             SkillCommand.self,
+            MemProfileCommand.self,
         ]
     )
 }

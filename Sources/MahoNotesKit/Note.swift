@@ -6,6 +6,10 @@ public struct Note: Sendable, Codable, Hashable {
         lhs.relativePath == rhs.relativePath && lhs.title == rhs.title && lhs.updated == rhs.updated
     }
 
+    /// The vault this note belongs to (set during cross-vault search).
+    /// Not included in Hashable/Equatable — identity is still relativePath.
+    public var vaultName: String?
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(relativePath)
     }
@@ -31,7 +35,7 @@ public struct Note: Sendable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case relativePath, title, tags, created, updated, isPublic, slug
-        case author, draft, order, series, body, collection
+        case author, draft, order, series, body, collection, vaultName
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -49,6 +53,7 @@ public struct Note: Sendable, Codable, Hashable {
         try container.encodeIfPresent(order, forKey: .order)
         try container.encodeIfPresent(series, forKey: .series)
         try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(vaultName, forKey: .vaultName)
     }
 
     public init(from decoder: Decoder) throws {
@@ -65,6 +70,14 @@ public struct Note: Sendable, Codable, Hashable {
         order = try container.decodeIfPresent(Int.self, forKey: .order)
         series = try container.decodeIfPresent(String.self, forKey: .series)
         body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+        vaultName = try container.decodeIfPresent(String.self, forKey: .vaultName)
+    }
+
+    /// Create a copy of this note stamped with a vault name (for cross-vault search results).
+    public func withVaultName(_ name: String) -> Note {
+        var copy = self
+        copy.vaultName = name
+        return copy
     }
 
     public init(
@@ -79,7 +92,8 @@ public struct Note: Sendable, Codable, Hashable {
         draft: Bool,
         order: Int?,
         series: String?,
-        body: String
+        body: String,
+        vaultName: String? = nil
     ) {
         self.relativePath = relativePath
         self.title = title
@@ -93,5 +107,6 @@ public struct Note: Sendable, Codable, Hashable {
         self.order = order
         self.series = series
         self.body = body
+        self.vaultName = vaultName
     }
 }

@@ -354,28 +354,33 @@ public final class VectorIndex: @unchecked Sendable {
 
         var added = 0, updated = 0, deleted = 0
 
-        for note in notes {
+        for (i, note) in notes.enumerated() {
             let filePath = (vaultPath as NSString).appendingPathComponent(note.relativePath)
             let fileMtime = Self.fileMtime(atPath: filePath)
 
+            var needsIndex = false
             if let existingMtime = existingMtimes[note.relativePath] {
                 if abs(fileMtime - existingMtime) > 0.001 {
-                    let chunks = chunkNote(note)
-                    if !chunks.isEmpty {
-                        let texts = chunks.map { $0.text }
-                        let vectors = try await asyncEmbedder(texts)
-                        try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
-                    }
+                    needsIndex = true
                     updated += 1
                 }
             } else {
+                needsIndex = true
+                added += 1
+            }
+
+            if needsIndex {
                 let chunks = chunkNote(note)
                 if !chunks.isEmpty {
                     let texts = chunks.map { $0.text }
                     let vectors = try await asyncEmbedder(texts)
-                    try indexNote(path: note.relativePath, chunks: chunks, vectors: vectors, model: model, mtime: fileMtime)
+                    try indexNote(path: note.relativePath, chunks: chunks.map { (id: $0.id, text: $0.text) }, vectors: vectors, model: model, mtime: fileMtime)
                 }
-                added += 1
+            }
+
+            // Yield every 5 notes to keep UI responsive during long builds.
+            if i % 5 == 4 {
+                try await Task.sleep(for: .milliseconds(10))
             }
         }
 
@@ -396,12 +401,11 @@ public final class VectorIndex: @unchecked Sendable {
 
     /// Default minimum cosine similarity score for vector search results.
     /// Results below this threshold are considered irrelevant and filtered out.
-    /// 0.35 is a reasonable default for sentence-transformers / E5 models:
     /// - >0.7: very similar
     /// - 0.5-0.7: related
-    /// - 0.35-0.5: loosely related
-    /// - <0.35: likely irrelevant
-    public static let defaultMinScore: Double = 0.35
+    /// - 0.4-0.5: loosely related
+    /// - <0.4: likely irrelevant / noise
+    public static let defaultMinScore: Double = 0.4
 
     /// Search for notes matching the query vector. Returns results aggregated by note path (best chunk score per note).
     /// - Parameters:
@@ -517,6 +521,16 @@ public final class VectorIndex: @unchecked Sendable {
             try nukeDatabase(dbPath: dbPath, fm: fm)
             return try Database(path: dbPath)
         }
+    }
+
+    /// Delete the index.db and sidecars for a vault. Call before full rebuild to ensure clean state.
+    public static func nukeIndexDatabase(vaultPath: String) {
+        let expanded = (vaultPath as NSString).expandingTildeInPath
+        let dbPath = (expanded as NSString).appendingPathComponent(".maho/index.db")
+        let fm = FileManager.default
+        try? fm.removeItem(atPath: dbPath)
+        try? fm.removeItem(atPath: dbPath + "-wal")
+        try? fm.removeItem(atPath: dbPath + "-shm")
     }
 
     /// Delete the database file and its WAL/SHM sidecars.

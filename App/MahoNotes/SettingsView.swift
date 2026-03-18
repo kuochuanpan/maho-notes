@@ -341,8 +341,10 @@ struct SearchSettingsTab: View {
     @Environment(AppState.self) private var appState
     @AppStorage("searchMode") private var searchMode: String = "text"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
-    @State private var isBuilding = false
-    @State private var buildStatus: String?
+
+    // Build state lives in AppState so it survives settings panel dismiss.
+    private var isBuilding: Bool { appState.isIndexBuilding }
+    private var buildStatus: String? { appState.indexBuildStatus }
 
     var body: some View {
         Form {
@@ -457,6 +459,43 @@ struct SearchSettingsTab: View {
     }
 
     /// Build vector index in a nonisolated context to avoid Sendable issues.
+    /// Build FTS + vector index for a single vault, fully isolated.
+    private nonisolated static func buildSingleVault(
+        entry: VaultEntry,
+        store: VaultStore,
+        model: EmbeddingModel,
+        vaultIndex: Int,
+        vaultCount: Int,
+        onStatus: @Sendable (String) -> Void
+    ) async throws -> (notes: Int, chunks: Int) {
+        let vaultPath = store.resolvedPath(for: entry)
+        let vault = Vault(path: vaultPath)
+        let notes = try vault.allNotes()
+        let label = "[\(vaultIndex+1)/\(vaultCount)] \(entry.name)"
+
+        // Nuke corrupted index.db before full rebuild
+        VectorIndex.nukeIndexDatabase(vaultPath: vaultPath)
+
+        // 1. FTS
+        onStatus("\(label): building text index...")
+        let ftsNoteCount: Int
+        do {
+            let searchIndex = try SearchIndex(vaultPath: vaultPath)
+            let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
+            ftsNoteCount = ftsStats.total
+        }
+
+        // 2. Vector
+        onStatus("\(label): building vector index...")
+        let vecChunks = try await buildVectorIndex(
+            vaultPath: vaultPath,
+            notes: notes,
+            model: model,
+            onStatus: { status in onStatus("\(label): \(status)") }
+        )
+        return (notes: ftsNoteCount, chunks: vecChunks)
+    }
+
     private nonisolated static func buildVectorIndex(
         vaultPath: String,
         notes: [Note],
@@ -465,10 +504,11 @@ struct SearchSettingsTab: View {
     ) async throws -> Int {
         let provider = SwiftEmbeddingsProvider(model: model)
         let embedder: @Sendable ([String]) async throws -> [[Float]] = { texts in
-            try await provider.embedBatch(texts)
+            try await provider.embedPassageBatch(texts)
         }
 
         // Try building; if it fails with corruption, nuke the DB and retry once
+        defer { provider.unloadModel() }  // Always release model memory when done
         do {
             return try await attemptBuildVectorIndex(
                 vaultPath: vaultPath, notes: notes, model: model,
@@ -540,14 +580,18 @@ struct SearchSettingsTab: View {
     }
 
     private func rebuildAllIndexes() {
-        isBuilding = true
-        buildStatus = nil
+        appState.isIndexBuilding = true
+        appState.indexBuildStatus = nil
 
-        Task {
+        // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
+        cleanModelMetadataCache()
+
+        // Store task in AppState so it survives settings panel dismiss.
+        appState.indexBuildTask = Task {
             guard let model = EmbeddingModel(rawValue: embeddingModel) else {
                 await MainActor.run {
-                    buildStatus = "Unknown embedding model."
-                    isBuilding = false
+                    appState.indexBuildStatus = "Unknown embedding model."
+                    appState.isIndexBuilding = false
                 }
                 return
             }
@@ -558,41 +602,28 @@ struct SearchSettingsTab: View {
 
             do {
                 for (i, entry) in appState.vaults.enumerated() {
-                    let vaultPath = appState.store.resolvedPath(for: entry)
-                    let vault = Vault(path: vaultPath)
-                    let notes = try vault.allNotes()
-
-                    // FTS
-                    await MainActor.run {
-                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building text index..."
-                    }
-                    let searchIndex = try SearchIndex(vaultPath: vaultPath)
-                    let ftsStats = try searchIndex.buildIndex(notes: notes, fullRebuild: true)
-                    totalNotes += ftsStats.total
-
-                    // Vector
-                    await MainActor.run {
-                        buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): building vector index..."
-                    }
-                    let chunks = try await Self.buildVectorIndex(
-                        vaultPath: vaultPath,
-                        notes: notes,
+                    let (nNotes, nChunks) = try await Self.buildSingleVault(
+                        entry: entry,
+                        store: appState.store,
                         model: model,
+                        vaultIndex: i,
+                        vaultCount: vaultCount,
                         onStatus: { status in
-                            Task { @MainActor in buildStatus = "[\(i+1)/\(vaultCount)] \(entry.name): \(status)" }
+                            Task { @MainActor in appState.indexBuildStatus = status }
                         }
                     )
-                    totalChunks += chunks
+                    totalNotes += nNotes
+                    totalChunks += nChunks
                 }
 
                 await MainActor.run {
-                    buildStatus = "Done: \(vaultCount) vaults, \(totalNotes) notes, \(totalChunks) chunks"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Done: \(vaultCount) vaults, \(totalNotes) notes, \(totalChunks) chunks"
+                    appState.isIndexBuilding = false
                 }
             } catch {
                 await MainActor.run {
-                    buildStatus = "Error: \(error.localizedDescription)"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Error: \(error.localizedDescription)"
+                    appState.isIndexBuilding = false
                 }
             }
         }
