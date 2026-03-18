@@ -341,8 +341,10 @@ struct SearchSettingsTab: View {
     @Environment(AppState.self) private var appState
     @AppStorage("searchMode") private var searchMode: String = "text"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
-    @State private var isBuilding = false
-    @State private var buildStatus: String?
+
+    // Build state lives in AppState so it survives settings panel dismiss.
+    private var isBuilding: Bool { appState.isIndexBuilding }
+    private var buildStatus: String? { appState.indexBuildStatus }
 
     var body: some View {
         Form {
@@ -578,17 +580,18 @@ struct SearchSettingsTab: View {
     }
 
     private func rebuildAllIndexes() {
-        isBuilding = true
-        buildStatus = nil
+        appState.isIndexBuilding = true
+        appState.indexBuildStatus = nil
 
         // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
         cleanModelMetadataCache()
 
-        Task {
+        // Store task in AppState so it survives settings panel dismiss.
+        appState.indexBuildTask = Task {
             guard let model = EmbeddingModel(rawValue: embeddingModel) else {
                 await MainActor.run {
-                    buildStatus = "Unknown embedding model."
-                    isBuilding = false
+                    appState.indexBuildStatus = "Unknown embedding model."
+                    appState.isIndexBuilding = false
                 }
                 return
             }
@@ -599,9 +602,6 @@ struct SearchSettingsTab: View {
 
             do {
                 for (i, entry) in appState.vaults.enumerated() {
-                    // Each vault processed in isolated static function so all memory
-                    // (notes bodies, SearchIndex DB, VectorIndex DB) is released
-                    // before the next vault starts.
                     let (nNotes, nChunks) = try await Self.buildSingleVault(
                         entry: entry,
                         store: appState.store,
@@ -609,28 +609,21 @@ struct SearchSettingsTab: View {
                         vaultIndex: i,
                         vaultCount: vaultCount,
                         onStatus: { status in
-                            Task { @MainActor in buildStatus = status }
+                            Task { @MainActor in appState.indexBuildStatus = status }
                         }
                     )
                     totalNotes += nNotes
                     totalChunks += nChunks
-
-                    // Pause between vaults to let ARC + autorelease pools fully drain.
-                    // CoreML/MLTensor ObjC buffers from the previous vault's inference
-                    // need time to be reclaimed before starting the next vault.
-                    if i < vaultCount - 1 {
-                        try await Task.sleep(for: .milliseconds(500))
-                    }
                 }
 
                 await MainActor.run {
-                    buildStatus = "Done: \(vaultCount) vaults, \(totalNotes) notes, \(totalChunks) chunks"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Done: \(vaultCount) vaults, \(totalNotes) notes, \(totalChunks) chunks"
+                    appState.isIndexBuilding = false
                 }
             } catch {
                 await MainActor.run {
-                    buildStatus = "Error: \(error.localizedDescription)"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Error: \(error.localizedDescription)"
+                    appState.isIndexBuilding = false
                 }
             }
         }

@@ -50,7 +50,10 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
     }
 
     /// Whether this model is suitable for iOS (memory-constrained devices).
-    /// E5 Large uses ~2.2 GB base + inference buffers, exceeding iOS limits.
+    /// With cpuOnly compute policy (avoids Metal memory pool leaks):
+    /// - MiniLM: ~170 MB peak, ~100 MB after unload — fits all iPhones
+    /// - E5 Small: ~743 MB peak, ~247 MB after unload — tight on 4 GB devices, OK on 6 GB+
+    /// - E5 Large: ~2.2 GB — exceeds iOS limits
     public var availableOnIOS: Bool {
         switch self {
         case .minilm, .e5small: return true
@@ -86,11 +89,6 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     private var bertBundle: Bert.ModelBundle?
     private var xlmBundle: XLMRoberta.ModelBundle?
     private var loaded = false
-    /// Tracks total embed() calls for periodic memory flush.
-    private var embedCallCount = 0
-    /// Flush model every N embed() calls to release CoreML memory pools.
-    /// Lower = more frequent reloads (~0.5s each) but tighter memory envelope.
-    private var flushInterval = 10
 
     public var dimensions: Int { model.dimensions }
     public var modelIdentifier: String { model.rawValue }
@@ -134,32 +132,26 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
     }
 
     public func embed(_ text: String) async throws -> [Float] {
-        // Periodically unload model to force CoreML to release internal memory pools.
-        // MLTensor buffers grow during inference and never shrink — this is the only
-        // way to reclaim memory. Re-load is fast (~0.5s from disk cache).
-        embedCallCount += 1
-        if embedCallCount > flushInterval {
-            unloadModel()
-            embedCallCount = 0
-            try await Task.sleep(for: .milliseconds(50))
-        }
-
         try await ensureLoaded()
 
-        // CoreML inference produces ObjC autorelease buffers (attention matmul,
-        // layer norms, etc.) that accumulate in Swift async contexts because
-        // there's no implicit autorelease pool drain between await points.
-        // Without this, memory grows ~50-100 MB per embed() call and never
-        // shrinks until the entire Task completes — causing ~800 MB residual
-        // after building a vault and OOM crashes with multiple vaults.
+        // Use CPU-only compute policy to avoid Metal GPU memory pool leaks.
         //
-        // Strategy: run the synchronous encode() inside autoreleasepool to
-        // drain ObjC intermediates, then await the MLTensor → Float conversion
-        // in a second autoreleasepool.
-
-        // Phase 1: synchronous model inference (produces MLTensor graph + ObjC buffers)
+        // Root cause: Apple's Metal allocator maintains a process-level buffer pool
+        // that never shrinks. Each MLTensor GPU inference adds ~7 MB to this pool,
+        // accumulating to ~800 MB+ over 100+ embed() calls and never releasing —
+        // even after unloadModel() or autoreleasepool drains.
+        //
+        // With cpuOnly on Apple Silicon (tested on M4):
+        //   MiniLM:   ~170 MB peak, stable across 100+ calls, drops to ~100 MB on unload
+        //   E5 Small: ~743 MB peak, stable, drops to ~247 MB on unload
+        //
+        // With cpuAndGPU (broken):
+        //   MiniLM:   grows to 800+ MB, never releases
+        //   E5 Small: grows to 1.4 GB+, causes EXC_RESOURCE on iOS
+        //
+        // CPU inference is fast enough: MiniLM ~15ms/chunk, E5 Small ~40ms/chunk.
         let tensor: MLTensor = try autoreleasepool {
-            try withMLTensorComputePolicy(.cpuAndGPU) {
+            try withMLTensorComputePolicy(.cpuOnly) {
                 switch model {
                 case .minilm:
                     return try bertBundle!.encode(text, maxLength: 512)
@@ -169,15 +161,10 @@ public final class SwiftEmbeddingsProvider: EmbeddingProvider, @unchecked Sendab
             }
         }
 
-        // Phase 2: async eager evaluation (shapedArray triggers actual compute).
-        // cast() is synchronous (builds lazy graph), shapedArray is async (runs compute).
+        // Eager evaluation: shapedArray triggers actual compute on CPU.
         let shaped = await tensor.cast(to: Float.self).shapedArray(of: Float.self)
 
-        // Phase 3: copy scalars out and drain any remaining ObjC buffers from evaluation.
-        let scalars: [Float] = autoreleasepool {
-            Array(shaped.scalars)
-        }
-        return scalars
+        return autoreleasepool { Array(shaped.scalars) }
     }
 
     public func embedBatch(_ texts: [String]) async throws -> [[Float]] {

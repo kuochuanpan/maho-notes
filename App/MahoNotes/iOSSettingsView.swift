@@ -12,8 +12,9 @@ struct iOSSettingsView: View {
     @AppStorage("searchScope") private var searchScope: String = "thisVault"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
-    @State private var isBuilding = false
-    @State private var buildStatus: String?
+    // Build state lives in AppState so it survives settings panel dismiss.
+    private var isBuilding: Bool { appState.isIndexBuilding }
+    private var buildStatus: String? { appState.indexBuildStatus }
     
 
     var body: some View {
@@ -514,22 +515,19 @@ struct iOSSettingsView: View {
             return
         }
         guard !entries.isEmpty else { return }
-        isBuilding = true
-        buildStatus = nil
+        appState.isIndexBuilding = true
+        appState.indexBuildStatus = nil
 
         // Pre-clean corrupted model metadata cache to prevent HubApi permission errors
         cleanModelMetadataCache()
 
-        Task {
+        // Store task in AppState so it survives settings panel dismiss.
+        appState.indexBuildTask = Task {
             do {
                 var totalNotes = 0
                 var totalChunks = 0
 
                 for (idx, entry) in entries.enumerated() {
-                    // Each vault is processed in its own scope so that notes,
-                    // SearchIndex, and VectorIndex are released before the next
-                    // vault starts. This prevents memory from accumulating across
-                    // vaults (Note.body strings are the biggest offender).
                     let (nNotes, nChunks) = try await Self.buildSingleVault(
                         entry: entry,
                         store: appState.store,
@@ -537,7 +535,7 @@ struct iOSSettingsView: View {
                         vaultIndex: idx,
                         vaultCount: entries.count,
                         onStatus: { status in
-                            Task { @MainActor in buildStatus = status }
+                            Task { @MainActor in appState.indexBuildStatus = status }
                         }
                     )
                     totalNotes += nNotes
@@ -545,13 +543,13 @@ struct iOSSettingsView: View {
                 }
 
                 await MainActor.run {
-                    buildStatus = "Done: \(totalNotes) notes, \(totalChunks) chunks"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Done: \(totalNotes) notes, \(totalChunks) chunks"
+                    appState.isIndexBuilding = false
                 }
             } catch {
                 await MainActor.run {
-                    buildStatus = "Error: \(error.localizedDescription)"
-                    isBuilding = false
+                    appState.indexBuildStatus = "Error: \(error.localizedDescription)"
+                    appState.isIndexBuilding = false
                 }
             }
         }
