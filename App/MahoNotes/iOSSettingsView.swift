@@ -12,6 +12,8 @@ struct iOSSettingsView: View {
     @AppStorage("searchScope") private var searchScope: String = "thisVault"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
+    @State private var pendingSearchMode: String?
+    @State private var showMemoryWarning = false
     // Build state lives in AppState so it survives settings panel dismiss.
     private var isBuilding: Bool { appState.isIndexBuilding }
     private var buildStatus: String? { appState.indexBuildStatus }
@@ -90,12 +92,36 @@ struct iOSSettingsView: View {
 
                 // Search & Embedding
                 Section("Search & Embedding") {
-                    Picker("Default Search Mode", selection: $searchMode) {
+                    Picker("Default Search Mode", selection: Binding(
+                        get: { searchMode },
+                        set: { newValue in
+                            if newValue != "text" && searchMode == "text" {
+                                pendingSearchMode = newValue
+                                showMemoryWarning = true
+                            } else {
+                                searchMode = newValue
+                            }
+                        }
+                    )) {
                         Text("Text").tag("text")
                         Text("Semantic").tag("semantic")
                         Text("Hybrid").tag("hybrid")
                     }
                     .pickerStyle(.segmented)
+                    .alert("Enable Semantic Search?", isPresented: $showMemoryWarning) {
+                        Button("Cancel", role: .cancel) {
+                            pendingSearchMode = nil
+                        }
+                        Button("Enable") {
+                            if let mode = pendingSearchMode {
+                                searchMode = mode
+                            }
+                            pendingSearchMode = nil
+                        }
+                    } message: {
+                        let model = EmbeddingModel(rawValue: embeddingModel) ?? .minilm
+                        Text("Semantic search uses an on-device embedding model that requires \(model.runtimeMemory) of memory. This runs in the background and won't affect app responsiveness.")
+                    }
 
                     Picker("Search Scope", selection: $searchScope) {
                         Text("This Vault").tag("thisVault")
@@ -105,7 +131,7 @@ struct iOSSettingsView: View {
 
                     Picker("Embedding Model", selection: $embeddingModel) {
                         ForEach(EmbeddingModel.allCases.filter(\.availableOnIOS), id: \.rawValue) { model in
-                            Text("\(model.displayName) (\(model.approximateSize))")
+                            Text("\(model.displayName) (RAM \(model.runtimeMemory))")
                                 .tag(model.rawValue)
                         }
                     }
@@ -588,7 +614,7 @@ struct iOSSettingsView: View {
         }
 
         if vaultIndex == 0 {
-            onStatus("\(prefix)Downloading \(model.displayName) (\(model.approximateSize))...")
+            onStatus("\(prefix)Downloading \(model.displayName) (\(model.downloadSize))...")
         }
 
         let vecChunks = try await buildVectorIndex(

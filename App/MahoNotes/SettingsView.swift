@@ -342,6 +342,10 @@ struct SearchSettingsTab: View {
     @AppStorage("searchMode") private var searchMode: String = "text"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
 
+    /// Pending search mode change that requires user confirmation.
+    @State private var pendingSearchMode: String?
+    @State private var showMemoryWarning = false
+
     // Build state lives in AppState so it survives settings panel dismiss.
     private var isBuilding: Bool { appState.isIndexBuilding }
     private var buildStatus: String? { appState.indexBuildStatus }
@@ -349,12 +353,36 @@ struct SearchSettingsTab: View {
     var body: some View {
         Form {
             // Search Mode
-            Picker("Default Search Mode", selection: $searchMode) {
+            Picker("Default Search Mode", selection: Binding(
+                get: { searchMode },
+                set: { newValue in
+                    if newValue != "text" && searchMode == "text" {
+                        pendingSearchMode = newValue
+                        showMemoryWarning = true
+                    } else {
+                        searchMode = newValue
+                    }
+                }
+            )) {
                 Text("Text (FTS5)").tag("text")
                 Text("Semantic").tag("semantic")
                 Text("Hybrid").tag("hybrid")
             }
             .pickerStyle(.segmented)
+            .alert("Enable Semantic Search?", isPresented: $showMemoryWarning) {
+                Button("Cancel", role: .cancel) {
+                    pendingSearchMode = nil
+                }
+                Button("Enable") {
+                    if let mode = pendingSearchMode {
+                        searchMode = mode
+                    }
+                    pendingSearchMode = nil
+                }
+            } message: {
+                let model = EmbeddingModel(rawValue: embeddingModel) ?? .minilm
+                Text("Semantic search uses an on-device embedding model that requires \(model.runtimeMemory) of memory. This runs in the background and won't affect app responsiveness.")
+            }
 
             // Embedding Model
             Section {
@@ -364,10 +392,13 @@ struct SearchSettingsTab: View {
                             Text(model.displayName)
                                 .fontWeight(embeddingModel == model.rawValue ? .semibold : .regular)
                             HStack(spacing: 8) {
-                                Text("\(model.dimensions) dimensions")
+                                Text("\(model.dimensions)d")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                Text(model.approximateSize)
+                                Text("↓ \(model.downloadSize)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("RAM \(model.runtimeMemory)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

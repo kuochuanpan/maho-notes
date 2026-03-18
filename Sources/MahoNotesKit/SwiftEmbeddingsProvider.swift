@@ -32,13 +32,29 @@ public enum EmbeddingModel: String, Sendable, CaseIterable {
         }
     }
 
-    public var approximateSize: String {
+    /// Download size for the model weights.
+    public var downloadSize: String {
         switch self {
         case .minilm: return "~80 MB"
         case .e5small: return "~120 MB"
         case .e5large: return "~2.2 GB"
         }
     }
+
+    /// Peak runtime memory usage (measured with cpuOnly compute policy on Apple Silicon).
+    /// This is what the user should care about — it's significantly larger than download size
+    /// because CoreML inflates weights + allocates intermediate tensors.
+    public var runtimeMemory: String {
+        switch self {
+        case .minilm: return "~170 MB"
+        case .e5small: return "~750 MB"
+        case .e5large: return "~2.2 GB"
+        }
+    }
+
+    /// Legacy alias — prefer `downloadSize` or `runtimeMemory` for clarity.
+    @available(*, deprecated, renamed: "downloadSize")
+    public var approximateSize: String { downloadSize }
 
     /// Whether this model requires "query: " / "passage: " instruction prefixes.
     /// E5 models use asymmetric encoding and need these prefixes for proper cross-lingual matching.

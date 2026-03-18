@@ -26,7 +26,7 @@ struct ModelCommand: AsyncParsableCommand {
                     name: model.rawValue,
                     displayName: model.displayName,
                     dimensions: model.dimensions,
-                    size: model.approximateSize,
+                    size: model.downloadSize,
                     downloaded: Self.isDownloaded(model)
                 )
             }
@@ -89,7 +89,7 @@ struct ModelCommand: AsyncParsableCommand {
             }
 
             if #available(macOS 15.0, *) {
-                print("Downloading '\(model.displayName)' (\(model.approximateSize))...")
+                print("Downloading '\(model.displayName)' (\(model.downloadSize))...")
                 let provider = SwiftEmbeddingsProvider(model: model)
                 // Trigger model download by running a dummy embed
                 _ = try await provider.embed("warmup")
