@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.0.0] — 2026-05-19
+
+**First App Store release.** Versions 0.3 through 0.8 shipped via TestFlight only; this entry summarizes everything since the last CHANGELOG entry (0.2.0).
+
+### 🔍 Search & Embeddings
+- **Cross-vault semantic search** — search across every registered vault from one bar; results carry a `vaultName` stamp and navigate to the correct vault on click
+- **Cross-lingual ranking** — E5 query/passage instruction prefixes for higher-quality multilingual results
+- **iOS search scope picker + multi-vault index build** — match the macOS experience on iPad and iPhone
+- **Search-time UX** — model warm-up on app launch, loading indicator while embeddings come online, confirmation prompt before first enabling semantic search
+- **Runtime memory shown per model** in Settings so users can pick a tier their device can afford
+
+### 📱 iOS Stability & Memory (the long road)
+The vector-index build was the dominant source of OOMs on iPhone/iPad. Resolved through a series of fixes:
+- `autoreleasepool` around CoreML buffers; periodic model flush + unload between chunks
+- Per-vault index build isolation so memory doesn't accumulate across vaults
+- Compute policy switched to `cpuOnly` to eliminate the Metal memory-pool leak (also resolved an E5-large `SIGSEGV` on certain devices)
+- iOS semantic-search errors now logged instead of swallowed by `try?`
+- Aggressive nuke-and-rebuild path for corrupt `index.db` (with diagnostic logging)
+- `vec0` table resilient drop; `.maho/` excluded from iCloud sync to keep index churn out of the cloud
+- Model download cancellation no longer leaves partial state behind
+
+### ☁️ iCloud Improvements
+- **Auto-adopt iCloud vaults on first launch** (tutorial vault is skipped) + welcome overlay
+- **Live registry change detection** — vaults appearing/disappearing from other devices show a reload indicator
+- **Cross-vault navigation fix** — selecting a search result from another vault on iOS now switches vaults correctly
+- **Merge conflict resolution** — properly renames vault directories on disk during merge
+
+### 🎨 UI Polish
+- macOS toolbar redesign — `unifiedCompact` style, smaller search field, reduced overall height
+- Search bar with embedded scope and mode pickers
+- Acknowledgments page listing all open-source dependencies
+- Editor: confirmation flow before enabling memory-heavy features
+
+### 🌐 Internationalization
+- 7 locales: `en`, `zh-Hant`, `ja`, `ko`, `fr`, `it`, `es`
+- 43 missing translations filled for the search / settings / vault management features added since 0.2.0
+- 19 more translations filled for runtime-memory display, vault add sheet, cross-vault merge sheet, and code-block toolbar
+
+### 🐛 Selected Bug Fixes
+- Conflict resolution path bug + abort-on-failure during merge
+- `wrap embedding` in `cpuAndGPU` compute policy preventing `EXC_BAD_ACCESS`
+- Auto-recover from corrupt `index.db` during schema init
+- Don't mark getting-started as installed when bundle resource is missing
+- Delete vault files when removing a vault from the registry
+- Read-only vault restrictions enforced across all UI surfaces
+- Getting-started bundle uses `.bundle` packaging to avoid Xcode copy conflicts
+- Use metadata `displayName` instead of folder name in new-note sheets
+
+### 🏗️ Architecture & Tooling
+- `swift-cjk-sqlite` bumped to 0.2.1 (vec pointer-safety fix)
+- License changed from MIT to **PolyForm Noncommercial 1.0.0**
+- README badges (version, license, Swift, platform, TestFlight)
+- `CLAUDE.md` for AI-assisted contributors
+
+### 📦 Versioning
+Marketing version aligned to `1.0.0` across `App/project.yml`, `Sources/mn/MahoNotes.swift`, `Sources/mn/Commands/SkillCommand.swift`, and the README badge. Build number (`CURRENT_PROJECT_VERSION`) remains `1` for the first App Store submission — increment per TestFlight upload.
+
 ## [0.2.0] — 2026-03-09
 
 ### 📱 iOS & iPadOS Support
