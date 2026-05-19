@@ -9,3 +9,7 @@ DerivedData/
 # App build artifacts (project regenerated via: cd App && xcodegen generate)
 App/MahoNotes.xcodeproj/
 build/
+
+# Claude Code per-developer settings (the .local.json variant is user-local).
+# Project-shared .claude/settings.json (no .local) can be committed.
+**/.claude/settings.local.json
