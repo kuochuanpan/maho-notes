@@ -564,14 +564,25 @@ struct MacContentView: View {
 #if os(iOS)
 /// Routes to iPad (NavigationSplitView) or iPhone (TabView) based on size class.
 struct AdaptiveIOSContentView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        if horizontalSizeClass == .regular {
-            IPadContentView()
-        } else {
-            iPhoneContentView()
+        ZStack {
+            if horizontalSizeClass == .regular {
+                IPadContentView()
+            } else {
+                iPhoneContentView()
+            }
+
+            // Hide the bare navigator (which would otherwise flash an "Add a
+            // Vault" empty state) while the initial vault registry load runs.
+            // iCloud adoption has its own dedicated overlay, so don't double up.
+            if !appState.isLoaded && !appState.isAdoptingICloud {
+                LoadingOverlay()
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: appState.isLoaded)
     }
 }
 #endif
