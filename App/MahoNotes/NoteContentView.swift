@@ -39,6 +39,14 @@ struct NoteContentView: View {
     @State private var showFilePicker = false
     @State private var showTablePicker = false
     @State private var importError: String?
+    // PDF export
+    @State private var isGeneratingPDF = false
+    @State private var exportError: String?
+    #if os(iOS)
+    @State private var pdfExportDocument: PDFFileDocument?
+    @State private var showPDFExporter = false
+    @State private var pdfExportFilename = "note"
+    #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -87,6 +95,7 @@ struct NoteContentView: View {
                 if appState.editorState.viewMode != .preview && !appState.editorState.isReadOnly && !isCompactWidth {
                     markdownToolbarButtons
                 }
+                pdfExportButton(for: note)
                 // iPad/iPhone: no inline action buttons in note content view
                 // (new note / sync / collection buttons removed from breadcrumb bar)
             }
@@ -136,6 +145,26 @@ struct NoteContentView: View {
         } message: {
             Text(importError ?? "")
         }
+        .alert("Export Error", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK") { exportError = nil }
+        } message: {
+            Text(exportError ?? "")
+        }
+        #if os(iOS)
+        .fileExporter(
+            isPresented: $showPDFExporter,
+            document: pdfExportDocument,
+            contentType: .pdf,
+            defaultFilename: pdfExportFilename
+        ) { result in
+            if case .failure(let error) = result {
+                exportError = "Failed to save PDF: \(error.localizedDescription)"
+            }
+        }
+        #endif
         .sheet(isPresented: $showTablePicker) {
             TablePickerView(
                 onInsert: { rows, columns in
@@ -425,6 +454,91 @@ struct NoteContentView: View {
             appState.editorState.applyToolbarAction(action)
         }
     }
+
+    // MARK: - PDF Export
+
+    @ViewBuilder
+    private func pdfExportButton(for note: Note) -> some View {
+        Button {
+            Task { await exportPDF(note) }
+        } label: {
+            if isGeneratingPDF {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 26, height: 26)
+            } else {
+                Image(systemName: "arrow.down.doc")
+                    .font(.system(size: 12))
+                    .frame(width: 26, height: 26)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .contentShape(Rectangle())
+        .disabled(isGeneratingPDF)
+        .controlSize(.small)
+        .accessibilityLabel("Export as PDF")
+        #if os(macOS)
+        .help("Export as PDF")
+        #endif
+    }
+
+    /// Markdown currently shown for the note — the live edit buffer when editing, else the saved body.
+    private func currentMarkdown(for note: Note) -> String {
+        if appState.editorState.viewMode != .preview && !appState.editorState.editingBody.isEmpty {
+            return appState.editorState.editingBody
+        }
+        return note.body
+    }
+
+    private func exportPDF(_ note: Note) async {
+        guard !isGeneratingPDF else { return }
+        isGeneratingPDF = true
+        defer { isGeneratingPDF = false }
+        do {
+            let exporter = NotePDFExporter()
+            let data = try await exporter.generatePDF(
+                markdown: currentMarkdown(for: note),
+                noteDirectoryURL: noteDirectoryURL(for: note)
+            )
+            let filename = Self.sanitizedFilename(note.title)
+            #if os(macOS)
+            savePDFmacOS(data: data, suggestedName: filename)
+            #else
+            pdfExportDocument = PDFFileDocument(data: data)
+            pdfExportFilename = filename
+            showPDFExporter = true
+            #endif
+        } catch {
+            exportError = "Failed to export PDF: \(error.localizedDescription)"
+        }
+    }
+
+    /// Strip filesystem-reserved characters from a note title for use as a filename.
+    private static func sanitizedFilename(_ title: String) -> String {
+        let invalid = CharacterSet(charactersIn: "/\\:*?\"<>|")
+        let cleaned = title.components(separatedBy: invalid).joined(separator: "-")
+        let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "note" : trimmed
+    }
+
+    #if os(macOS)
+    private func savePDFmacOS(data: Data, suggestedName: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = suggestedName + ".pdf"
+        panel.canCreateDirectories = true
+        panel.message = "Export note as PDF"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try data.write(to: url)
+            } catch {
+                exportError = "Failed to save PDF: \(error.localizedDescription)"
+            }
+        }
+    }
+    #endif
 
     // MARK: - Asset Import
 
