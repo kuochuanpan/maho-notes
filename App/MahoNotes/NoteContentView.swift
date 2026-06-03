@@ -165,6 +165,9 @@ struct NoteContentView: View {
             }
         }
         #endif
+        .onChange(of: appState.pdfExportRequestID) { _, _ in
+            Task { await exportPDF(note) }
+        }
         .sheet(isPresented: $showTablePicker) {
             TablePickerView(
                 onInsert: { rows, columns in
@@ -467,8 +470,8 @@ struct NoteContentView: View {
                     .controlSize(.small)
                     .frame(width: 26, height: 26)
             } else {
-                Image(systemName: "arrow.down.doc")
-                    .font(.system(size: 12))
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 13))
                     .frame(width: 26, height: 26)
             }
         }

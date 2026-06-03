@@ -34,6 +34,15 @@ struct MahoNotesApp: App {
         #endif
         #if os(macOS)
         .commands {
+            CommandGroup(after: .importExport) {
+                Menu("Export") {
+                    Button("Export to PDF…") {
+                        appState.requestExportPDF()
+                    }
+                    .disabled(appState.selectedNote == nil)
+                }
+            }
+
             CommandGroup(after: .sidebar) {
                 Button("Toggle Vault Rail") {
                     appState.toggleVaultRail()

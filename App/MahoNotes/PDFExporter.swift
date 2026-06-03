@@ -9,26 +9,34 @@ import AppKit
 import UIKit
 #endif
 
-/// Renders a note's markdown to a PDF by loading the *same* HTML the live preview uses
-/// (`MarkdownWebView.buildHTML`) into an offscreen `WKWebView`, then capturing it via
-/// `createPDF`. Works on both macOS and iOS — `WKWebView.createPDF` is cross-platform.
+enum PDFExportError: Error {
+    case renderFailed
+}
+
+/// Renders a note's markdown to a paginated PDF by loading the *same* HTML the live preview
+/// uses (`MarkdownWebView.buildHTML`) into an offscreen `WKWebView`, then driving the platform
+/// print system to produce A4 pages.
 ///
-/// The web view is attached to the key window (fully transparent) while loading so layout
-/// and the vendor scripts (KaTeX, highlight.js, Mermaid) run reliably, then removed.
+/// We use the print system (`NSPrintOperation` / `UIPrintPageRenderer`) rather than
+/// `WKWebView.createPDF`, because `createPDF` emits a single page as tall as the whole note —
+/// the print path paginates content into real A4 pages suitable for printing.
 @MainActor
 final class NotePDFExporter: NSObject, WKNavigationDelegate {
-    /// US Letter width in points (8.5in × 72). Controls line wrapping in the rendered PDF.
-    private static let pageWidth: CGFloat = 612
-    private static let pageHeight: CGFloat = 792
+    /// A4 in PostScript points (210mm × 297mm at 72dpi).
+    private static let paperSize = CGSize(width: 595.28, height: 841.89)
+    /// 0.5in margin on every side.
+    private static let margin: CGFloat = 36
+    private static var printableWidth: CGFloat { paperSize.width - margin * 2 }
 
     private var webView: WKWebView?
     private var loadContinuation: CheckedContinuation<Void, Error>?
 
-    /// Generate PDF data for the given markdown. Throws if the page fails to load.
+    /// Generate paginated A4 PDF data for the given markdown. Throws if the page fails to load.
     func generatePDF(markdown: String, noteDirectoryURL: URL?) async throws -> Data {
         let config = WKWebViewConfiguration()
+        // Lay the content out at the printable width so text wraps the way it will print.
         let webView = WKWebView(
-            frame: CGRect(x: 0, y: 0, width: Self.pageWidth, height: Self.pageHeight),
+            frame: CGRect(x: 0, y: 0, width: Self.printableWidth, height: Self.paperSize.height),
             configuration: config
         )
         webView.navigationDelegate = self
@@ -44,7 +52,7 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
 
         attachOffscreen(webView)
         defer {
-            removeFromSuperview(webView)
+            webView.removeFromSuperview()
             self.webView = nil
         }
 
@@ -60,12 +68,63 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         // syntax highlighting) finish mutating the DOM. Give them a moment before capture.
         try? await Task.sleep(for: .milliseconds(500))
 
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-            webView.createPDF(configuration: WKPDFConfiguration()) { result in
-                continuation.resume(with: result)
-            }
-        }
+        return try Self.renderPaginatedPDF(from: webView)
     }
+
+    // MARK: - Paginated rendering
+
+    #if os(macOS)
+    private static func renderPaginatedPDF(from webView: WKWebView) throws -> Data {
+        let printInfo = NSPrintInfo()
+        printInfo.paperSize = paperSize
+        printInfo.topMargin = margin
+        printInfo.bottomMargin = margin
+        printInfo.leftMargin = margin
+        printInfo.rightMargin = margin
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = false
+        printInfo.isVerticallyCentered = false
+        printInfo.jobDisposition = .save
+
+        let tmpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("pdf")
+        printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = tmpURL
+
+        let operation = webView.printOperation(with: printInfo)
+        operation.showsPrintPanel = false
+        operation.showsProgressPanel = false
+
+        guard operation.run() else { throw PDFExportError.renderFailed }
+        defer { try? FileManager.default.removeItem(at: tmpURL) }
+        return try Data(contentsOf: tmpURL)
+    }
+    #else
+    private static func renderPaginatedPDF(from webView: WKWebView) throws -> Data {
+        let paperRect = CGRect(origin: .zero, size: paperSize)
+        let printableRect = paperRect.insetBy(dx: margin, dy: margin)
+
+        let renderer = UIPrintPageRenderer()
+        renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
+        // UIPrintPageRenderer reads paper/printable rects via KVC.
+        renderer.setValue(paperRect, forKey: "paperRect")
+        renderer.setValue(printableRect, forKey: "printableRect")
+
+        let data = NSMutableData()
+        UIGraphicsBeginPDFContextToData(data, paperRect, nil)
+        let pageCount = max(renderer.numberOfPages, 1)
+        renderer.prepare(forDrawingPages: NSRange(location: 0, length: pageCount))
+        for page in 0..<pageCount {
+            UIGraphicsBeginPDFPage()
+            renderer.drawPage(at: page, in: paperRect)
+        }
+        UIGraphicsEndPDFContext()
+
+        guard data.length > 0 else { throw PDFExportError.renderFailed }
+        return data as Data
+    }
+    #endif
 
     // MARK: - Offscreen attachment
 
@@ -83,10 +142,6 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         webView.alpha = 0
         window.addSubview(webView)
         #endif
-    }
-
-    private func removeFromSuperview(_ webView: WKWebView) {
-        webView.removeFromSuperview()
     }
 
     // MARK: - WKNavigationDelegate
