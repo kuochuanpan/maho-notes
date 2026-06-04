@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import PDFKit
 import UniformTypeIdentifiers
 import MahoNotesKit
 
@@ -13,13 +14,17 @@ enum PDFExportError: Error {
     case renderFailed
 }
 
-/// Renders a note's markdown to a paginated PDF by loading the *same* HTML the live preview
-/// uses (`MarkdownWebView.buildHTML`) into an offscreen `WKWebView`, then driving the platform
-/// print system to produce A4 pages.
+/// Renders a note's markdown to a paginated A4 PDF.
 ///
-/// We use the print system (`NSPrintOperation` / `UIPrintPageRenderer`) rather than
-/// `WKWebView.createPDF`, because `createPDF` emits a single page as tall as the whole note —
-/// the print path paginates content into real A4 pages suitable for printing.
+/// The note's HTML — the *same* HTML the live preview uses (`MarkdownWebView.buildHTML`) — is
+/// loaded into an offscreen `WKWebView` and captured with `WKWebView.createPDF`, which produces
+/// a single page as tall as the whole note. That continuous page is then sliced into A4 pages
+/// with Core Graphics (`repaginate`).
+///
+/// We deliberately avoid the platform print system (`NSPrintOperation` / `UIPrintPageRenderer`):
+/// `WKWebView` + `NSPrintOperation` crashes on macOS ("WKPrintingView frame was not initialized")
+/// and can emit a multi-gigabyte file. The createPDF + slice path is deterministic and shared by
+/// both platforms.
 @MainActor
 final class NotePDFExporter: NSObject, WKNavigationDelegate {
     /// A4 in PostScript points (210mm × 297mm at 72dpi).
@@ -27,6 +32,7 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
     /// 0.5in margin on every side.
     private static let margin: CGFloat = 36
     private static var printableWidth: CGFloat { paperSize.width - margin * 2 }
+    private static var printableHeight: CGFloat { paperSize.height - margin * 2 }
 
     private var webView: WKWebView?
     private var loadContinuation: CheckedContinuation<Void, Error>?
@@ -34,7 +40,8 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
     /// Generate paginated A4 PDF data for the given markdown. Throws if the page fails to load.
     func generatePDF(markdown: String, noteDirectoryURL: URL?) async throws -> Data {
         let config = WKWebViewConfiguration()
-        // Lay the content out at the printable width so text wraps the way it will print.
+        // Lay the content out at the printable width so text wraps the way it will print and the
+        // captured page needs no horizontal scaling (scale factor stays 1).
         let webView = WKWebView(
             frame: CGRect(x: 0, y: 0, width: Self.printableWidth, height: Self.paperSize.height),
             configuration: config
@@ -68,63 +75,62 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         // syntax highlighting) finish mutating the DOM. Give them a moment before capture.
         try? await Task.sleep(for: .milliseconds(500))
 
-        return try Self.renderPaginatedPDF(from: webView)
-    }
-
-    // MARK: - Paginated rendering
-
-    #if os(macOS)
-    private static func renderPaginatedPDF(from webView: WKWebView) throws -> Data {
-        let printInfo = NSPrintInfo()
-        printInfo.paperSize = paperSize
-        printInfo.topMargin = margin
-        printInfo.bottomMargin = margin
-        printInfo.leftMargin = margin
-        printInfo.rightMargin = margin
-        printInfo.horizontalPagination = .fit
-        printInfo.verticalPagination = .automatic
-        printInfo.isHorizontallyCentered = false
-        printInfo.isVerticallyCentered = false
-        printInfo.jobDisposition = .save
-
-        let tmpURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("pdf")
-        printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = tmpURL
-
-        let operation = webView.printOperation(with: printInfo)
-        operation.showsPrintPanel = false
-        operation.showsProgressPanel = false
-
-        guard operation.run() else { throw PDFExportError.renderFailed }
-        defer { try? FileManager.default.removeItem(at: tmpURL) }
-        return try Data(contentsOf: tmpURL)
-    }
-    #else
-    private static func renderPaginatedPDF(from webView: WKWebView) throws -> Data {
-        let paperRect = CGRect(origin: .zero, size: paperSize)
-        let printableRect = paperRect.insetBy(dx: margin, dy: margin)
-
-        let renderer = UIPrintPageRenderer()
-        renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
-        // UIPrintPageRenderer reads paper/printable rects via KVC.
-        renderer.setValue(paperRect, forKey: "paperRect")
-        renderer.setValue(printableRect, forKey: "printableRect")
-
-        let data = NSMutableData()
-        UIGraphicsBeginPDFContextToData(data, paperRect, nil)
-        let pageCount = max(renderer.numberOfPages, 1)
-        renderer.prepare(forDrawingPages: NSRange(location: 0, length: pageCount))
-        for page in 0..<pageCount {
-            UIGraphicsBeginPDFPage()
-            renderer.drawPage(at: page, in: paperRect)
+        let continuousPDF = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+            webView.createPDF(configuration: WKPDFConfiguration()) { result in
+                continuation.resume(with: result)
+            }
         }
-        UIGraphicsEndPDFContext()
 
-        guard data.length > 0 else { throw PDFExportError.renderFailed }
-        return data as Data
+        return try Self.repaginate(continuousPDF)
     }
-    #endif
+
+    // MARK: - Pagination
+
+    /// Slice a single tall PDF page into A4 pages with Core Graphics. Content is scaled to the
+    /// printable width and split vertically; page breaks are positional (a line may straddle a
+    /// boundary), the standard tradeoff for slicing a continuous web render.
+    private static func repaginate(_ pdfData: Data) throws -> Data {
+        guard let srcDoc = PDFDocument(data: pdfData),
+              let srcPage = srcDoc.page(at: 0),
+              let cgPage = srcPage.pageRef else {
+            throw PDFExportError.renderFailed
+        }
+
+        let srcBox = srcPage.bounds(for: .mediaBox)
+        guard srcBox.width > 0, srcBox.height > 0 else { throw PDFExportError.renderFailed }
+
+        let scale = printableWidth / srcBox.width
+        let scaledHeight = srcBox.height * scale
+        let pageCount = max(1, Int(ceil(scaledHeight / printableHeight)))
+
+        let out = NSMutableData()
+        guard let consumer = CGDataConsumer(data: out as CFMutableData) else {
+            throw PDFExportError.renderFailed
+        }
+        var mediaBox = CGRect(origin: .zero, size: paperSize)
+        guard let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+            throw PDFExportError.renderFailed
+        }
+
+        for page in 0..<pageCount {
+            ctx.beginPDFPage(nil)
+            ctx.saveGState()
+            // Keep content inside the page margins.
+            ctx.clip(to: CGRect(x: margin, y: margin, width: printableWidth, height: printableHeight))
+            // Position slice `page` so its top aligns with the top of the printable area.
+            let tyOffset = (paperSize.height - margin) - scaledHeight + CGFloat(page) * printableHeight
+            ctx.translateBy(x: margin, y: tyOffset)
+            ctx.scaleBy(x: scale, y: scale)
+            ctx.translateBy(x: -srcBox.origin.x, y: -srcBox.origin.y)
+            ctx.drawPDFPage(cgPage)
+            ctx.restoreGState()
+            ctx.endPDFPage()
+        }
+        ctx.closePDF()
+
+        guard out.length > 0 else { throw PDFExportError.renderFailed }
+        return out as Data
+    }
 
     // MARK: - Offscreen attachment
 
