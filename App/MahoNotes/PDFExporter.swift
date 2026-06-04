@@ -75,21 +75,76 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         // syntax highlighting) finish mutating the DOM. Give them a moment before capture.
         try? await Task.sleep(for: .milliseconds(500))
 
+        // Measure the vertical extent of every text line / atomic block so we can break pages
+        // between them instead of through them.
+        let layout = await measureLayout(webView)
+
         let continuousPDF = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
             webView.createPDF(configuration: WKPDFConfiguration()) { result in
                 continuation.resume(with: result)
             }
         }
 
-        return try Self.repaginate(continuousPDF)
+        return try Self.repaginate(continuousPDF, layout: layout)
+    }
+
+    // MARK: - Layout measurement
+
+    /// One run of laid-out content that must not be split across a page boundary,
+    /// in CSS-pixel document coordinates (top-down).
+    private struct LayoutMeasurement: Decodable {
+        let height: Double
+        /// `[top, bottom]` pairs for each text line and atomic block.
+        let atoms: [[Double]]
+    }
+
+    /// Collect the bounding boxes of every text line (via `Range.getClientRects`) plus atomic
+    /// blocks (images, code blocks, tables, etc.) so pagination can avoid cutting through them.
+    private func measureLayout(_ webView: WKWebView) async -> LayoutMeasurement? {
+        let js = """
+        (function () {
+          var atoms = [];
+          function push(t, b) { if (b > t) atoms.push([t, b]); }
+          var y = window.scrollY;
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+          var n;
+          while ((n = walker.nextNode())) {
+            if (!n.nodeValue || !n.nodeValue.trim()) continue;
+            var range = document.createRange();
+            range.selectNodeContents(n);
+            var rects = range.getClientRects();
+            for (var i = 0; i < rects.length; i++) {
+              if (rects[i].height > 0) push(rects[i].top + y, rects[i].bottom + y);
+            }
+          }
+          var blocks = document.querySelectorAll("img, pre, table, svg, .mermaid, hr, blockquote, h1, h2, h3, h4, h5, h6, .admonition, .math-block");
+          for (var j = 0; j < blocks.length; j++) {
+            var r = blocks[j].getBoundingClientRect();
+            if (r.height > 0) push(r.top + y, r.bottom + y);
+          }
+          return JSON.stringify({ height: document.body.scrollHeight, atoms: atoms });
+        })();
+        """
+        return await withCheckedContinuation { (continuation: CheckedContinuation<LayoutMeasurement?, Never>) in
+            webView.evaluateJavaScript(js) { result, _ in
+                guard let json = result as? String,
+                      let data = json.data(using: .utf8),
+                      let measurement = try? JSONDecoder().decode(LayoutMeasurement.self, from: data) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: measurement)
+            }
+        }
     }
 
     // MARK: - Pagination
 
-    /// Slice a single tall PDF page into A4 pages with Core Graphics. Content is scaled to the
-    /// printable width and split vertically; page breaks are positional (a line may straddle a
-    /// boundary), the standard tradeoff for slicing a continuous web render.
-    private static func repaginate(_ pdfData: Data) throws -> Data {
+    /// Slice the single tall PDF page into A4 pages with Core Graphics. Page breaks land in the
+    /// gaps *between* text lines / atomic blocks (using `layout`) so no line is cut in half; the
+    /// leftover space at the bottom of a page is simply left blank. Falls back to fixed-height
+    /// slices if measurement is unavailable.
+    private static func repaginate(_ pdfData: Data, layout: LayoutMeasurement?) throws -> Data {
         guard let srcDoc = PDFDocument(data: pdfData),
               let srcPage = srcDoc.page(at: 0),
               let cgPage = srcPage.pageRef else {
@@ -100,8 +155,12 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         guard srcBox.width > 0, srcBox.height > 0 else { throw PDFExportError.renderFailed }
 
         let scale = printableWidth / srcBox.width
-        let scaledHeight = srcBox.height * scale
-        let pageCount = max(1, Int(ceil(scaledHeight / printableHeight)))
+        // How much of the source page (in its own points) fits on one A4 page.
+        let pageHeightSrc = printableHeight / scale
+
+        // Map the CSS-pixel measurements onto source-PDF points (vertical scale is uniform).
+        let forbidden = forbiddenRanges(layout: layout, srcHeight: srcBox.height)
+        let spans = pageSpans(contentHeight: srcBox.height, pageHeight: pageHeightSrc, forbidden: forbidden)
 
         let out = NSMutableData()
         guard let consumer = CGDataConsumer(data: out as CFMutableData) else {
@@ -112,13 +171,16 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
             throw PDFExportError.renderFailed
         }
 
-        for page in 0..<pageCount {
+        for (start, end) in spans {
+            let sliceHeight = (end - start) * scale
             ctx.beginPDFPage(nil)
             ctx.saveGState()
-            // Keep content inside the page margins.
-            ctx.clip(to: CGRect(x: margin, y: margin, width: printableWidth, height: printableHeight))
-            // Position slice `page` so its top aligns with the top of the printable area.
-            let tyOffset = (paperSize.height - margin) - scaledHeight + CGFloat(page) * printableHeight
+            // Clip to just this slice, top-aligned in the printable area — the rest of the page
+            // (when a line wouldn't fully fit) stays blank.
+            let clipY = (paperSize.height - margin) - sliceHeight
+            ctx.clip(to: CGRect(x: margin, y: clipY, width: printableWidth, height: sliceHeight))
+            // Align source distance-from-top `start` with the top of the printable area.
+            let tyOffset = (paperSize.height - margin) - (srcBox.height - start) * scale
             ctx.translateBy(x: margin, y: tyOffset)
             ctx.scaleBy(x: scale, y: scale)
             ctx.translateBy(x: -srcBox.origin.x, y: -srcBox.origin.y)
@@ -130,6 +192,67 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
 
         guard out.length > 0 else { throw PDFExportError.renderFailed }
         return out as Data
+    }
+
+    /// Merge the measured line/block boxes into maximal non-overlapping vertical ranges (in
+    /// source-PDF points, top-down) that a page break must not fall inside.
+    private static func forbiddenRanges(layout: LayoutMeasurement?, srcHeight: CGFloat) -> [(lo: CGFloat, hi: CGFloat)] {
+        guard let layout, layout.height > 0, !layout.atoms.isEmpty else { return [] }
+        let ratio = srcHeight / CGFloat(layout.height)
+        let mergeTolerance: CGFloat = 1.0
+
+        let boxes = layout.atoms
+            .compactMap { pair -> (lo: CGFloat, hi: CGFloat)? in
+                guard pair.count == 2 else { return nil }
+                return (CGFloat(pair[0]) * ratio, CGFloat(pair[1]) * ratio)
+            }
+            .sorted { $0.lo < $1.lo }
+
+        var merged: [(lo: CGFloat, hi: CGFloat)] = []
+        for box in boxes {
+            if var last = merged.last, box.lo <= last.hi + mergeTolerance {
+                last.hi = max(last.hi, box.hi)
+                merged[merged.count - 1] = last
+            } else {
+                merged.append(box)
+            }
+        }
+        return merged
+    }
+
+    /// Choose page boundaries (top-down, source-PDF points). Each page is at most `pageHeight`
+    /// tall and never ends inside a `forbidden` range — it ends early at the range's top instead,
+    /// pushing that whole line/block to the next page. A range taller than a full page is cut
+    /// (unavoidable, e.g. an image or code block larger than the printable area).
+    private static func pageSpans(contentHeight: CGFloat, pageHeight: CGFloat,
+                                  forbidden: [(lo: CGFloat, hi: CGFloat)]) -> [(CGFloat, CGFloat)] {
+        guard pageHeight > 0 else { return [(0, contentHeight)] }
+        var spans: [(CGFloat, CGFloat)] = []
+        var start: CGFloat = 0
+        let eps: CGFloat = 0.5
+        var safety = 0
+
+        while start < contentHeight - eps {
+            safety += 1
+            if safety > 5000 { spans.append((start, contentHeight)); break }
+
+            var end = start + pageHeight
+            if end >= contentHeight - eps {
+                spans.append((start, contentHeight))
+                break
+            }
+            // If the break falls inside a line/block, pull it up to that block's top.
+            for range in forbidden where range.lo < end - eps && end < range.hi - eps {
+                if range.lo > start + eps { end = range.lo }
+                // else: the block is taller than a page starting here → cut is unavoidable.
+                break
+            }
+            if end <= start + eps { end = start + pageHeight } // guarantee forward progress
+            spans.append((start, end))
+            start = end
+        }
+        if spans.isEmpty { spans.append((0, contentHeight)) }
+        return spans
     }
 
     // MARK: - Offscreen attachment
