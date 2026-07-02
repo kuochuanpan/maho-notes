@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.1] — 2026-06-03
+## [1.0.1] — 2026-07-02
 
 ### 📄 Export
 - **Export note to PDF** — an "Export as PDF" button in the note toolbar renders the note exactly as the in-app preview (math, code highlighting, Mermaid, ruby, images, admonitions). macOS saves via the standard save panel; iOS saves to Files / iCloud Drive. No new entitlements required.
