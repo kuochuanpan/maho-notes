@@ -26,7 +26,7 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onCheckboxToggle = onCheckboxToggle
-        let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
+        let html = Self.buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
         guard html != context.coordinator.lastHTML else { return }
@@ -69,7 +69,7 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onCheckboxToggle = onCheckboxToggle
-        let html = buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
+        let html = Self.buildHTML(from: markdown, noteDirectoryURL: noteDirectoryURL)
         let baseURL = Bundle.main.resourceURL
         // Skip reload if HTML hasn't changed — prevents scroll-to-top on unnecessary re-renders
         if html == context.coordinator.lastHTML {
@@ -223,7 +223,7 @@ extension MarkdownWebView {
 
     /// Replace relative `_assets/` image paths with base64 `data:` URLs so WKWebView can display them.
     /// Non-image `_assets/` links are converted to `file://` URLs (for "Open in..." via link click).
-    private func resolveAssetPaths(in markdown: String, noteDirectoryURL: URL?) -> String {
+    private static func resolveAssetPaths(in markdown: String, noteDirectoryURL: URL?) -> String {
         guard let dirURL = noteDirectoryURL else { return markdown }
 
         // Match image references: ![...](_assets/...)
@@ -268,7 +268,9 @@ extension MarkdownWebView {
         return result
     }
 
-    func buildHTML(from markdown: String, noteDirectoryURL: URL? = nil) -> String {
+    /// Build the full standalone HTML document for a note. Shared by the live preview
+    /// (`updateNSView`/`updateUIView`) and the offscreen PDF exporter (`NotePDFExporter`).
+    static func buildHTML(from markdown: String, noteDirectoryURL: URL? = nil) -> String {
         let resolved = resolveAssetPaths(in: markdown, noteDirectoryURL: noteDirectoryURL)
         let renderer = MarkdownHTMLRenderer()
         let body = renderer.render(resolved)

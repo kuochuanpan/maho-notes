@@ -325,6 +325,16 @@ import os
         return allNotes.first { $0.relativePath == path }
     }
 
+    /// Incremented to ask the note content view to export the current note as PDF.
+    /// Driven by the File ▸ Export ▸ Export to PDF menu command; observed by `NoteContentView`.
+    var pdfExportRequestID: Int = 0
+
+    /// Trigger a PDF export of the currently selected note (if any).
+    func requestExportPDF() {
+        guard selectedNote != nil else { return }
+        pdfExportRequestID += 1
+    }
+
     // MARK: - Computed
 
     /// The currently selected vault entry.

@@ -5,7 +5,7 @@ struct MahoNotes: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mn",
         abstract: "Maho Notes — personal knowledge base CLI",
-        version: "1.0.0",
+        version: "1.0.1",
         subcommands: [
             InitCommand.self,
             ListCommand.self,
