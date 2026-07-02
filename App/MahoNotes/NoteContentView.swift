@@ -486,9 +486,10 @@ struct NoteContentView: View {
         #endif
     }
 
-    /// Markdown currently shown for the note — the live edit buffer when editing, else the saved body.
+    /// Markdown currently shown for the note — mirrors `contentForMode`: the live edit buffer in
+    /// editor/split mode (even when the user has emptied it), the saved body in preview mode.
     private func currentMarkdown(for note: Note) -> String {
-        if appState.editorState.viewMode != .preview && !appState.editorState.editingBody.isEmpty {
+        if appState.editorState.viewMode != .preview {
             return appState.editorState.editingBody
         }
         return note.body
@@ -496,6 +497,12 @@ struct NoteContentView: View {
 
     private func exportPDF(_ note: Note) async {
         guard !isGeneratingPDF else { return }
+        // The preview shows a downloading placeholder for cloud-only notes; note.body would
+        // export empty or stale content.
+        guard !isCloudOnly(note) else {
+            exportError = String(localized: "Note is still downloading from iCloud.")
+            return
+        }
         isGeneratingPDF = true
         defer { isGeneratingPDF = false }
         do {

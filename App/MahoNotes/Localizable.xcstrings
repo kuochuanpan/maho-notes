@@ -4375,6 +4375,53 @@
         }
       }
     },
+    "Note is still downloading from iCloud." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Note is still downloading from iCloud."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nota todavía se está descargando de iCloud."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La note est encore en cours de téléchargement depuis iCloud."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nota è ancora in fase di download da iCloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ノートはまだiCloudからダウンロード中です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "노트가 아직 iCloud에서 다운로드 중입니다."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筆記仍在從 iCloud 下載中。"
+          }
+        }
+      }
+    },
     "Import Error" : {
       "extractionState" : "manual",
       "localizations" : {

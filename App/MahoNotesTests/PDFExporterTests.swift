@@ -58,4 +58,34 @@ struct PDFExporterTests {
         #expect(ranges.blocks.first?.lo == 120)
         #expect(ranges.blocks.first?.hi == 170)
     }
+
+    @Test func contentBottomComesFromUnfilteredBoxes() {
+        let layout = NotePDFExporter.LayoutMeasurement(
+            height: 300,
+            lines: [[95, 105]],
+            blocks: [[0, 250], [120, 170]]
+        )
+
+        let ranges = NotePDFExporter.breakAvoidanceRanges(
+            layout: layout,
+            srcHeight: 300,
+            pageHeight: 100
+        )
+
+        // The oversized block [0, 250] is dropped from break avoidance but must still
+        // anchor the content bottom so trailing blank space is trimmed correctly.
+        #expect(ranges.contentBottom == 250)
+    }
+
+    @Test func missingLayoutYieldsNoContentBottom() {
+        let ranges = NotePDFExporter.breakAvoidanceRanges(
+            layout: nil,
+            srcHeight: 300,
+            pageHeight: 100
+        )
+
+        #expect(ranges.contentBottom == nil)
+        #expect(ranges.lines.isEmpty)
+        #expect(ranges.blocks.isEmpty)
+    }
 }

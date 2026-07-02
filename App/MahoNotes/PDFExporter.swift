@@ -17,8 +17,9 @@ enum PDFExportError: Error {
 /// Renders a note's markdown to a paginated A4 PDF.
 ///
 /// The note's HTML — the *same* HTML the live preview uses (`MarkdownWebView.buildHTML`) — is
-/// loaded into an offscreen `WKWebView` and captured with `WKWebView.createPDF` using an explicit
-/// full-content rect. That continuous page is then sliced into A4 pages with Core Graphics
+/// loaded into an offscreen `WKWebView` and captured with `WKWebView.createPDF`, which with the
+/// default configuration produces a single page as tall as the whole note regardless of the
+/// view's bounds. That continuous page is then sliced into A4 pages with Core Graphics
 /// (`repaginate`).
 ///
 /// We deliberately avoid the platform print system (`NSPrintOperation` / `UIPrintPageRenderer`):
@@ -79,18 +80,13 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         // Measure the vertical extent of every text line / atomic block so we can break pages
         // between them instead of through them.
         let layout = await measureLayout(webView)
-        let documentHeight: CGFloat
-        if let layout, layout.height > 0 {
-            documentHeight = CGFloat(layout.height)
-        } else {
-            documentHeight = await measureDocumentHeight(webView)
-        }
-        let contentHeight = measuredContentHeight(webView, documentHeight: documentHeight)
 
+        // Capture with the default (nil) rect: WebKit renders the full document regardless of the
+        // view's bounds. Deriving an explicit rect from the JS measurement instead would silently
+        // truncate the note whenever measurement fails or the layout is still settling —
+        // measurement failure must only ever degrade break placement, never lose content.
         let continuousPDF = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-            let configuration = WKPDFConfiguration()
-            configuration.rect = CGRect(x: 0, y: 0, width: Self.printableWidth, height: contentHeight)
-            webView.createPDF(configuration: configuration) { result in
+            webView.createPDF(configuration: WKPDFConfiguration()) { result in
                 continuation.resume(with: result)
             }
         }
@@ -246,46 +242,6 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
         }
     }
 
-    private func measureDocumentHeight(_ webView: WKWebView) async -> CGFloat {
-        let js = """
-        (function () {
-          var root = document.documentElement;
-          var body = document.body;
-          return Math.max(
-            body ? body.scrollHeight : 0,
-            root ? root.scrollHeight : 0,
-            body ? body.offsetHeight : 0,
-            root ? root.offsetHeight : 0
-          );
-        })();
-        """
-        return await withCheckedContinuation { (continuation: CheckedContinuation<CGFloat, Never>) in
-            webView.evaluateJavaScript(js) { result, _ in
-                if let value = result as? NSNumber {
-                    continuation.resume(returning: CGFloat(truncating: value))
-                } else if let value = result as? Double {
-                    continuation.resume(returning: CGFloat(value))
-                } else {
-                    continuation.resume(returning: 0)
-                }
-            }
-        }
-    }
-
-    private func measuredContentHeight(_ webView: WKWebView, documentHeight: CGFloat) -> CGFloat {
-        #if os(macOS)
-        let scrollContentHeight: CGFloat = 0
-        #else
-        let scrollContentHeight = webView.scrollView.contentSize.height
-        #endif
-        return max(
-            documentHeight,
-            scrollContentHeight,
-            webView.bounds.height,
-            Self.paperSize.height
-        )
-    }
-
     // MARK: - Pagination
 
     /// Slice the single tall PDF page into A4 pages with Core Graphics. Page breaks land in the
@@ -308,8 +264,16 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
 
         // Map the CSS-pixel measurements onto source-PDF points (vertical scale is uniform).
         let avoidance = breakAvoidanceRanges(layout: layout, srcHeight: srcBox.height, pageHeight: pageHeightSrc)
+        // The captured page is never shorter than the viewport, so a note shorter than one page
+        // ends in a run of blank space that would otherwise spill onto a blank trailing page.
+        // Trim to the bottom of the lowest measured box (plus slack for borders/shadows).
+        let contentHeight: CGFloat = if let bottom = avoidance.contentBottom {
+            min(srcBox.height, bottom + 4)
+        } else {
+            srcBox.height
+        }
         let spans = pageSpans(
-            contentHeight: srcBox.height,
+            contentHeight: contentHeight,
             pageHeight: pageHeightSrc,
             lineRanges: avoidance.lines,
             blockRanges: avoidance.blocks
@@ -348,35 +312,35 @@ final class NotePDFExporter: NSObject, WKNavigationDelegate {
     }
 
     /// Merge the measured line and block boxes into non-overlapping vertical ranges (in
-    /// source-PDF points, top-down) that page breaks should avoid.
+    /// source-PDF points, top-down) that page breaks should avoid. Also reports `contentBottom`,
+    /// the bottom of the lowest measured box before any fit-filtering, so the caller can trim
+    /// trailing blank space off the capture.
     static func breakAvoidanceRanges(
         layout: LayoutMeasurement?,
         srcHeight: CGFloat,
         pageHeight: CGFloat
-    ) -> (lines: [(lo: CGFloat, hi: CGFloat)], blocks: [(lo: CGFloat, hi: CGFloat)]) {
-        guard let layout, layout.height > 0 else { return ([], []) }
+    ) -> (lines: [(lo: CGFloat, hi: CGFloat)], blocks: [(lo: CGFloat, hi: CGFloat)], contentBottom: CGFloat?) {
+        guard let layout, layout.height > 0 else { return ([], [], nil) }
         let ratio = srcHeight / CGFloat(layout.height)
         let lineMergeTolerance: CGFloat = 0.1
         let blockMergeTolerance: CGFloat = 0.5
 
-        let lines = mergeRanges(
-            layout.lines
-                .compactMap { scaledRange($0, ratio: ratio, limit: srcHeight) }
-                .sorted { $0.lo < $1.lo },
-            tolerance: lineMergeTolerance
-        )
+        let scaledLines = layout.lines.compactMap { scaledRange($0, ratio: ratio, limit: srcHeight) }
+        let scaledBlocks = layout.blocks.compactMap { scaledRange($0, ratio: ratio, limit: srcHeight) }
+        let contentBottom = (scaledLines + scaledBlocks).map(\.hi).max()
+
+        let lines = mergeRanges(scaledLines.sorted { $0.lo < $1.lo }, tolerance: lineMergeTolerance)
 
         // Avoid keeping blocks together only when they can fit on a page. Long code blocks,
         // tables, or quotes still need line-safe breaks inside them.
         let blocks = mergeRanges(
-            layout.blocks
-                .compactMap { scaledRange($0, ratio: ratio, limit: srcHeight) }
+            scaledBlocks
                 .filter { ($0.hi - $0.lo) < pageHeight }
                 .sorted { $0.lo < $1.lo },
             tolerance: blockMergeTolerance
         )
 
-        return (lines, blocks)
+        return (lines, blocks, contentBottom)
     }
 
     private static func scaledRange(_ pair: [Double], ratio: CGFloat, limit: CGFloat) -> (lo: CGFloat, hi: CGFloat)? {
