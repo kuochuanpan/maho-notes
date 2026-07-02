@@ -4,11 +4,13 @@
 [![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0-green)](LICENSE)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange?logo=swift)](https://swift.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20iOS%20%7C%20iPadOS-lightgrey?logo=apple)](https://github.com/kuochuanpan/maho-notes)
-[![TestFlight](https://img.shields.io/badge/TestFlight-available-blue?logo=apple)](https://testflight.apple.com/join/placeholder)
+[![App Store](https://img.shields.io/badge/App%20Store-available-blue?logo=apple)](https://apps.apple.com/us/app/maho-notes/id6760572212)
 
 A personal knowledge base for humans and AI agents.
 
 **Multi-platform native app** (macOS + iPadOS + iOS) with a powerful **CLI** (`mn`) — built in Swift.
+
+**[📲 Download on the App Store](https://apps.apple.com/us/app/maho-notes/id6760572212)** — available for macOS, iOS, and iPadOS.
 
 ## Features
 
@@ -24,25 +26,27 @@ A personal knowledge base for humans and AI agents.
 
 ## Install
 
-### Homebrew (CLI only)
+### App (macOS / iOS / iPadOS)
+
+Get it from the [App Store](https://apps.apple.com/us/app/maho-notes/id6760572212) — one universal app for Mac, iPhone, and iPad.
+
+### CLI via Homebrew
 
 ```bash
 brew tap mahopan/tap
-brew install mn
+brew install maho-notes    # installs the `mn` binary
 ```
 
 ### Build from source
 
 ```bash
+# CLI
 git clone https://github.com/kuochuanpan/maho-notes.git
 cd maho-notes
 swift build -c release
 # Binary at .build/release/mn
-```
 
-### App (macOS / iOS / iPadOS)
-
-```bash
+# App
 cd App
 xcodegen generate
 open MahoNotes.xcodeproj
@@ -112,8 +116,7 @@ mn index --model e5-large            # ~2.2GB, best quality
 
 ```
 vault/
-├── maho.yaml              # vault config
-├── collections.yaml       # collection definitions
+├── maho.yaml              # vault config (incl. collection definitions)
 ├── notes/                 # collection directory
 │   ├── _index.md          # collection overview
 │   ├── _assets/           # images and attachments

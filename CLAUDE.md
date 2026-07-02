@@ -24,16 +24,16 @@ open MahoNotes.xcodeproj
 
 The Xcode project (`App/MahoNotes.xcodeproj`) is gitignored — always run `xcodegen generate` after pulling or after editing `App/project.yml`. CI is currently disabled (`.github/workflows/ci.yml.disabled`).
 
-### Homebrew distribution
+### Distribution
 
-The CLI ships through a **separate tap repo** (`mahopan/tap`) — there is no formula in this repository. Releases of `mn` are built and tagged here, then the formula in the tap repo points at the tag's source tarball / binary.
+**App — App Store.** The universal app is live on the App Store for macOS, iOS, and iPadOS: <https://apps.apple.com/us/app/maho-notes/id6760572212> (Apple ID `6760572212`). When cutting a release, bump **both** `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `App/project.yml` — App Store Connect requires the build number to strictly increase across every upload, even for the same marketing version.
+
+**CLI — Homebrew.** The CLI ships through a **separate tap repo** (`mahopan/tap`) — there is no formula in this repository. Releases of `mn` are built and tagged here, then the formula in the tap repo points at the tag's source tarball / binary.
 
 ```bash
 brew tap mahopan/tap
-brew install maho-notes              # formula name per App/MahoNotes/Resources/GettingStarted.bundle/getting-started/010-cli.md
+brew install maho-notes              # formula is `maho-notes`; the installed binary is always `mn`
 ```
-
-Note: `README.md` currently shows `brew install mn` while the in-app tutorial shows `brew install maho-notes`. The tutorial bundle is the more recently-updated source; treat that name as canonical and fix the README if you touch this area. The CLI binary is always called `mn` regardless of formula name.
 
 ## Architecture
 
@@ -70,7 +70,7 @@ When adding UI, prefer reusing the cross-platform views and gating only the bits
 ### Search has three modes and one index
 
 - FTS5 keyword search via `swift-cjk-sqlite` (CJK tokenizer for 中英日韓 inside the same SQLite file).
-- Semantic search via `swift-embeddings` (HuggingFace Safetensors models, MLTensor runtime). Vectors live in the same SQLite DB via `sqlite-vec`. Models: `minilm` (default, ~90MB) / `e5-small` / `e5-large` (~2.2GB).
+- Semantic search via `swift-embeddings` (HuggingFace Safetensors models, MLTensor runtime). Vectors live in the same SQLite DB via `sqlite-vec`. Models: `minilm` (default, ~80MB) / `e5-small` (~120MB) / `e5-large` (~2.2GB).
 - Hybrid = RRF fusion (k=60, 1:1 weight). `--hybrid` without a vector index degrades to FTS5 with a warning.
 
 Chunking strategy lives in `Chunker.swift`: heading-based splits, title prepended to each chunk, no overlap, no frontmatter. Note score = best chunk score. Models are downloaded on demand (ODR in App Store builds; HuggingFace Hub for CLI/sideloaded builds, cached in `~/.maho/models/`). NLEmbedding is intentionally not used — only English is supported by Apple's API (see decision #21).
