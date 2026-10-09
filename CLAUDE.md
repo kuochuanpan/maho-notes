@@ -22,6 +22,8 @@ open MahoNotes.xcodeproj
 # Target `MahoNotes` builds for both macOS and iOS (Mac/iPhone/iPad destinations); pick destination in Xcode.
 ```
 
+> **Warning — `swift test` touches live data.** On a Mac that has real Maho Notes data, the Kit suite writes to the live App Group `config.yaml` (`AuthTests.tokenNeverInVaultConfig` replaces `auth.github_token` with a fixture via `Auth.storeToken`) and deletes the live iCloud registry `Documents/config/vaults.yaml` (`VaultStoreTests.cleanupRemovesCache` → `cleanupCloudArtifacts()` uses the real `iCloudDocumentsBasePath()`). Back up both files first, or fix the test isolation before running the suite.
+
 The Xcode project (`App/MahoNotes.xcodeproj`) is gitignored — always run `xcodegen generate` after pulling or after editing `App/project.yml`. CI is currently disabled (`.github/workflows/ci.yml.disabled`).
 
 ### Distribution
@@ -34,6 +36,16 @@ The Xcode project (`App/MahoNotes.xcodeproj`) is gitignored — always run `xcod
 brew tap mahopan/tap
 brew install maho-notes              # formula is `maho-notes`; the installed binary is always `mn`
 ```
+
+### Xcode MCP (Xcode 27, external-agent mode)
+
+Xcode 27 exposes its tooling to external agents over MCP through `xcrun mcpbridge`. The repo's `.mcp.json` registers that bridge as the `xcode` server, so Claude Code sessions in this repo get Xcode's tools: `BuildProject` / `GetBuildLog`, `XcodeRefreshCodeIssuesInFile`, `RunAllTests` / `RunSomeTests` / `GetTestList`, `RunProject` / `GetConsoleOutput` / `StopProject`, `RenderPreview`, `RunCodeSnippet`, `DeviceInteraction*` (simulator screenshots + taps), `StringCatalog*` / `LocalizationPlanner`, `DocumentationSearch`, and project-structure file ops (`XcodeRead`, `XcodeGrep`, …).
+
+- **Preconditions**: Xcode must be running, with Xcode > Settings > Intelligence > Model Context Protocol > "Allow external agents to use Xcode tools" turned on. `xcrun mcp-server status` reports the server state and any pending approval ids (`sudo xcrun mcp-server approve <id>` is the CLI fallback for the dialog).
+- **First call every session**: `XcodeOpenWorkspace` with the absolute path to `App/MahoNotes.xcodeproj` (run `xcodegen generate` first if the project is missing). That call is what triggers Xcode's approval dialog for the agent and the project folder; until it is approved every other Xcode tool returns "This agent isn't approved to use Xcode's tools yet".
+- **Schemes**: `MahoNotes_macOS` and `MahoNotes_iOS` (`XcodeListSchemes` / `XcodeSwitchScheme`, `XcodeListRunDestinations` / `XcodeSwitchRunDestination`). The app's own unit tests (`MahoNotesTests`) run through Xcode's test tools; `MahoNotesKit` / `mn` tests are SwiftPM — keep using `swift build` / `swift test` for those.
+- **When to use which**: prefer the Xcode tools for anything about the app target (structured build errors, previews, running on a simulator, String Catalog edits). Plain `xcodebuild` from Bash still works and does not need Xcode running. The bridge is macOS-only and talks to the Xcode selected by `xcode-select` (override with `MCP_XCODE_PID`).
+- **Apple's bundled skills** (swiftui-specialist, translation / translation-coordinator, device-interaction, modernize-tests, accessibility-*, …) ship as an Xcode-exported Claude Code plugin. Load them for a session with `claude --plugin-dir "$(xcrun agent plugin path --plugin-format claude)"`. That plugin declares the same bridge again (as `plugin:xcode-integration:xcode`), so expect a second server and possibly a second approval; disable one of the two under `/mcp` if that bothers you. The `StringCatalogEdit` tool refuses to run unless the `xcode-integration:translation` skill is loaded, so use the plugin for localization work.
 
 ## Architecture
 

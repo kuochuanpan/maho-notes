@@ -74,6 +74,8 @@ targets:
           enabled: true
     scheme:
       storeKitConfiguration: MahoNotes/Products.storekit
+      testTargets:
+        - MahoNotesTests_${platform}
 
   MahoNotesTests:
     type: bundle.unit-test
@@ -86,7 +88,11 @@ targets:
         PRODUCT_NAME: MahoNotesTests
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Maho Notes.app/Contents/MacOS/Maho Notes"
+        # The host app is "Maho Notes.app" (PRODUCT_NAME), so xcodegen's automatic
+        # TEST_HOST (derived from the target name) is wrong; the executable sits
+        # at Contents/MacOS/ on macOS and at the bundle root on iOS.
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Maho Notes.app/Contents/MacOS/Maho Notes"
+        "TEST_HOST[sdk=iphone*]": "$(BUILT_PRODUCTS_DIR)/Maho Notes.app/Maho Notes"
         BUNDLE_LOADER: "$(TEST_HOST)"
       configs:
         Debug:
