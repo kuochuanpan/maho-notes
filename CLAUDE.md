@@ -24,6 +24,8 @@ open MahoNotes.xcodeproj
 
 > **Warning — `swift test` touches live data.** On a Mac that has real Maho Notes data, the Kit suite writes to the live App Group `config.yaml` (`AuthTests.tokenNeverInVaultConfig` replaces `auth.github_token` with a fixture via `Auth.storeToken`) and deletes the live iCloud registry `Documents/config/vaults.yaml` (`VaultStoreTests.cleanupRemovesCache` → `cleanupCloudArtifacts()` uses the real `iCloudDocumentsBasePath()`). Back up both files first, or fix the test isolation before running the suite.
 
+> **Building with a non-default Xcode (betas):** run `xcrun xcodebuild …` or `"$DEVELOPER_DIR/usr/bin/xcodebuild" …`, never a bare `xcodebuild`. If an Xcode's `Contents/Developer/usr/bin` is on PATH ahead of `/usr/bin` (home-manager's `home.sessionPath` did this on the build Mac), a bare `xcodebuild` is that Xcode's own binary and ignores `DEVELOPER_DIR`, while `xcrun` / `simctl` honor it — you silently get a 27.0-SDK binary on a 27.2 simulator. Confirm the SDK with `otool -l <binary> | grep -A5 LC_BUILD_VERSION`. `scripts/verify-duo.sh` does both.
+
 The Xcode project (`App/MahoNotes.xcodeproj`) is gitignored — always run `xcodegen generate` after pulling or after editing `App/project.yml`. CI is currently disabled (`.github/workflows/ci.yml.disabled`).
 
 ### Distribution
