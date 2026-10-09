@@ -229,7 +229,12 @@ struct MarkdownEditorView: UIViewRepresentable {
         // MARK: - Keyboard Accessory
 
         func makeKeyboardAccessory() -> UIView {
-            let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44))
+            // Only the height matters: UIKit stretches an inputAccessoryView to the
+            // keyboard's width. Never size from UIScreen.main — the window is not the
+            // screen in iPad multitasking or on iPhone Duo's folding displays.
+            let bar = UIToolbar()
+            bar.sizeToFit()
+            bar.autoresizingMask = [.flexibleWidth]
             bar.isTranslucent = true
 
             var items: [UIBarButtonItem] = []

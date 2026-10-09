@@ -88,7 +88,10 @@ struct TitleBarSearchField: NSViewRepresentable {
         context.coordinator.observer = NotificationCenter.default.addObserver(
             forName: .focusTitleBarSearch, object: nil, queue: .main
         ) { _ in
-            field.window?.makeFirstResponder(field)
+            // Delivered on the main queue (queue: .main), so main-actor access is safe.
+            MainActor.assumeIsolated {
+                _ = field.window?.makeFirstResponder(field)
+            }
         }
 
         return field
@@ -341,7 +344,7 @@ struct MacContentView: View {
                     let title = newNoteTitle.trimmingCharacters(in: .whitespaces)
                     guard !title.isEmpty else { return }
                     do {
-                        let path = try appState.createNote(title: title, collectionId: newNoteCollectionId)
+                        _ = try appState.createNote(title: title, collectionId: newNoteCollectionId)
                         showingNewNote = false
                         appState.editorState.viewMode = .editor
                         appState.editorState.startEditing()

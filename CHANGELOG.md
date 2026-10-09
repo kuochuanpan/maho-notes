@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### 🛠 Xcode 27 / iPhone 18 / iPhone Duo
+- **Builds with Xcode 27.0** (iOS 27 / macOS 27 SDKs, Swift 6.4) with a clean warning baseline; verified on the iPhone 18 Pro simulator.
+- **iPhone Duo ready (27.0 SDK level)** — iPhone orientations and `UIRequiresFullScreen = NO` declared explicitly, keyboard toolbar no longer sized from `UIScreen.main`, and device-name lookups made main-actor safe for the iOS 27 `UIDevice` isolation. Full Duo adoption (Device Hub poses, vertical toolbar, fold reserved regions) waits for Xcode 27.1 — see decision #30.
+
 ## [1.0.1] — 2026-07-02
 
 ### 📄 Export

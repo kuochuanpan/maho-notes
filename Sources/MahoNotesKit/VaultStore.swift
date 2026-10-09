@@ -217,12 +217,20 @@ public actor VaultStore {
     }
 
     /// Merge a local registry with a cloud registry, resolving name conflicts.
+    /// When `localDeviceName` is nil the current device's name is read on the
+    /// main actor (`UIDevice.current` is main-actor isolated in the iOS 27 SDK).
     public func mergeRegistries(
         local: VaultRegistry,
         cloud: VaultRegistry,
         localDeviceName: String? = nil
-    ) -> (merged: VaultRegistry, conflicts: [VaultNameConflict]) {
-        MahoNotesKit.mergeRegistries(local: local, cloud: cloud, localDeviceName: localDeviceName)
+    ) async -> (merged: VaultRegistry, conflicts: [VaultNameConflict]) {
+        let deviceName: String
+        if let localDeviceName {
+            deviceName = localDeviceName
+        } else {
+            deviceName = await currentDeviceName()
+        }
+        return MahoNotesKit.mergeRegistries(local: local, cloud: cloud, localDeviceName: deviceName)
     }
 
     /// Remove iCloud registry and stale iCloud vault copies.

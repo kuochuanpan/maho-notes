@@ -193,29 +193,10 @@ func writeVaultFiles(
                 .replacingOccurrences(of: "https://github.com/", with: "git@github.com:")
             let urlsToTry = sshURL != tutorialRepoURL ? [sshURL, tutorialRepoURL] : [tutorialRepoURL]
 
-            var cloneSucceeded = false
-            #if os(macOS)
-            for url in urlsToTry {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-                process.arguments = ["clone", "--depth", "1", url, "getting-started"]
-                process.currentDirectoryURL = URL(fileURLWithPath: vaultPath)
-                process.standardOutput = Pipe()
-                process.standardError = Pipe()
-                process.environment = (ProcessInfo.processInfo.environment).merging(
-                    ["GIT_TERMINAL_PROMPT": "0"], uniquingKeysWith: { _, new in new }
-                )
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        cloneSucceeded = true
-                        break
-                    }
-                } catch {}
+            // First URL that clones wins (`contains` short-circuits like the old loop).
+            let cloneSucceeded = urlsToTry.contains { url in
+                gitShallowClone(url, into: vaultPath, as: "getting-started")
             }
-            #endif
 
             if cloneSucceeded {
                 let gitDir = (gsDir as NSString).appendingPathComponent(".git")
@@ -337,29 +318,9 @@ public func cloneGitHubVault(
             "https://github.com/\(repo).git"
         ]
 
-        var cloneSucceeded = false
-        #if os(macOS)
-        for url in urls {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["clone", "--depth", "1", url, vaultName]
-            process.currentDirectoryURL = URL(fileURLWithPath: vaultRoot)
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
-            process.environment = (ProcessInfo.processInfo.environment).merging(
-                ["GIT_TERMINAL_PROMPT": "0"], uniquingKeysWith: { _, new in new }
-            )
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
-                    cloneSucceeded = true
-                    break
-                }
-            } catch {}
+        let cloneSucceeded = urls.contains { url in
+            gitShallowClone(url, into: vaultRoot, as: vaultName)
         }
-        #endif
 
         if !cloneSucceeded {
             throw VaultInitError.cloneFailed(repo)
@@ -456,4 +417,37 @@ public func initVault(
         tutorialRepoURL: tutorialRepoURL
     )
     print("Vault initialized at \(vaultPath)")
+}
+
+// MARK: - git helper
+
+/// Runs `git clone --depth 1 <url> <directoryName>` inside `parentDir` with the
+/// system git binary and reports whether it succeeded.
+///
+/// Only macOS has a git binary (and `Process`); on iOS this always returns
+/// `false` and the app clones through the REST-based `GitHubSyncManager`
+/// instead. Keeping the platform gate inside a function — rather than around a
+/// `var cloneSucceeded = false` at each call site — avoids the compiler's
+/// "will never be executed" warnings on the iOS build.
+func gitShallowClone(_ url: String, into parentDir: String, as directoryName: String) -> Bool {
+    #if os(macOS)
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = ["clone", "--depth", "1", url, directoryName]
+    process.currentDirectoryURL = URL(fileURLWithPath: parentDir)
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+    process.environment = ProcessInfo.processInfo.environment.merging(
+        ["GIT_TERMINAL_PROMPT": "0"], uniquingKeysWith: { _, new in new }
+    )
+    do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    } catch {
+        return false
+    }
+    #else
+    return false
+    #endif
 }

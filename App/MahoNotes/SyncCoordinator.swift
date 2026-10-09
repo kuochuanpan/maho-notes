@@ -7,6 +7,8 @@ import UIKit
 
 // MARK: - DeviceInfo
 
+/// Main-actor only: `UIDevice.current` is main-actor isolated as of the iOS 27 SDK.
+@MainActor
 enum DeviceInfo {
     static var name: String {
         #if os(macOS)

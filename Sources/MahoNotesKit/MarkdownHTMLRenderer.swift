@@ -132,7 +132,7 @@ public struct MarkdownHTMLRenderer: Sendable {
     /// Extract footnote definitions `[^id]: content` and replace references `[^id]` with placeholders.
     /// Definitions are removed from the body and collected for postprocessing.
     private func preprocessFootnotes(_ text: String) -> FootnoteResult {
-        var lines = text.components(separatedBy: "\n")
+        let lines = text.components(separatedBy: "\n")
         var definitions: [(id: String, content: String)] = []
         var definitionIds: Set<String> = []
 

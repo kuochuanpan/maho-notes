@@ -116,7 +116,6 @@ func resolvedPath(for entry: VaultEntry) -> String {
 func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
     let fm = FileManager.default
     let iCloudVaultsBase = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
-    let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
 
     var updated = registry
 
@@ -240,6 +239,11 @@ func setGlobalSyncMode(_ mode: CloudSyncMode, globalConfigDir: String = mahoConf
 // MARK: - Device Name
 
 /// Returns a short, filesystem-safe device name for conflict resolution.
+///
+/// Main-actor only: on iOS the name comes from `UIDevice.current`, which the
+/// iOS 27 SDK marks as main-actor isolated. Off-main callers (e.g. `VaultStore`)
+/// hop to the main actor and pass the result down explicitly.
+@MainActor
 public func currentDeviceName() -> String {
     #if os(macOS)
     let name = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
@@ -340,9 +344,9 @@ private extension String {
 func mergeRegistries(
     local: VaultRegistry,
     cloud: VaultRegistry,
-    localDeviceName: String? = nil
+    localDeviceName: String
 ) -> (merged: VaultRegistry, conflicts: [VaultNameConflict]) {
-    let deviceName = localDeviceName ?? currentDeviceName()
+    let deviceName = localDeviceName
     var merged: [VaultEntry] = []
     var conflicts: [VaultNameConflict] = []
     var processedCloudNames: Set<String> = []

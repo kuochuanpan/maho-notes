@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     macOS: "15.0"
     iOS: "18.0"
-  xcodeVersion: "26.3"
+  xcodeVersion: "27.0"
   createIntermediateGroups: true
   localizations:
   - en
@@ -50,6 +50,11 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        # iPhone Duo presents landscape ("open, turned") on the inner display and
+        # must be resizable; declare both explicitly (App Store Connect's Duo
+        # resizability check looks at orientations + UIRequiresFullScreen).
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIRequiresFullScreen: NO
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: K867NAPA93
       configs:
