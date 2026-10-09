@@ -1,10 +1,15 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.2] — 2026-10-09
+
+TestFlight build 3.
 
 ### 🛠 Xcode 27 / iPhone 18 / iPhone Duo
 - **Builds with Xcode 27.0** (iOS 27 / macOS 27 SDKs, Swift 6.4) with a clean warning baseline; verified on the iPhone 18 Pro simulator.
 - **iPhone Duo ready (27.0 SDK level)** — iPhone orientations and `UIRequiresFullScreen = NO` declared explicitly, keyboard toolbar no longer sized from `UIScreen.main`, and device-name lookups made main-actor safe for the iOS 27 `UIDevice` isolation. Full Duo adoption (Device Hub poses, vertical toolbar, fold reserved regions) waits for Xcode 27.1 — see decision #30.
+- **Verified on the iPhone Duo simulator** — `scripts/verify-duo.sh` builds with Xcode 27.1+ (27.2 beta used), runs on the iOS 27.1 runtime (the iOS 27.2 beta runtimes blacklist Duo), and screenshots both displays. With the 27.1+ SDK the app fills Duo's outer display instead of the 27.0 compatibility letterbox.
+- **App unit tests runnable from `xcodebuild test`** — `MahoNotesTests` is attached to both app schemes with correct per-platform test hosts.
+- **Xcode 27 MCP bridge** registered in `.mcp.json` for agent sessions.
 
 ## [1.0.1] — 2026-07-02
 
