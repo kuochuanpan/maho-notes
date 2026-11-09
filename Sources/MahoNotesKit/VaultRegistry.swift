@@ -51,9 +51,16 @@ public struct VaultRegistry: Codable, Sendable {
         findVault(named: primary)
     }
 
+    /// Adds a vault. One without a color gets the least-used palette color
+    /// (`VaultColor.nextForNewVault(among:)`), so every new vault — from the app or the CLI —
+    /// has a stable badge color that differs from the others.
     public mutating func addVault(_ entry: VaultEntry) throws {
         guard findVault(named: entry.name) == nil else {
             throw VaultRegistryError.duplicateName(entry.name)
+        }
+        var entry = entry
+        if (entry.color ?? "").isEmpty {
+            entry.color = VaultColor.nextForNewVault(among: vaults).name
         }
         vaults.append(entry)
     }

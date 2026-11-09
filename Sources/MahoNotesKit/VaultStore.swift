@@ -219,6 +219,24 @@ public actor VaultStore {
         return true
     }
 
+    /// Gives each registered vault that has no color one from the palette and saves, so the
+    /// vaults created before the palette existed stop showing a color picked from their name.
+    /// Saves only when a vault needed a color, so later calls are a no-op.
+    /// Returns `true` if it saved a change.
+    ///
+    /// Reads only the registry itself, never the cache: the app calls this unprompted on every
+    /// launch, and it must not save a cached vault list as the shared registry while iCloud's
+    /// copy is missing. An iCloud registry that exists but can't be read throws, as in
+    /// `loadRegistryForUpdate()`.
+    @discardableResult
+    public func assignMissingVaultColors() throws -> Bool {
+        guard var registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir, iCloudBase: iCloudBase),
+              registry.assignMissingVaultColors()
+        else { return false }
+        try saveRegistry(registry)
+        return true
+    }
+
     // ══════════════════════════════════════════
     // MARK: - Finding Missing Vaults, Collections and Notes
     // ══════════════════════════════════════════

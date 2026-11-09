@@ -42,50 +42,28 @@ enum MahoTheme {
 
     // MARK: - Vault Colors
 
+    // The palette itself lives in MahoNotesKit (`VaultColor.palette`), so the registry code that
+    // gives new vaults a color and the views that draw it agree on the names.
+
     struct VaultColorOption: Identifiable {
         let name: String
         let color: Color
         var id: String { name }
     }
 
-    static let vaultColorOptions: [VaultColorOption] = [
-        VaultColorOption(name: "red", color: .red),
-        VaultColorOption(name: "orange", color: .orange),
-        VaultColorOption(name: "yellow", color: .yellow),
-        VaultColorOption(name: "green", color: .green),
-        VaultColorOption(name: "mint", color: .mint),
-        VaultColorOption(name: "teal", color: .teal),
-        VaultColorOption(name: "cyan", color: .cyan),
-        VaultColorOption(name: "blue", color: .blue),
-        VaultColorOption(name: "indigo", color: .indigo),
-        VaultColorOption(name: "purple", color: .purple),
-        VaultColorOption(name: "pink", color: .pink),
-        VaultColorOption(name: "brown", color: .brown),
-        VaultColorOption(name: "coral", color: Color(red: 1.0, green: 0.45, blue: 0.35)),
-        VaultColorOption(name: "lavender", color: Color(red: 0.69, green: 0.56, blue: 0.87)),
-        VaultColorOption(name: "sage", color: Color(red: 0.52, green: 0.69, blue: 0.52)),
-        VaultColorOption(name: "sky", color: Color(red: 0.45, green: 0.72, blue: 0.95)),
-        VaultColorOption(name: "slate", color: Color(red: 0.44, green: 0.50, blue: 0.56)),
-        VaultColorOption(name: "charcoal", color: Color(red: 0.30, green: 0.30, blue: 0.35)),
-    ]
-
-    static func vaultColor(named name: String) -> Color? {
-        vaultColorOptions.first { $0.name == name }?.color
+    /// Picker swatches, in palette order (four rows of six).
+    static let vaultColorOptions: [VaultColorOption] = VaultColor.palette.map {
+        VaultColorOption(name: $0.name, color: color(for: $0))
     }
 
+    /// Badge color for a vault: its stored palette color, or a name-derived palette color
+    /// for a vault that has none yet.
     static func resolvedVaultColor(for entry: VaultEntry) -> Color {
-        if let colorName = entry.color, let c = vaultColor(named: colorName) {
-            return c
-        }
-        let colors: [Color] = [
-            .blue, .purple, .pink, .red, .orange,
-            .yellow, .green, .teal, .cyan, .indigo,
-        ]
-        var hash = 0
-        for char in entry.name.unicodeScalars {
-            hash = hash &* 31 &+ Int(char.value)
-        }
-        return colors[abs(hash) % colors.count]
+        color(for: VaultColor.resolved(for: entry))
+    }
+
+    private static func color(for vaultColor: VaultColor) -> Color {
+        Color(.sRGB, red: vaultColor.red, green: vaultColor.green, blue: vaultColor.blue)
     }
 
     // MARK: - C Column (Note Content)

@@ -556,6 +556,15 @@ import os
         } catch {
             logger.warning("Device vault entry repair skipped: \(error.localizedDescription)")
         }
+        // Vaults from before the theme palette have no stored color and showed a system color
+        // picked from their name; give each a palette color once. Saves only when one is missing.
+        do {
+            if try await store.assignMissingVaultColors() {
+                logger.info("Assigned palette colors to vaults that had none")
+            }
+        } catch {
+            logger.warning("Vault color assignment skipped: \(error.localizedDescription)")
+        }
         do {
             let result: VaultRegistry? = try await store.loadRegistry()
 
