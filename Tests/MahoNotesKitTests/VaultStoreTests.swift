@@ -423,7 +423,7 @@ struct VaultStoreTests {
 
     // MARK: - VaultStore cleanupCloudArtifacts Tests
 
-    @Test("VaultStore cleanupCloudArtifacts removes cache file")
+    @Test("VaultStore cleanupCloudArtifacts removes cache file and iCloud registry")
     func cleanupRemovesCache() async throws {
         let tmpDir = try makeTempDir()
         defer { cleanup(tmpDir) }
@@ -433,10 +433,50 @@ struct VaultStoreTests {
         try "test".write(toFile: cachePath, atomically: true, encoding: .utf8)
         #expect(FileManager.default.fileExists(atPath: cachePath))
 
-        let store = VaultStore(globalConfigDir: tmpDir)
+        // Stand-in for the iCloud container — never let this test hit the live one,
+        // where deleting config/vaults.yaml propagates to every device.
+        let iCloudBase = (tmpDir as NSString).appendingPathComponent("icloud")
+        let iCloudConfig = (iCloudBase as NSString).appendingPathComponent("config")
+        try FileManager.default.createDirectory(atPath: iCloudConfig, withIntermediateDirectories: true)
+        let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent("vaults.yaml")
+        try "primary: test\nvaults: []\n".write(toFile: iCloudRegistryPath, atomically: true, encoding: .utf8)
+
+        let store = VaultStore(globalConfigDir: tmpDir, iCloudDocumentsBase: iCloudBase)
         try await store.cleanupCloudArtifacts()
 
         #expect(!FileManager.default.fileExists(atPath: cachePath))
+        #expect(!FileManager.default.fileExists(atPath: iCloudRegistryPath))
+    }
+
+    @Test("VaultStore cloud-mode registry round-trips through the injected iCloud base")
+    func cloudModeRegistryUsesInjectedICloudBase() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+
+        let iCloudBase = (tmpDir as NSString).appendingPathComponent("icloud")
+        let store = VaultStore(globalConfigDir: tmpDir, iCloudDocumentsBase: iCloudBase)
+        try await store.setCloudSyncMode(.icloud)
+
+        let registry = VaultRegistry(
+            primary: "notes",
+            vaults: [VaultEntry(name: "notes", type: .icloud, access: .readWrite)]
+        )
+        try await store.saveRegistry(registry)
+
+        let iCloudRegistryPath = (iCloudBase as NSString).appendingPathComponent("config/vaults.yaml")
+        #expect(FileManager.default.fileExists(atPath: iCloudRegistryPath))
+
+        let loaded = try await store.loadRegistry()
+        #expect(loaded?.primary == "notes")
+
+        guard case .cloudRegistryExists(let cloud) = await store.checkCloudRegistryExists() else {
+            Issue.record("expected the registry in the injected iCloud base to be found")
+            return
+        }
+        #expect(cloud.primary == "notes")
+
+        let path = store.resolvedPath(for: registry.vaults[0])
+        #expect(path.hasPrefix(iCloudBase))
     }
 
     // MARK: - Path Resolution Tests

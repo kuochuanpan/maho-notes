@@ -89,9 +89,15 @@ public enum VaultRegistryError: Error, CustomStringConvertible {
 // MARK: - Path resolution
 
 func resolvedPath(for entry: VaultEntry) -> String {
+    resolvedPath(for: entry, iCloudBase: iCloudDocumentsBasePath())
+}
+
+/// `resolvedPath(for:)` with an explicit iCloud Documents base, so callers that
+/// were handed a non-default base (tests, `VaultStore`) never touch the live container.
+func resolvedPath(for entry: VaultEntry, iCloudBase: String) -> String {
     switch entry.type {
     case .icloud:
-        let base = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
+        let base = (iCloudBase as NSString).appendingPathComponent("vaults")
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .github, .device:
         let base = mahoConfigBase() + "/vaults"
@@ -113,9 +119,12 @@ func resolvedPath(for entry: VaultEntry) -> String {
 /// - Copies vault directory contents from source to destination
 /// - Updates vault type in registry
 /// - Returns the updated registry
-func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
+func migrateVaultsToCloud(
+    registry: VaultRegistry,
+    iCloudBase: String = iCloudDocumentsBasePath()
+) throws -> VaultRegistry {
     let fm = FileManager.default
-    let iCloudVaultsBase = (iCloudDocumentsBasePath() as NSString).appendingPathComponent("vaults")
+    let iCloudVaultsBase = (iCloudBase as NSString).appendingPathComponent("vaults")
 
     var updated = registry
 
@@ -124,7 +133,7 @@ func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
         guard entry.type == .device else { continue }
 
         // Only trim trailing slash — leading "/" is part of the absolute path
-        var sourcePath = resolvedPath(for: entry)
+        var sourcePath = resolvedPath(for: entry, iCloudBase: iCloudBase)
         while sourcePath.hasSuffix("/") { sourcePath.removeLast() }
         let destPath = (iCloudVaultsBase as NSString).appendingPathComponent(entry.name)
 
@@ -158,7 +167,10 @@ func migrateVaultsToCloud(registry: VaultRegistry) throws -> VaultRegistry {
 }
 
 /// Migrates vault data from iCloud back to local storage.
-func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
+func migrateVaultsFromCloud(
+    registry: VaultRegistry,
+    iCloudBase: String = iCloudDocumentsBasePath()
+) throws -> VaultRegistry {
     let fm = FileManager.default
     let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
 
@@ -168,7 +180,7 @@ func migrateVaultsFromCloud(registry: VaultRegistry) throws -> VaultRegistry {
         guard entry.type == .icloud else { continue }
 
         // Only trim trailing slash — leading "/" is part of the absolute path
-        var sourcePath = resolvedPath(for: entry)
+        var sourcePath = resolvedPath(for: entry, iCloudBase: iCloudBase)
         while sourcePath.hasSuffix("/") { sourcePath.removeLast() }
         let destPath = (localVaultsBase as NSString).appendingPathComponent(entry.name)
 
@@ -269,9 +281,12 @@ public enum CloudSyncActivationCheck: Sendable {
 }
 
 /// Checks whether iCloud already has a vault registry.
-func checkCloudRegistryExists(globalConfigDir: String = mahoConfigBase()) -> CloudSyncActivationCheck {
+func checkCloudRegistryExists(
+    globalConfigDir: String = mahoConfigBase(),
+    iCloudBase: String = iCloudDocumentsBasePath()
+) -> CloudSyncActivationCheck {
     let fm = FileManager.default
-    let iCloudConfig = iCloudConfigPath()
+    let iCloudConfig = iCloudConfigPath(iCloudBase: iCloudBase)
     let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
 
     if fm.fileExists(atPath: iCloudRegistryPath),
@@ -505,15 +520,19 @@ public func iCloudDocumentsBasePath() -> String {
 private let registryFileName = "vaults.yaml"
 private let cacheFileName = "vaults-cache.yaml"
 
-private func iCloudConfigPath() -> String {
-    return (iCloudDocumentsBasePath() as NSString).appendingPathComponent("config")
+private func iCloudConfigPath(iCloudBase: String) -> String {
+    return (iCloudBase as NSString).appendingPathComponent("config")
 }
 
 /// Loads the vault registry.
 /// - Cloud Sync ON (default): tries iCloud config path first, falls back to `globalConfigDir/vaults.yaml`
 /// - Cloud Sync OFF: only reads from `globalConfigDir/vaults.yaml`
 /// - Parameter globalConfigDir: defaults to `mahoConfigBase()`
-func loadRegistry(globalConfigDir: String = mahoConfigBase()) throws -> VaultRegistry? {
+/// - Parameter iCloudBase: iCloud Documents directory; defaults to the live container
+func loadRegistry(
+    globalConfigDir: String = mahoConfigBase(),
+    iCloudBase: String = iCloudDocumentsBasePath()
+) throws -> VaultRegistry? {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let globalPath = (expandedGlobal as NSString).appendingPathComponent(registryFileName)
@@ -521,7 +540,7 @@ func loadRegistry(globalConfigDir: String = mahoConfigBase()) throws -> VaultReg
     let cloudSync = loadCloudSyncMode(globalConfigDir: globalConfigDir)
 
     if cloudSync == .icloud {
-        let iCloudPath = (iCloudConfigPath() as NSString).appendingPathComponent(registryFileName)
+        let iCloudPath = (iCloudConfigPath(iCloudBase: iCloudBase) as NSString).appendingPathComponent(registryFileName)
         if fm.fileExists(atPath: iCloudPath) {
             // Use coordinated read for iCloud; fall back to regular read if coordination fails
             let content: String
@@ -546,7 +565,12 @@ func loadRegistry(globalConfigDir: String = mahoConfigBase()) throws -> VaultReg
 ///   always writes cache to `globalConfigDir/vaults-cache.yaml`
 /// - Cloud Sync OFF: writes only to `globalConfigDir/vaults.yaml`; no cache file written
 /// - Parameter globalConfigDir: defaults to `mahoConfigBase()`
-func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = mahoConfigBase()) throws {
+/// - Parameter iCloudBase: iCloud Documents directory; defaults to the live container
+func saveRegistry(
+    _ registry: VaultRegistry,
+    globalConfigDir: String = mahoConfigBase(),
+    iCloudBase: String = iCloudDocumentsBasePath()
+) throws {
     let fm = FileManager.default
     let expandedGlobal = (globalConfigDir as NSString).expandingTildeInPath
     let encoder = YAMLEncoder()
@@ -556,7 +580,7 @@ func saveRegistry(_ registry: VaultRegistry, globalConfigDir: String = mahoConfi
 
     if cloudSync == .icloud {
         // Write to iCloud config directory (create if needed)
-        let iCloudConfig = iCloudConfigPath()
+        let iCloudConfig = iCloudConfigPath(iCloudBase: iCloudBase)
         try fm.createDirectory(atPath: iCloudConfig, withIntermediateDirectories: true)
         let primaryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
         // Use coordinated write for iCloud files; fall back to regular write if

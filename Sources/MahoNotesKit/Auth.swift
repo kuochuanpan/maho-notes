@@ -79,14 +79,20 @@ public enum AuthError: Error, CustomStringConvertible {
 public struct Auth: Sendable {
     private let vaultPath: String?
 
-    /// Global config directory for device-level settings like auth tokens
+    /// Directory whose `config.yaml` holds the device-level token for this instance.
+    public let globalConfigDir: String
+
+    /// Default global config directory for device-level settings like auth tokens
     public static var globalConfigDir: String {
         mahoConfigBase()
     }
 
-    /// Initialize with a vault path (optional — auth works without a vault)
-    public init(vaultPath: String? = nil) {
+    /// Initialize with a vault path (optional — auth works without a vault).
+    /// - Parameter globalConfigDir: where the device-level `config.yaml` lives. Defaults to
+    ///   `Auth.globalConfigDir` (the live App Group container on macOS); tests must pass a temp dir.
+    public init(vaultPath: String? = nil, globalConfigDir: String? = nil) {
         self.vaultPath = vaultPath.map { ($0 as NSString).expandingTildeInPath }
+        self.globalConfigDir = globalConfigDir.map { ($0 as NSString).expandingTildeInPath } ?? Auth.globalConfigDir
     }
 
     /// Resolve token from stored config only (no CLI fallback).
@@ -161,7 +167,7 @@ public struct Auth: Sendable {
 
     /// Load stored token from global ~/.maho/config.yaml
     private func loadStoredTokenGlobal() throws -> String? {
-        let configPath = "\(Auth.globalConfigDir)/config.yaml"
+        let configPath = "\(globalConfigDir)/config.yaml"
         return try loadTokenFromYaml(path: configPath)
     }
 
@@ -190,7 +196,7 @@ public struct Auth: Sendable {
 
     /// Store token in global ~/.maho/config.yaml under auth.github_token
     public func storeToken(_ token: String) throws {
-        let configDir = Auth.globalConfigDir
+        let configDir = globalConfigDir
         let configPath = "\(configDir)/config.yaml"
         let fm = FileManager.default
 

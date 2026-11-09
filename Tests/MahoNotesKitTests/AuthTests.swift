@@ -25,6 +25,20 @@ struct AuthTests {
         return (tmp.path, tmp)
     }
 
+    /// Temp stand-in for the global config dir. Every `Auth` that stores a token must use one —
+    /// the default is the live App Group `config.yaml`, which holds the user's real GitHub token.
+    private func makeTempGlobalDir(in tmp: URL) throws -> String {
+        let dir = tmp.appendingPathComponent("global-maho").path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func loadAuthSection(globalDir: String) throws -> [String: Any]? {
+        let content = try String(contentsOfFile: "\(globalDir)/config.yaml", encoding: .utf8)
+        let loaded = try Yams.load(yaml: content) as? [String: Any]
+        return loaded?["auth"] as? [String: Any]
+    }
+
     // MARK: - Token Resolution
 
     @Test func resolveTokenFindsAnySource() throws {
@@ -33,7 +47,7 @@ struct AuthTests {
         let (vaultPath, tmp) = try makeTestVault()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let auth = Auth(vaultPath: vaultPath)
+        let auth = Auth(vaultPath: vaultPath, globalConfigDir: try makeTempGlobalDir(in: tmp))
         // Store a token so there's definitely one available
         try auth.storeToken("ghp_test1234567890abcdef")
 
@@ -45,25 +59,23 @@ struct AuthTests {
         let (_, tmp) = try makeTestVault()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        // Save and restore global config dir to avoid polluting real ~/.maho/
-        let origGlobalDir = Auth.globalConfigDir
-        let tempGlobalDir = tmp.appendingPathComponent("global-maho").path
-        try FileManager.default.createDirectory(atPath: tempGlobalDir, withIntermediateDirectories: true)
+        // Device-level only: no vault, token lives in the (temp) global config
+        let auth = Auth(globalConfigDir: try makeTempGlobalDir(in: tmp))
+        try auth.storeToken("ghp_stored_only_test_123")
 
-        // Use a fresh Auth with no vault (device-level only)
-        let auth = Auth()
-        // Temporarily override global config dir for testing
-        // Store token directly to temp global path
-        let configPath = "\(tempGlobalDir)/config.yaml"
-        let yaml = "auth:\n  github_token: ghp_stored_only_test_123\n"
-        try yaml.write(toFile: configPath, atomically: true, encoding: .utf8)
+        let token = try auth.resolveStoredToken()
+        #expect(token.token == "ghp_stored_only_test_123")
+        #expect(token.source == .stored)
+    }
 
-        // Verify the yaml was written correctly
-        let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
-        let content = String(data: data, encoding: .utf8)!
-        let loaded = try Yams.load(yaml: content) as? [String: Any]
-        let authSection = loaded?["auth"] as? [String: Any]
-        #expect(authSection?["github_token"] as? String == "ghp_stored_only_test_123")
+    @Test func resolveStoredTokenThrowsWhenNoneStored() throws {
+        let (_, tmp) = try makeTestVault()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let auth = Auth(globalConfigDir: try makeTempGlobalDir(in: tmp))
+        #expect(throws: AuthError.self) {
+            try auth.resolveStoredToken()
+        }
     }
 
     @Test func maskedTokenDisplay() throws {
@@ -96,34 +108,27 @@ struct AuthTests {
         #expect(token.source.rawValue == ".maho/config.yaml")
     }
 
-    @Test func storeAndRetrieveToken() throws {
+    @Test func storeTokenPreservesOtherConfigKeys() throws {
         let (_, tmp) = try makeTestVault()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        // storeToken writes to global ~/.maho/config.yaml
-        // For testing, verify the store mechanism works by writing and reading back
-        let tempGlobalDir = tmp.appendingPathComponent("global-maho-store").path
-        try FileManager.default.createDirectory(atPath: tempGlobalDir, withIntermediateDirectories: true)
+        let globalDir = try makeTempGlobalDir(in: tmp)
+        try "sync:\n  cloud: icloud\n".write(toFile: "\(globalDir)/config.yaml", atomically: true, encoding: .utf8)
 
-        let configPath = "\(tempGlobalDir)/config.yaml"
+        try Auth(globalConfigDir: globalDir).storeToken("ghp_stored_test_token_123")
 
-        // Simulate what Auth.storeToken does
-        let yaml = "auth:\n  github_token: ghp_stored_test_token_123\n"
-        try yaml.write(toFile: configPath, atomically: true, encoding: .utf8)
-
-        // Read it back
-        let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
-        let content = String(data: data, encoding: .utf8)!
+        let content = try String(contentsOfFile: "\(globalDir)/config.yaml", encoding: .utf8)
         let loaded = try Yams.load(yaml: content) as? [String: Any]
-        let authSection = loaded?["auth"] as? [String: Any]
-        #expect(authSection?["github_token"] as? String == "ghp_stored_test_token_123")
+        #expect((loaded?["auth"] as? [String: Any])?["github_token"] as? String == "ghp_stored_test_token_123")
+        #expect((loaded?["sync"] as? [String: Any])?["cloud"] as? String == "icloud")
     }
 
     @Test func tokenNeverInVaultConfig() throws {
         let (vaultPath, tmp) = try makeTestVault()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let auth = Auth(vaultPath: vaultPath)
+        let globalDir = try makeTempGlobalDir(in: tmp)
+        let auth = Auth(vaultPath: vaultPath, globalConfigDir: globalDir)
         try auth.storeToken("ghp_secret_token_456")
 
         // Verify token is NOT in vault-level config
@@ -131,6 +136,9 @@ struct AuthTests {
         let vaultConfig = try config.loadVaultConfig()
         let authSection = vaultConfig["auth"] as? [String: Any]
         #expect(authSection == nil)
+
+        // ...and that it went to the injected global config instead
+        #expect(try loadAuthSection(globalDir: globalDir)?["github_token"] as? String == "ghp_secret_token_456")
     }
 
     // MARK: - Error Messages

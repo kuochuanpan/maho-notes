@@ -17,14 +17,24 @@ public actor VaultStore {
     /// Root directory for global config.
     private let globalConfigDir: String
 
+    /// iCloud Documents directory (holds `config/vaults.yaml` and `vaults/`).
+    private let iCloudBase: String
+
     /// Create a VaultStore.
     /// - Parameter globalConfigDir: Path to the global config directory. Tilde is expanded automatically.
     ///   Defaults to platform-appropriate `.maho` directory.
-    public init(globalConfigDir: String? = nil) {
+    /// - Parameter iCloudDocumentsBase: iCloud Documents directory. Defaults to the live iCloud container,
+    ///   whose contents sync to every device — tests that touch cloud-mode code paths must pass a temp dir.
+    public init(globalConfigDir: String? = nil, iCloudDocumentsBase: String? = nil) {
         if let dir = globalConfigDir {
             self.globalConfigDir = (dir as NSString).expandingTildeInPath
         } else {
             self.globalConfigDir = mahoConfigBase()
+        }
+        if let base = iCloudDocumentsBase {
+            self.iCloudBase = (base as NSString).expandingTildeInPath
+        } else {
+            self.iCloudBase = iCloudDocumentsBasePath()
         }
     }
 
@@ -38,7 +48,7 @@ public actor VaultStore {
     /// The cache fallback is new — existing `loadRegistry()` does not read it.
     public func loadRegistry() throws -> VaultRegistry? {
         // Delegate to existing free function first
-        if let registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir) {
+        if let registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir, iCloudBase: iCloudBase) {
             return registry
         }
         // Fallback to cache when primary sources unavailable
@@ -47,7 +57,7 @@ public actor VaultStore {
 
     /// Save the vault registry (writes to the correct location based on cloud mode).
     public func saveRegistry(_ registry: VaultRegistry) throws {
-        try MahoNotesKit.saveRegistry(registry, globalConfigDir: globalConfigDir)
+        try MahoNotesKit.saveRegistry(registry, globalConfigDir: globalConfigDir, iCloudBase: iCloudBase)
     }
 
     /// Load cached registry from `~/.maho/vaults-cache.yaml`.
@@ -144,7 +154,7 @@ public actor VaultStore {
     /// Synchronous registry load for CLI contexts where async is not available.
     /// Uses the same logic as the async version: primary sources → cache fallback.
     nonisolated public func loadRegistrySync() throws -> VaultRegistry? {
-        if let registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir) {
+        if let registry = try MahoNotesKit.loadRegistry(globalConfigDir: globalConfigDir, iCloudBase: iCloudBase) {
             return registry
         }
         // Cache fallback (same as async loadRegistry)
@@ -164,7 +174,7 @@ public actor VaultStore {
     /// it derives the path from the entry's type and name without accessing
     /// any mutable actor state. Callers don't need `await`.
     nonisolated public func resolvedPath(for entry: VaultEntry) -> String {
-        MahoNotesKit.resolvedPath(for: entry)
+        MahoNotesKit.resolvedPath(for: entry, iCloudBase: iCloudBase)
     }
 
     // ══════════════════════════════════════════
@@ -203,17 +213,17 @@ public actor VaultStore {
 
     /// Migrate device vaults to iCloud. Returns the updated registry.
     public func migrateToCloud(_ registry: VaultRegistry) throws -> VaultRegistry {
-        try MahoNotesKit.migrateVaultsToCloud(registry: registry)
+        try MahoNotesKit.migrateVaultsToCloud(registry: registry, iCloudBase: iCloudBase)
     }
 
     /// Migrate iCloud vaults back to device. Returns the updated registry.
     public func migrateFromCloud(_ registry: VaultRegistry) throws -> VaultRegistry {
-        try MahoNotesKit.migrateVaultsFromCloud(registry: registry)
+        try MahoNotesKit.migrateVaultsFromCloud(registry: registry, iCloudBase: iCloudBase)
     }
 
     /// Check whether iCloud already has a vault registry.
     public func checkCloudRegistryExists() -> CloudSyncActivationCheck {
-        MahoNotesKit.checkCloudRegistryExists(globalConfigDir: globalConfigDir)
+        MahoNotesKit.checkCloudRegistryExists(globalConfigDir: globalConfigDir, iCloudBase: iCloudBase)
     }
 
     /// Merge a local registry with a cloud registry, resolving name conflicts.
@@ -239,7 +249,6 @@ public actor VaultStore {
     /// from causing unexpected merges when cloud sync is re-enabled.
     public func cleanupCloudArtifacts() throws {
         let fm = FileManager.default
-        let iCloudBase = iCloudDocumentsBasePath()
 
         // Remove iCloud registry
         let iCloudConfigDir = (iCloudBase as NSString).appendingPathComponent("config")

@@ -179,18 +179,21 @@ struct VaultRegistryTests {
 
     // MARK: - Cache file written on save
 
-    /// Cache file is written when Cloud Sync is ON, but this test requires
-    /// the iCloud container to be writable. Skipped in CI / sandboxed environments.
-    @Test(.disabled("Requires iCloud container entitlement — run manually"))
-    func cacheFileWrittenOnSaveWhenCloudOn() throws {
+    /// Cache file is written when Cloud Sync is ON. The iCloud base is a temp dir so the
+    /// fixture registry never overwrites the live, device-synced `config/vaults.yaml`.
+    @Test func cacheFileWrittenOnSaveWhenCloudOn() throws {
         let dir = try makeTempDir()
         defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
 
         // Cache is only written when Cloud Sync is ON
         try setGlobalSyncMode(.icloud, globalConfigDir: dir)
 
         let registry = sampleRegistry()
-        try saveRegistry(registry, globalConfigDir: dir)
+        try saveRegistry(registry, globalConfigDir: dir, iCloudBase: iCloudBase)
+
+        let iCloudRegistryPath = (iCloudBase as NSString).appendingPathComponent("config/vaults.yaml")
+        #expect(FileManager.default.fileExists(atPath: iCloudRegistryPath), "registry should be written to the iCloud base")
 
         let cachePath = (dir as NSString).appendingPathComponent("vaults-cache.yaml")
         #expect(FileManager.default.fileExists(atPath: cachePath), "cache file should exist when cloud sync ON")
