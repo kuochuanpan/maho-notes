@@ -9,6 +9,10 @@ TestFlight build 4.
 - **Bottom toolbar moves to the right edge** — where Duo lays bars out vertically (closed, and open in landscape), the iPhone layout's floating toolbar (New Note, New Collection, Sync, Settings) and the note's view-mode pill become system toolbar items in the trailing vertical bar. Other iPhones and iPads keep the floating toolbar.
 - **Even columns when half open** — partially folded like a book, the navigator column ends exactly on the fold so the list side and the note side are the same width.
 - See decision #31; `scripts/verify-duo.sh` lists what to check in each pose.
+- **Fixed after TestFlight build 4** (found on a real iPhone Duo):
+  - *Half open looked like fully open.* Build 4 waited for the system to mark the fold's reserved region active, which only happens once the hinge has settled, so a hand-held device never split. The split now follows the hinge angle itself (engages at ≤ 160°, releases above 170°) and still honors the system's fold region.
+  - *Search stayed at the bottom of the left panel.* On the inner display, search now sits in the trailing vertical bar with the other controls; results still list in the navigator.
+  - *Vault rail flickered in and out with the fold.* The inner display now starts with navigator + note (the layout the split view settles on at that width), so folding only moves the divider; the sidebar button still brings the rail in.
 
 ### 🧪 Tests
 - **Test suite no longer touches live user data** — `Auth` takes an injectable `globalConfigDir`, and `VaultStore` / the registry functions take an injectable iCloud Documents base. `AuthTests` used to overwrite the real GitHub token in the App Group `config.yaml`, and `VaultStoreTests.cleanupRemovesCache` used to delete the device-synced iCloud `config/vaults.yaml`; both now use temp dirs. `cacheFileWrittenOnSaveWhenCloudOn` is re-enabled, and new tests cover a real `storeToken` round-trip and cloud-mode registry I/O against the injected iCloud base.

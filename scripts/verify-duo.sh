@@ -27,10 +27,14 @@
 # end after each pose change. What to look for (decision #31):
 #   Closed          outer display edge to edge; navigator actions and the
 #                   note's view-mode toggle in the vertical bar on the right.
-#   Open            inner display edge to edge; view-mode toggle in the
-#                   vertical bar, no floating pill.
+#   Open            inner display edge to edge; navigator + note; search and
+#                   the view-mode toggle in the vertical bar, no floating pill.
 #   Partially Open  as Open, and the navigator ends exactly on the fold so the
 #                   two halves are equally wide.
+# This script installs onto the "Maho Duo Check" simulator only; another Duo
+# simulator keeps whatever build it last had. Stream the layout diagnostics
+# with:
+#   xcrun simctl spawn <udid> log stream --level info --predicate 'category == "duo"'
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

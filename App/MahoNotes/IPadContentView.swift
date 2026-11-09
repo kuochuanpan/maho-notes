@@ -17,8 +17,24 @@ struct IPadContentView: View {
     /// because NavigationSplitViewVisibility is a preference the system can override
     @State private var columnCycleState: Int = 0
     @State private var sheets = SheetCoordinator()
-    /// iPhone Duo's fold on the inner display (nil on every other device).
+    /// Running on a device with a hinge (iPhone Duo).
+    @State private var hasHinge = false
+    /// The hinge is in the book pose (`DuoHinge.isBookFolded`).
+    @State private var hingeBookFolded = false
+    /// Where a vertical fold would cross the window (see `onDuoFoldChange`).
     @State private var duoFold: DuoFold?
+    /// The detail column hosts iPhone Duo's trailing vertical bar, so search
+    /// moves there from the navigator.
+    @State private var detailHasVerticalBar = false
+
+    /// Global x of the hinge line while iPhone Duo is folded like a book.
+    /// Either signal counts: the hinge angle (delivered continuously, even
+    /// while the device moves in a hand), or the system marking the fold's
+    /// reserved region active (only once the hinge has settled).
+    private var bookFoldMidX: CGFloat? {
+        guard hasHinge, let duoFold, hingeBookFolded || duoFold.isActive else { return nil }
+        return duoFold.midX
+    }
 
     var body: some View {
         @Bindable var sheets = sheets
@@ -33,10 +49,20 @@ struct IPadContentView: View {
             navigatorContent
                 .scrollContentBackground(.hidden)
                 .background(MahoTheme.navigatorBackground(for: colorScheme))
-                .modifier(FoldAlignedNavigatorWidth(fold: duoFold))
+                .modifier(FoldAlignedNavigatorWidth(isEnabled: hasHinge, foldMidX: bookFoldMidX))
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                // Search sits with the navigator, except on iPhone Duo where the
+                // detail's trailing vertical bar hosts it (see the detail
+                // column). It is attached from a background so moving it never
+                // changes the list's identity (scroll position, expanded
+                // collections).
+                .background {
+                    if !detailHasVerticalBar {
+                        Color.clear
+                            .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                    }
+                }
                 .toolbar(removing: .sidebarToggle)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -96,6 +122,18 @@ struct IPadContentView: View {
                             }
                         }
                     }
+                    // iPhone Duo: search joins the trailing vertical bar, the
+                    // split-view pattern Notes and Mail use (search at the
+                    // trailing side of the toolbar, results in the list column).
+                    .background {
+                        if verticalEdge != nil {
+                            Color.clear
+                                .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
+                        }
+                    }
+                    .onChange(of: verticalEdge != nil, initial: true) { _, hasVerticalBar in
+                        detailHasVerticalBar = hasVerticalBar
+                    }
             }
             .environment(\.sidebarToggleAction, columnCycleState == 2
                 ? { withAnimation { cycleColumns() } } : nil)
@@ -118,11 +156,29 @@ struct IPadContentView: View {
         .navigationSplitViewStyle(.balanced)
         // iPhone Duo: observe the fold from a window-sized view so it is found
         // whichever column it crosses; FoldAlignedNavigatorWidth compares it
-        // with the navigator's own global frame.
+        // with the navigator's own global frame. The hinge observer is what
+        // reliably notices folding: geometry callbacks only run on relayout.
         .background {
             Color.clear
                 .ignoresSafeArea()
                 .onDuoFoldChange { duoFold = $0 }
+        }
+        .onDuoHingeChange { hinge in
+            if hinge != nil && !hasHinge && columnCycleState == 0 {
+                // iPhone Duo's inner display (951 pt) is too narrow for the
+                // split view to tile rail + navigator + note while flat: it
+                // hides the rail on its own, and after a fold it floats the
+                // rail over the other columns instead. Start with navigator +
+                // note, so folding only moves the divider (navigator | note
+                // in equal halves); the sidebar button still cycles the rail
+                // in.
+                columnVisibility = .doubleColumn
+                columnCycleState = 1
+            }
+            // Fires many times a second while folding; keep it to storing two
+            // Bools, which only change value when a threshold is crossed.
+            hasHinge = hinge != nil
+            hingeBookFolded = hinge?.isBookFolded(wasFolded: hingeBookFolded) ?? false
         }
         .toolbar(removing: .sidebarToggle)
         .overlay {
