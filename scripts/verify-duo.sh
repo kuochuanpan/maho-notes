@@ -20,9 +20,17 @@
 #
 # The script picks the first installed Xcode whose simctl lists a Duo device
 # type when no path is given. Output (DerivedData + screenshots) goes to
-# build/duo/, which is gitignored. Poses (Closed / Book / Open / Rotate) are
-# only switchable from Xcode's Device Hub, so re-run the two screenshot
-# commands printed at the end after each pose change.
+# build/duo/, which is gitignored. The device pose (Closed / Partially Open /
+# Open, the three buttons below the bezel) is only switchable from Device Hub:
+# `simctl` has no hinge control and Xcode's MCP device-interaction tools do not
+# accept the Duo simulator. Re-run the two screenshot commands printed at the
+# end after each pose change. What to look for (decision #31):
+#   Closed          outer display edge to edge; navigator actions and the
+#                   note's view-mode toggle in the vertical bar on the right.
+#   Open            inner display edge to edge; view-mode toggle in the
+#                   vertical bar, no floating pill.
+#   Partially Open  as Open, and the navigator ends exactly on the fold so the
+#                   two halves are equally wide.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -112,6 +120,6 @@ sleep 10
 xcrun simctl io "$UDID" screenshot --display=primary   "$OUT/duo-outer.png" || true
 xcrun simctl io "$UDID" screenshot --display=primary-1 "$OUT/duo-inner.png" || true
 echo "Screenshots written to $OUT (duo-outer.png, duo-inner.png)."
-echo "Change pose in Device Hub (Closed / Book / Open / Rotate Right), then re-run:"
+echo "Change pose in Device Hub (Closed / Partially Open / Open), then re-run:"
 echo "  xcrun simctl io $UDID screenshot --display=primary   <outer.png>"
 echo "  xcrun simctl io $UDID screenshot --display=primary-1 <inner.png>"

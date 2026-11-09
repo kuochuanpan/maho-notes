@@ -17,6 +17,8 @@ struct IPadContentView: View {
     /// because NavigationSplitViewVisibility is a preference the system can override
     @State private var columnCycleState: Int = 0
     @State private var sheets = SheetCoordinator()
+    /// iPhone Duo's fold on the inner display (nil on every other device).
+    @State private var duoFold: DuoFold?
 
     var body: some View {
         @Bindable var sheets = sheets
@@ -31,6 +33,7 @@ struct IPadContentView: View {
             navigatorContent
                 .scrollContentBackground(.hidden)
                 .background(MahoTheme.navigatorBackground(for: colorScheme))
+                .modifier(FoldAlignedNavigatorWidth(fold: duoFold))
                 .navigationTitle(selectedVaultTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search notes...")
@@ -69,29 +72,58 @@ struct IPadContentView: View {
                 }
         } detail: {
             // C — Note Content (nav bar hidden; toggle + actions live in breadcrumb bar)
-            NoteContentView()
-                .background(MahoTheme.contentBackground(for: colorScheme))
-                .navigationBarHidden(true)
-                .toolbar(removing: .sidebarToggle)
-                .environment(\.sidebarToggleAction, columnCycleState == 2
-                    ? { withAnimation { cycleColumns() } } : nil)
-                .environment(\.inlineActionButtons, AnyView(detailInlineActions))
-                .environment(\.emptyStateActions, EmptyStateActions(
-                    onCreateVault: {
-                        sheets.showingAddVault = true
-                    },
-                    onCreateCollection: appState.selectedVault?.access == .readOnly ? nil : {
-                        sheets.showingNewCollection = true
-                        sheets.newCollectionName = ""
-                        sheets.newCollectionIcon = "folder"
-                        sheets.collectionError = nil
-                    },
-                    onCreateNote: appState.selectedVault?.access == .readOnly ? nil : {
-                        presentNewNote()
+            ToolbarVerticalEdgeReader { verticalEdge in
+                NoteContentView()
+                    .background(MahoTheme.contentBackground(for: colorScheme))
+                    // Horizontal bars: the breadcrumb bar stands in for the
+                    // navigation bar. iPhone Duo's vertical bar on the trailing
+                    // edge costs no height, so keep it there and let it carry
+                    // the view-mode toggle that the bottom-corner pill holds
+                    // elsewhere (FloatingToolbarView hides itself in this case).
+                    .toolbar(verticalEdge == nil ? .hidden : .automatic, for: .navigationBar)
+                    .toolbar(removing: .sidebarToggle)
+                    .toolbar(removing: .title)
+                    .toolbar {
+                        if verticalEdge != nil && appState.selectedNote != nil {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    appState.editorState.cycleViewMode()
+                                } label: {
+                                    Label("Cycle View Mode", systemImage: appState.editorState.viewMode.systemImage)
+                                }
+                                .disabled(appState.editorState.isReadOnly)
+                                .keyboardShortcut("e", modifiers: .command)
+                            }
+                        }
                     }
-                ))
+            }
+            .environment(\.sidebarToggleAction, columnCycleState == 2
+                ? { withAnimation { cycleColumns() } } : nil)
+            .environment(\.inlineActionButtons, AnyView(detailInlineActions))
+            .environment(\.emptyStateActions, EmptyStateActions(
+                onCreateVault: {
+                    sheets.showingAddVault = true
+                },
+                onCreateCollection: appState.selectedVault?.access == .readOnly ? nil : {
+                    sheets.showingNewCollection = true
+                    sheets.newCollectionName = ""
+                    sheets.newCollectionIcon = "folder"
+                    sheets.collectionError = nil
+                },
+                onCreateNote: appState.selectedVault?.access == .readOnly ? nil : {
+                    presentNewNote()
+                }
+            ))
         }
         .navigationSplitViewStyle(.balanced)
+        // iPhone Duo: observe the fold from a window-sized view so it is found
+        // whichever column it crosses; FoldAlignedNavigatorWidth compares it
+        // with the navigator's own global frame.
+        .background {
+            Color.clear
+                .ignoresSafeArea()
+                .onDuoFoldChange { duoFold = $0 }
+        }
         .toolbar(removing: .sidebarToggle)
         .overlay {
             if appState.isAdoptingICloud {

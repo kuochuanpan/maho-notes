@@ -8,7 +8,18 @@ import MahoNotesKit
     weak var appState: AppState?
 
     /// View mode for the content panel.
-    enum ViewMode: String { case preview, editor, split }
+    enum ViewMode: String {
+        case preview, editor, split
+
+        /// SF Symbol for the view-mode toggle showing this mode.
+        var systemImage: String {
+            switch self {
+            case .preview: return "eye"
+            case .editor: return "pencil"
+            case .split: return "rectangle.split.2x1"
+            }
+        }
+    }
 
     /// Current view mode. Forced to `.preview` for read-only vaults.
     var viewMode: ViewMode = .preview {

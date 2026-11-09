@@ -8,7 +8,15 @@ struct FloatingToolbarView: View {
         #if os(macOS)
         macOSFloatingButton
         #else
-        iOSFloatingButton
+        // iPhone Duo: where the system lays bars out vertically, both iOS
+        // layouts put the view-mode toggle into that bar on the trailing edge
+        // (iPhoneContentView's note detail, IPadContentView's detail column),
+        // so the bottom-corner pill steps aside.
+        ToolbarVerticalEdgeReader { verticalEdge in
+            if verticalEdge == nil {
+                iOSFloatingButton
+            }
+        }
         #endif
     }
 
@@ -45,11 +53,7 @@ struct FloatingToolbarView: View {
     #endif
 
     private var iconName: String {
-        switch appState.editorState.viewMode {
-        case .preview: return "eye"
-        case .editor: return "pencil"
-        case .split: return "rectangle.split.2x1"
-        }
+        appState.editorState.viewMode.systemImage
     }
 
     #if os(macOS)

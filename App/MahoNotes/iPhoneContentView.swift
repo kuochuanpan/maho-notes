@@ -22,30 +22,44 @@ struct iPhoneContentView: View {
         ZStack(alignment: .leading) {
             // B — Navigator + C — Note Detail (via NavigationStack push)
             NavigationStack(path: $navigationPath) {
-                navigatorContent
-                    .scrollContentBackground(.hidden)
-                    .background(MahoTheme.navigatorBackground(for: colorScheme))
-                    .navigationTitle(selectedVaultTitle)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search notes...")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    showSidebar.toggle()
+                ToolbarVerticalEdgeReader { verticalEdge in
+                    navigatorContent
+                        .scrollContentBackground(.hidden)
+                        .background(MahoTheme.navigatorBackground(for: colorScheme))
+                        .navigationTitle(selectedVaultTitle)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search notes...")
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        showSidebar.toggle()
+                                    }
+                                } label: {
+                                    Image(systemName: "sidebar.left")
                                 }
-                            } label: {
-                                Image(systemName: "sidebar.left")
+                            }
+                            // iPhone Duo: the system lays bars out vertically on
+                            // the trailing edge, and a custom bar pinned to the
+                            // bottom would neither move there nor give back the
+                            // short display's height. Hand the same actions to
+                            // the system toolbar instead.
+                            if verticalEdge != nil {
+                                ToolbarItemGroup(placement: .bottomBar) {
+                                    navigatorToolbarItems
+                                }
                             }
                         }
-                    }
-                    .overlay(alignment: .bottom) {
-                        floatingToolbar
-                            .padding(.bottom, 24)
-                    }
-                    .navigationDestination(for: String.self) { notePath in
-                        noteDetail(for: notePath)
-                    }
+                        .overlay(alignment: .bottom) {
+                            if verticalEdge == nil {
+                                floatingToolbar
+                                    .padding(.bottom, 24)
+                            }
+                        }
+                }
+                .navigationDestination(for: String.self) { notePath in
+                    noteDetail(for: notePath)
+                }
             }
 
             // A — Vault rail overlay (slides in from left)
@@ -227,21 +241,70 @@ struct iPhoneContentView: View {
         return vault.displayName ?? vault.name
     }
 
+    // MARK: - Navigator Actions
+
+    private var newNoteDisabled: Bool {
+        appState.selectedVault == nil || appState.collections.isEmpty || appState.selectedVault?.access == .readOnly
+    }
+
+    private var newCollectionDisabled: Bool {
+        appState.selectedVault == nil || appState.selectedVault?.access == .readOnly
+    }
+
+    private func presentNewCollection() {
+        sheets.showingNewCollection = true
+        sheets.newCollectionName = ""
+        sheets.newCollectionIcon = "folder"
+        sheets.collectionError = nil
+    }
+
+    /// The floating toolbar's actions as system toolbar items, used where the
+    /// system lays bars out vertically (iPhone Duo). Each item carries a title
+    /// as well as a symbol so the overflow menu can list it.
+    @ViewBuilder
+    private var navigatorToolbarItems: some View {
+        Button {
+            presentNewNote()
+        } label: {
+            Label("New Note", systemImage: "square.and.pencil")
+        }
+        .disabled(newNoteDisabled)
+
+        Button {
+            presentNewCollection()
+        } label: {
+            Label("New Collection", systemImage: "folder.badge.plus")
+        }
+        .disabled(newCollectionDisabled)
+
+        Button {
+            appState.syncCoordinator.syncNow()
+        } label: {
+            if appState.syncCoordinator.isSyncing {
+                ProgressView()
+            } else {
+                Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+            }
+        }
+        .disabled(appState.syncCoordinator.isSyncing)
+
+        Button {
+            sheets.showingSettings = true
+        } label: {
+            Label("Settings", systemImage: "gearshape")
+        }
+    }
+
     // MARK: - Floating Toolbar (Liquid Glass)
 
     private var floatingToolbar: some View {
         HStack(spacing: 20) {
-            floatingButton(icon: "square.and.pencil",
-                           disabled: appState.selectedVault == nil || appState.collections.isEmpty || appState.selectedVault?.access == .readOnly) {
+            floatingButton(icon: "square.and.pencil", disabled: newNoteDisabled) {
                 presentNewNote()
             }
 
-            floatingButton(icon: "folder.badge.plus",
-                           disabled: appState.selectedVault == nil || appState.selectedVault?.access == .readOnly) {
-                sheets.showingNewCollection = true
-                sheets.newCollectionName = ""
-                sheets.newCollectionIcon = "folder"
-                sheets.collectionError = nil
+            floatingButton(icon: "folder.badge.plus", disabled: newCollectionDisabled) {
+                presentNewCollection()
             }
 
             // Sync with spinner
@@ -539,41 +602,42 @@ struct iPhoneContentView: View {
     // MARK: - Note Detail (C Column via push)
 
     private func noteDetail(for notePath: String) -> some View {
-        NoteContentView()
-            .background(MahoTheme.contentBackground(for: colorScheme))
-            .navigationTitle(appState.selectedNote?.title ?? "Note")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        appState.editorState.cycleViewMode(compactWidth: horizontalSizeClass == .compact)
-                    } label: {
-                        Image(systemName: viewModeIcon)
+        ToolbarVerticalEdgeReader { verticalEdge in
+            NoteContentView()
+                .background(MahoTheme.contentBackground(for: colorScheme))
+                .navigationTitle(appState.selectedNote?.title ?? "Note")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            appState.editorState.cycleViewMode(compactWidth: horizontalSizeClass == .compact)
+                        } label: {
+                            Label("Cycle View Mode", systemImage: viewModeIcon)
+                        }
+                        .disabled(appState.editorState.isReadOnly)
+                        // With a vertical bar (iPhone Duo) this button replaces the
+                        // floating view-mode pill, so it takes over the pill's ⌘E.
+                        .keyboardShortcut(verticalEdge != nil ? KeyboardShortcut("e", modifiers: .command) : nil)
                     }
-                    .disabled(appState.editorState.isReadOnly)
                 }
+        }
+        .onAppear {
+            // Skip selectNote if already selected (e.g. from createNote which
+            // sets viewMode = .editor — selectNote would reset it to .preview)
+            if appState.selectedNotePath != notePath {
+                appState.selectNote(path: notePath)
             }
-            .onAppear {
-                // Skip selectNote if already selected (e.g. from createNote which
-                // sets viewMode = .editor — selectNote would reset it to .preview)
-                if appState.selectedNotePath != notePath {
-                    appState.selectNote(path: notePath)
-                }
+        }
+        .onDisappear {
+            // Auto-save when navigating back to B column
+            if appState.editorState.hasUnsavedChanges {
+                appState.editorState.saveNote()
             }
-            .onDisappear {
-                // Auto-save when navigating back to B column
-                if appState.editorState.hasUnsavedChanges {
-                    appState.editorState.saveNote()
-                }
-            }
+        }
     }
 
     private var viewModeIcon: String {
-        switch appState.editorState.viewMode {
-        case .preview: return "eye"
-        case .editor: return "pencil"
-        case .split: return "rectangle.split.2x1"
-        }
+        appState.editorState.viewMode.systemImage
     }
 
     // MARK: - Search Results

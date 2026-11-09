@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 📱 iPhone Duo
+- **Full screen on both displays** — the app now requires the iOS 27.1+ SDK (Xcode 27.1 or later), which removes the empty strip a 27.0-SDK build leaves along the right edge of Duo's outer and inner displays.
+- **Bottom toolbar moves to the right edge** — where Duo lays bars out vertically (closed, and open in landscape), the iPhone layout's floating toolbar (New Note, New Collection, Sync, Settings) and the note's view-mode pill become system toolbar items in the trailing vertical bar. Other iPhones and iPads keep the floating toolbar.
+- **Even columns when half open** — partially folded like a book, the navigator column ends exactly on the fold so the list side and the note side are the same width.
+- See decision #31; `scripts/verify-duo.sh` lists what to check in each pose.
+
 ### 🧪 Tests
 - **Test suite no longer touches live user data** — `Auth` takes an injectable `globalConfigDir`, and `VaultStore` / the registry functions take an injectable iCloud Documents base. `AuthTests` used to overwrite the real GitHub token in the App Group `config.yaml`, and `VaultStoreTests.cleanupRemovesCache` used to delete the device-synced iCloud `config/vaults.yaml`; both now use temp dirs. `cacheFileWrittenOnSaveWhenCloudOn` is re-enabled, and new tests cover a real `storeToken` round-trip and cloud-mode registry I/O against the injected iCloud base.
 

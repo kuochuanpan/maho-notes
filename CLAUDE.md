@@ -66,10 +66,12 @@ The app target is universal, but each form factor has its own root view and the 
 | macOS | `ContentView.swift` | `SettingsView.swift`, `MacAddVaultSheet.swift`, `FloatingToolbarView` (macOS branch) |
 | iPad | `IPadContentView.swift` | `IPadVaultRail.swift`, `IPadAddVaultSheet.swift` — 3-column layout matching macOS (vault rail / navigator / content) |
 | iPhone | `iPhoneContentView.swift` | slide-over vault rail, `NavigationStack` push, bottom toolbar |
-| iOS-shared (iPad + iPhone) | `iOSSettingsView.swift` | iOS-only settings UI; macOS uses `SettingsView.swift` |
+| iOS-shared (iPad + iPhone) | `iOSSettingsView.swift`, `DuoSupport.swift` | iOS-only settings UI (macOS uses `SettingsView.swift`); iPhone Duo helpers |
 | cross-platform | `AppState.swift`, `NavigatorView.swift`, `NoteContentView.swift`, `MarkdownEditorView.swift`, `NoteRowContent.swift`, `CollectionRowContent.swift`, `NoteRowActions.swift` | shared between all three; conditional code inside |
 
 When adding UI, prefer reusing the cross-platform views and gating only the bits that genuinely differ. iOS-only files start with `#if os(iOS)` at the top of the file — match that pattern instead of sprinkling per-view conditionals.
+
+**iPhone Duo** routes through the same two iOS layouts by size class: the outer display (compact width) gets `iPhoneContentView`, the inner display (regular × regular) gets `IPadContentView`. The Duo-specific parts (decision #31) go through `DuoSupport.swift`, which wraps the iOS 27.1 APIs behind `#available`: `ToolbarVerticalEdgeReader` (non-nil where the system lays bars out vertically on the trailing edge — custom bottom bars must then hand their actions to system `.toolbar` items, because only standard bars move there), `onDuoFoldChange` (the fold's `.division` reserved region), and `FoldAlignedNavigatorWidth` (pins the navigator column to the fold when partially open). The app therefore needs the **iOS 27.1+ SDK** to build; a 27.0-SDK build also letterboxes on Duo. Pose changes (Closed / Partially Open / Open) can only be made by hand in Device Hub — see `scripts/verify-duo.sh`.
 
 **Entitlements** are a single file (`App/MahoNotes/MahoNotes.entitlements`) used for both platforms. It enables iCloud (CloudDocuments, container `iCloud.dev.pcca.mahonotes`), the `group.dev.pcca.mahonotes` app group, app sandbox, network client, app-scope bookmarks, and user-selected read/write. The stale comment in `project.yml` mentioning `MahoNotes_macOS.entitlements` / `MahoNotes_iOS.entitlements` does not reflect the current layout — there's only the one file.
 

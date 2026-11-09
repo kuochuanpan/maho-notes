@@ -4,7 +4,11 @@ options:
   deploymentTarget:
     macOS: "15.0"
     iOS: "18.0"
-  xcodeVersion: "27.0"
+  # The iOS app needs the iOS 27.1+ SDK (Xcode 27.1 or later): it adopts the
+  # iPhone Duo APIs (vertical toolbar edge, fold reserved regions), and a
+  # 27.0-SDK build runs on Duo in a compatibility window with an empty strip
+  # along the right edge. See DuoSupport.swift and decision #31.
+  xcodeVersion: "27.2"
   createIntermediateGroups: true
   localizations:
   - en
