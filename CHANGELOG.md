@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.3] — 2026-11-09
+
+TestFlight build 4.
 
 ### 📱 iPhone Duo
 - **Full screen on both displays** — the app now requires the iOS 27.1+ SDK (Xcode 27.1 or later), which removes the empty strip a 27.0-SDK build leaves along the right edge of Duo's outer and inner displays.
