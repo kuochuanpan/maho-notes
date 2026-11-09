@@ -12,6 +12,7 @@ struct iOSSettingsView: View {
     @AppStorage("searchScope") private var searchScope: String = "thisVault"
     @AppStorage("embeddingModel") private var embeddingModel: String = "minilm"
     @State private var vaultToRemove: String?
+    @State private var showFindMissing = false
     @State private var pendingSearchMode: String?
     @State private var showMemoryWarning = false
     // Build state lives in AppState so it survives settings panel dismiss.
@@ -82,7 +83,7 @@ struct iOSSettingsView: View {
                 }
 
                 // Vaults
-                Section("Vaults") {
+                Section {
                     ForEach(appState.vaults, id: \.name) { entry in
                         vaultRow(entry)
                     }
@@ -94,6 +95,16 @@ struct iOSSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    Button {
+                        showFindMissing = true
+                    } label: {
+                        Label("Find Missing Items…", systemImage: "magnifyingglass")
+                    }
+                } header: {
+                    Text("Vaults")
+                } footer: {
+                    Text("Find vaults, collections and notes that are on this device but don't show up.")
                 }
 
                 // Search & Embedding
@@ -248,6 +259,10 @@ struct iOSSettingsView: View {
                 set: { if !$0 { appState.cloudSync.cancelMerge() } }
             )) {
                 iOSCloudSyncMergeSheet()
+            }
+            .sheet(isPresented: $showFindMissing) {
+                FindMissingItemsView()
+                    .environment(appState)
             }
             // Merge Result Alert
             .alert("Merge Complete", isPresented: Binding(

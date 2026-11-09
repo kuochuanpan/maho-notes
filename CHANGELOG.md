@@ -22,6 +22,14 @@ TestFlight build 4.
   - After first-launch adoption, only the local cache is rewritten, never the iCloud registry.
 - **Getting Started no longer shows up empty on other devices** — turning Cloud Sync on skipped any `.device` vault whose folder already existed in iCloud, so the shared registry kept a `.device` entry pointing at a folder only one device had. Migration now copies in the local files iCloud lacks (never overwriting) and converts the entry to `.icloud`. With Cloud Sync on, the bundled tutorial is installed into iCloud as an `.icloud` vault. On launch, the app repairs existing `.device` entries that have no local folder but a vault in iCloud.
 
+### 🔎 Find Missing Items
+- **Settings › Vaults › Find Missing Items…** (macOS and iOS) lists what's on this device but doesn't show up. Each row with a fix is checked by default; **Fix Selected** applies the checked ones, reloads, and scans again. Nothing is deleted.
+  - **Vaults not in your list** — folders with a `maho.yaml` in iCloud `vaults/` (while Cloud Sync is on) or in this device's `vaults/` that aren't registered. A repo in `maho.yaml` makes it a GitHub vault, and its repo is filled in. With Cloud Sync on, a device vault is copied into iCloud before it's added. Folders whose name is already registered are skipped: they're leftovers from moving a vault between this device and iCloud.
+  - **Collections** — a folder with notes that `maho.yaml` doesn't list (fix: add it, keeping every other key). A collection `maho.yaml` lists without a folder (fix: create the folder). An unreadable or not-yet-downloaded `maho.yaml` is reported, and its collections are skipped so no fix can overwrite it.
+  - **Notes the app can't show** — notes at the vault root (fix: move into an `unsorted` collection). `.markdown`/`.MD`/… files (fix: rename to `.md`). UTF-16/32 files (fix: convert to UTF-8; other encodings are only reported). Notes iCloud hasn't downloaded (fix: download). README/LICENSE/CHANGELOG at a vault root, `_`-prefixed folders and READMEs aren't flagged.
+- **CLI:** `mn vault find [--vault <name>] [--fix] [--json]` runs the same scan; `mn skill` documents it.
+- Kit: `VaultStore.findMissingItems(vaultName:)`, `VaultStore.addFoundVault(_:)`, `Vault.findIssues()`, `Vault.fix(_:)`; 33 new UI strings in all 7 languages.
+
 ### 🧪 Tests
 - **Test suite no longer touches live user data** — `Auth` takes an injectable `globalConfigDir`, and `VaultStore` / the registry functions take an injectable iCloud Documents base. `AuthTests` used to overwrite the real GitHub token in the App Group `config.yaml`, and `VaultStoreTests.cleanupRemovesCache` used to delete the device-synced iCloud `config/vaults.yaml`; both now use temp dirs. `cacheFileWrittenOnSaveWhenCloudOn` is re-enabled, and new tests cover a real `storeToken` round-trip and cloud-mode registry I/O against the injected iCloud base.
 

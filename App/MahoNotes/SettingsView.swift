@@ -35,6 +35,7 @@ struct SettingsView: View {
 struct VaultsSettingsTab: View {
     @Environment(AppState.self) private var appState
     @State private var vaultToRemove: String?
+    @State private var showFindMissing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -123,10 +124,17 @@ struct VaultsSettingsTab: View {
                 Text("Use the + button in the vault rail to add vaults.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Spacer()
+                Button("Find Missing Items…") { showFindMissing = true }
+                    .help("Find vaults, collections and notes that are on this device but don't show up.")
             }
             .padding(.horizontal, 4)
         }
         .padding()
+        .sheet(isPresented: $showFindMissing) {
+            FindMissingItemsView()
+                .environment(appState)
+        }
         .alert("Delete Vault", isPresented: Binding(
             get: { vaultToRemove != nil },
             set: { if !$0 { vaultToRemove = nil } }

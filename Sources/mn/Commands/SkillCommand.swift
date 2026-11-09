@@ -63,9 +63,17 @@ mn vault add --path /some/local/dir   # register existing local directory
 mn vault remove <name>                # unregister vault
 mn vault set-primary <name>           # set default vault
 mn vault info <name>                  # show vault details
+mn vault find                         # report vaults/collections/notes on disk that don't show up
+mn vault find --fix                   # add those vaults and apply the fixes (never deletes files)
 ```
 
 Most commands accept `--vault <name>` to target a specific vault, or `--all` for all vaults.
+
+`mn vault find` reports vault folders missing from the registry, collection folders missing
+from `maho.yaml` (or listed without a folder), and notes the app can't show: notes at the vault
+root (moved to `unsorted/` by `--fix`), `.markdown`/`.MD` files (renamed to `.md`), UTF-16/32
+files (converted to UTF-8), and notes iCloud hasn't downloaded. Run it read-only first; `--fix`
+changes files, and a vault added by `--fix` is only checked on the next run.
 
 ## Commands
 

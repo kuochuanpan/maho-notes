@@ -5,15 +5,154 @@ import MahoNotesKit
 struct VaultCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vault",
-        abstract: "Manage vaults (list, add, remove, set-primary, info)",
+        abstract: "Manage vaults (list, add, remove, set-primary, info, find)",
         subcommands: [
             VaultListSubcommand.self,
             VaultAddSubcommand.self,
             VaultRemoveSubcommand.self,
             VaultSetPrimarySubcommand.self,
             VaultInfoSubcommand.self,
+            VaultFindSubcommand.self,
         ]
     )
+}
+
+// MARK: - mn vault find
+
+struct VaultFindSubcommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "find",
+        abstract: "Find vaults, collections and notes that are on disk but don't show up",
+        discussion: """
+        Looks for vault folders missing from the registry, collection folders missing from \
+        maho.yaml (or listed without a folder), and notes the app can't show: notes at the \
+        vault root, .markdown/.MD files, non-UTF-8 files, and notes iCloud hasn't downloaded. \
+        Changes nothing unless --fix is given.
+        """
+    )
+
+    @Option(name: .long, help: "Only check this vault's collections and notes (skips the vault search)")
+    var vault: String?
+
+    @Flag(name: .long, help: "Add the vaults found and apply every available fix")
+    var fix: Bool = false
+
+    @OptionGroup var outputOption: OutputOption
+
+    private struct Failure: Encodable {
+        let vault: String
+        let item: String
+        let error: String
+    }
+
+    private struct Output: Encodable {
+        let unregisteredVaults: [FoundVault]
+        let vaults: [VaultIssueReport]
+        let fixed: [String]?
+        let failed: [Failure]?
+    }
+
+    func run() async throws {
+        let store = VaultStore.shared
+        if let vault, try await store.loadRegistry()?.findVault(named: vault) == nil {
+            throw ValidationError("Vault '\(vault)' not found.")
+        }
+        let report = try await store.findMissingItems(vaultName: vault)
+
+        var fixed: [String] = []
+        var failed: [Failure] = []
+        if fix {
+            for found in report.unregisteredVaults {
+                do {
+                    try await store.addFoundVault(found)
+                    fixed.append("vault:\(found.name)")
+                } catch {
+                    failed.append(Failure(vault: found.name, item: "vault", error: error.localizedDescription))
+                }
+            }
+            for vaultReport in report.vaults {
+                let fixable = vaultReport.issues.filter(\.isFixable)
+                let failures = Vault(path: vaultReport.vaultPath).fix(fixable)
+                let failedIds = Set(failures.map(\.issue.id))
+                fixed += fixable.filter { !failedIds.contains($0.id) }.map { "\(vaultReport.vaultName)/\($0.id)" }
+                failed += failures.map {
+                    Failure(vault: vaultReport.vaultName, item: $0.issue.id, error: $0.error.localizedDescription)
+                }
+            }
+        }
+
+        if outputOption.json {
+            try printJSON(Output(
+                unregisteredVaults: report.unregisteredVaults,
+                vaults: report.vaults,
+                fixed: fix ? fixed : nil,
+                failed: fix ? failed : nil
+            ))
+            return
+        }
+
+        if report.isEmpty {
+            print("Nothing missing: every vault, collection and note shows up.")
+            return
+        }
+
+        if !report.unregisteredVaults.isEmpty {
+            print("Vaults not in the registry:")
+            for found in report.unregisteredVaults {
+                var location = found.type.rawValue
+                if let repo = found.github { location += " (\(repo))" }
+                print("  \(found.name)  [\(location)]  \(found.noteCount) note(s)")
+                print("      \(found.path)")
+            }
+            print("")
+        }
+
+        for vaultReport in report.vaults {
+            print("\(vaultReport.vaultName):")
+            for issue in vaultReport.issues {
+                let fixNote = issue.isFixable ? "  → \(Self.fixDescription(issue.kind))" : ""
+                print("  \(issue.path)  \(Self.reason(issue))\(fixNote)")
+            }
+            print("")
+        }
+
+        if fix {
+            print("Fixed \(fixed.count) item(s).")
+            for failure in failed {
+                print("Couldn't fix \(failure.vault)/\(failure.item): \(failure.error)")
+            }
+            if !report.unregisteredVaults.isEmpty {
+                print("Run `mn vault find` again to check the vaults just added.")
+            }
+        } else {
+            print("Run `mn vault find --fix` to add the vaults and apply the fixes marked →.")
+        }
+    }
+
+    private static func reason(_ issue: VaultIssue) -> String {
+        switch issue.kind {
+        case .unreadableConfig: return "maho.yaml can't be read (\(issue.detail ?? "unknown error")); collections weren't checked"
+        case .configNotDownloaded: return "maho.yaml isn't downloaded from iCloud yet; collections weren't checked"
+        case .unlistedCollection: return "collection folder not listed in maho.yaml"
+        case .collectionFolderMissing: return "listed in maho.yaml, but the folder is missing"
+        case .noteOutsideCollections: return "note outside any collection (not shown)"
+        case .nonStandardExtension: return "only .md files are shown"
+        case .notUTF8: return issue.isFixable ? "UTF-16/32 text (not shown)" : "not UTF-8 text (not shown); re-save it as UTF-8"
+        case .notDownloaded: return "not downloaded from iCloud yet"
+        }
+    }
+
+    private static func fixDescription(_ kind: VaultIssue.Kind) -> String {
+        switch kind {
+        case .unreadableConfig: return ""
+        case .configNotDownloaded, .notDownloaded: return "download"
+        case .unlistedCollection: return "add to maho.yaml"
+        case .collectionFolderMissing: return "create the folder"
+        case .noteOutsideCollections: return "move to \(Vault.unsortedCollectionId)/"
+        case .nonStandardExtension: return "rename to .md"
+        case .notUTF8: return "convert to UTF-8"
+        }
+    }
 }
 
 // MARK: - mn vault list

@@ -220,6 +220,49 @@ public actor VaultStore {
     }
 
     // ══════════════════════════════════════════
+    // MARK: - Finding Missing Vaults, Collections and Notes
+    // ══════════════════════════════════════════
+
+    /// Scans storage for unregistered vaults, and each registered read-write vault for
+    /// collections and notes that don't show up (see `Vault.findIssues()`). Read-only.
+    /// - Parameter vaultName: Only check this vault's content, and skip the vault search.
+    public func findMissingItems(vaultName: String? = nil) throws -> MissingItemsReport {
+        let registry = try loadRegistry() ?? VaultRegistry(primary: "", vaults: [])
+
+        let found = vaultName != nil ? [] : MahoNotesKit.findUnregisteredVaults(
+            registry: registry,
+            iCloudBase: iCloudBase,
+            localBase: localStorageBase,
+            includeICloud: cloudSyncMode() == .icloud
+        )
+
+        var reports: [VaultIssueReport] = []
+        for entry in registry.vaults where entry.access == .readWrite {
+            if let vaultName, entry.name != vaultName { continue }
+            let vaultPath = resolvedPath(for: entry)
+            guard FileManager.default.fileExists(atPath: vaultPath) else { continue }
+            let issues = Vault(path: vaultPath).findIssues()
+            guard !issues.isEmpty else { continue }
+            reports.append(VaultIssueReport(
+                vaultName: entry.name, displayName: entry.displayName, vaultPath: vaultPath, issues: issues))
+        }
+        return MissingItemsReport(unregisteredVaults: found, vaults: reports)
+    }
+
+    /// Adds a vault found by `findMissingItems()` to the registry. With Cloud Sync on, a
+    /// `.device` vault is first copied into iCloud (as turning Cloud Sync on would), so the
+    /// shared registry never points at a folder only this device has.
+    public func addFoundVault(_ found: FoundVault) throws {
+        var entry = VaultEntry(
+            name: found.name, type: found.type, github: found.github,
+            access: .readWrite, displayName: found.title)
+        if entry.type == .device && cloudSyncMode() == .icloud {
+            entry = try migrateToCloud(VaultRegistry(primary: entry.name, vaults: [entry])).vaults[0]
+        }
+        try registerVault(entry)
+    }
+
+    // ══════════════════════════════════════════
     // MARK: - Path Resolution
     // ══════════════════════════════════════════
 
