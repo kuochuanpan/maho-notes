@@ -84,6 +84,14 @@ struct VaultsSettingsTab: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading, 40)
                     }
+
+                    if let notice = appState.cloudSync.cloudSyncNotice {
+                        Text(notice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 40)
+                    }
                 }
                 .padding(4)
             }

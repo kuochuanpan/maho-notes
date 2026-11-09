@@ -14,6 +14,14 @@ TestFlight build 4.
   - *Search stayed at the bottom of the left panel.* On the inner display, search now sits in the trailing vertical bar with the other controls; results still list in the navigator.
   - *Vault rail flickered in and out with the fold.* The inner display now starts with navigator + note (the layout the split view settles on at that width), so folding only moves the divider; the sidebar button still brings the rail in.
 
+### 🗂 Vault registry
+- **Vaults no longer disappear from every device** — a device that couldn't see the shared iCloud registry (not downloaded yet on a fresh install, or deleted by the old test suite) treated it as missing, registered the Getting Started tutorial into an empty registry, and saved that over the real one. Every device then lost its vault list (the vault folders stayed on disk). Now:
+  - An iCloud registry that exists but isn't downloaded (`.vaults.yaml.icloud` placeholder) or can't be decoded counts as present. Loads throw `VaultRegistryError.iCloudRegistryUnavailable` instead of returning nothing, and `checkCloudRegistryExists` reports `.cloudRegistryUnavailable`.
+  - Code that loads the registry in order to save it (`registerVault`, `registerVaultEntry`, vault remove / set primary / rename, disabling Cloud Sync) uses `loadRegistryForUpdate()`. That load aborts on an unreadable iCloud registry and no longer starts from an empty registry when a load fails. When the iCloud registry is truly gone, it builds on the cached vault list.
+  - First launch adopts iCloud instead of installing the tutorial while the iCloud registry is still downloading. Turning Cloud Sync on in that state leaves it off and shows a notice under the picker (localized in all 7 languages).
+  - After first-launch adoption, only the local cache is rewritten, never the iCloud registry.
+- **Getting Started no longer shows up empty on other devices** — turning Cloud Sync on skipped any `.device` vault whose folder already existed in iCloud, so the shared registry kept a `.device` entry pointing at a folder only one device had. Migration now copies in the local files iCloud lacks (never overwriting) and converts the entry to `.icloud`. With Cloud Sync on, the bundled tutorial is installed into iCloud as an `.icloud` vault. On launch, the app repairs existing `.device` entries that have no local folder but a vault in iCloud.
+
 ### 🧪 Tests
 - **Test suite no longer touches live user data** — `Auth` takes an injectable `globalConfigDir`, and `VaultStore` / the registry functions take an injectable iCloud Documents base. `AuthTests` used to overwrite the real GitHub token in the App Group `config.yaml`, and `VaultStoreTests.cleanupRemovesCache` used to delete the device-synced iCloud `config/vaults.yaml`; both now use temp dirs. `cacheFileWrittenOnSaveWhenCloudOn` is re-enabled, and new tests cover a real `storeToken` round-trip and cloud-mode registry I/O against the injected iCloud base.
 

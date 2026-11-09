@@ -214,7 +214,10 @@ func writeVaultFiles(
 /// Registers `name` in the vault registry, setting it as primary if it's the first vault.
 /// Skips silently if already registered.
 func registerVaultEntry(name: String, vaultPath: String, githubRepo: String?, globalConfigDir: String, readOnly: Bool = false, vaultType: VaultType? = nil) throws {
-    var registry = (try? loadRegistry(globalConfigDir: globalConfigDir)) ?? VaultRegistry(primary: "", vaults: [])
+    // A failed load must abort, not start from an empty registry: saving that would
+    // replace every device's vault list with this one entry.
+    var registry = try VaultStore(globalConfigDir: globalConfigDir).loadRegistryForUpdateSync()
+        ?? VaultRegistry(primary: "", vaults: [])
     guard registry.findVault(named: name) == nil else { return }
 
     // Determine vault type: explicit > github > cloud sync detection > .device

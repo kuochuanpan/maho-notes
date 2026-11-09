@@ -479,6 +479,150 @@ struct VaultStoreTests {
         #expect(path.hasPrefix(iCloudBase))
     }
 
+    // MARK: - Registry writes never replace a registry they couldn't read
+    //
+    // Regression for vaults vanishing on every device: a device that couldn't see the
+    // shared iCloud registry registered the tutorial into an empty registry and saved
+    // that over the real one. All tests inject temp dirs for iCloud and local storage.
+
+    private struct CloudStore {
+        let store: VaultStore
+        let iCloudBase: String
+        let localBase: String
+        var iCloudRegistryPath: String { (iCloudBase as NSString).appendingPathComponent("config/vaults.yaml") }
+    }
+
+    private func makeCloudStore(in tmpDir: String) async throws -> CloudStore {
+        let iCloudBase = (tmpDir as NSString).appendingPathComponent("icloud")
+        let localBase = (tmpDir as NSString).appendingPathComponent("local")
+        let store = VaultStore(globalConfigDir: tmpDir, iCloudDocumentsBase: iCloudBase, localStorageBase: localBase)
+        try await store.setCloudSyncMode(.icloud)
+        try FileManager.default.createDirectory(
+            atPath: (iCloudBase as NSString).appendingPathComponent("config"), withIntermediateDirectories: true)
+        return CloudStore(store: store, iCloudBase: iCloudBase, localBase: localBase)
+    }
+
+    private func isICloudRegistryUnavailable(_ error: any Error) -> Bool {
+        if case VaultRegistryError.iCloudRegistryUnavailable = error { return true }
+        return false
+    }
+
+    private let tutorialEntry = VaultEntry(name: "getting-started", type: .device, access: .readWrite)
+
+    @Test("registerVault refuses to write over an iCloud registry that hasn't downloaded")
+    func registerVaultKeepsUndownloadedICloudRegistry() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let placeholder = ((cloud.iCloudRegistryPath as NSString).deletingLastPathComponent as NSString)
+            .appendingPathComponent(".vaults.yaml.icloud")
+        try Data().write(to: URL(fileURLWithPath: placeholder))
+
+        await #expect(performing: { try await cloud.store.registerVault(self.tutorialEntry) },
+                      throws: isICloudRegistryUnavailable)
+        #expect(!FileManager.default.fileExists(atPath: cloud.iCloudRegistryPath),
+                "no fresh registry may be written in place of the undownloaded one")
+    }
+
+    @Test("registerVault refuses to write over an iCloud registry it can't decode")
+    func registerVaultKeepsUndecodableICloudRegistry() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let garbage = "not: [a registry"
+        try garbage.write(toFile: cloud.iCloudRegistryPath, atomically: true, encoding: .utf8)
+
+        await #expect(throws: (any Error).self) { try await cloud.store.registerVault(self.tutorialEntry) }
+        #expect(try String(contentsOfFile: cloud.iCloudRegistryPath, encoding: .utf8) == garbage)
+    }
+
+    @Test("registerVault keeps cached vaults when the iCloud registry is gone")
+    func registerVaultBuildsOnCacheWhenICloudRegistryMissing() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let cached = VaultRegistry(primary: "Personal", vaults: [
+            VaultEntry(name: "Personal", type: .icloud, access: .readWrite),
+            VaultEntry(name: "japanese", type: .github, github: "user/japanese", access: .readWrite),
+        ])
+        try YAMLEncoder().encode(cached).write(
+            toFile: (tmpDir as NSString).appendingPathComponent("vaults-cache.yaml"), atomically: true, encoding: .utf8)
+
+        try await cloud.store.registerVault(tutorialEntry)
+
+        let saved = try YAMLDecoder().decode(
+            VaultRegistry.self, from: String(contentsOfFile: cloud.iCloudRegistryPath, encoding: .utf8))
+        #expect(saved.vaults.map(\.name) == ["Personal", "japanese", "getting-started"])
+        #expect(saved.primary == "Personal")
+    }
+
+    @Test("loadRegistry shows the cache while the iCloud registry is downloading")
+    func loadRegistryFallsBackToCacheWhenICloudUnavailable() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let placeholder = ((cloud.iCloudRegistryPath as NSString).deletingLastPathComponent as NSString)
+            .appendingPathComponent(".vaults.yaml.icloud")
+        try Data().write(to: URL(fileURLWithPath: placeholder))
+
+        // Without a cache the failure surfaces instead of an empty vault list
+        await #expect(performing: { _ = try await cloud.store.loadRegistry() }, throws: isICloudRegistryUnavailable)
+
+        try "primary: Personal\nvaults:\n- name: Personal\n  type: icloud\n  access: read-write\n".write(
+            toFile: (tmpDir as NSString).appendingPathComponent("vaults-cache.yaml"), atomically: true, encoding: .utf8)
+        let loaded = try await cloud.store.loadRegistry()
+        #expect(loaded?.primary == "Personal")
+        await #expect(performing: { _ = try await cloud.store.loadRegistryForUpdate() }, throws: isICloudRegistryUnavailable)
+    }
+
+    @Test("repairDeviceEntriesStoredInICloud rewrites a dangling tutorial entry")
+    func repairRewritesDanglingDeviceEntry() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let iCloudVault = (cloud.iCloudBase as NSString).appendingPathComponent("vaults/getting-started")
+        try FileManager.default.createDirectory(atPath: iCloudVault, withIntermediateDirectories: true)
+        try "title: Getting Started\n".write(
+            toFile: (iCloudVault as NSString).appendingPathComponent("maho.yaml"), atomically: true, encoding: .utf8)
+        try await cloud.store.saveRegistry(VaultRegistry(primary: "getting-started", vaults: [tutorialEntry]))
+
+        #expect(try await cloud.store.repairDeviceEntriesStoredInICloud())
+        let repaired = try await cloud.store.loadRegistry()
+        #expect(repaired?.vaults.first?.type == .icloud)
+        #expect(cloud.store.resolvedPath(for: try #require(repaired?.vaults.first)).hasPrefix(cloud.iCloudBase))
+        // Second run finds nothing to do
+        #expect(try await !cloud.store.repairDeviceEntriesStoredInICloud())
+    }
+
+    @Test("saveCachedRegistry writes the cache and leaves the iCloud registry alone")
+    func saveCachedRegistryWritesOnlyCache() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+
+        try await cloud.store.saveCachedRegistry(VaultRegistry(primary: "Personal", vaults: [
+            VaultEntry(name: "Personal", type: .icloud, access: .readWrite),
+        ]))
+
+        #expect(try await cloud.store.loadCachedRegistry()?.primary == "Personal")
+        #expect(!FileManager.default.fileExists(atPath: cloud.iCloudRegistryPath))
+    }
+
+    @Test("repairDeviceEntriesStoredInICloud does nothing while Cloud Sync is off")
+    func repairSkippedWhenCloudSyncOff() async throws {
+        let tmpDir = try makeTempDir()
+        defer { cleanup(tmpDir) }
+        let cloud = try await makeCloudStore(in: tmpDir)
+        let iCloudVault = (cloud.iCloudBase as NSString).appendingPathComponent("vaults/getting-started")
+        try FileManager.default.createDirectory(atPath: iCloudVault, withIntermediateDirectories: true)
+        try "x".write(toFile: (iCloudVault as NSString).appendingPathComponent("maho.yaml"), atomically: true, encoding: .utf8)
+        try await cloud.store.setCloudSyncMode(.off)
+        try await cloud.store.saveRegistry(VaultRegistry(primary: "getting-started", vaults: [tutorialEntry]))
+
+        #expect(try await !cloud.store.repairDeviceEntriesStoredInICloud())
+        #expect(try await cloud.store.loadRegistry()?.vaults.first?.type == .device)
+    }
+
     // MARK: - Path Resolution Tests
 
     @Test("VaultStore resolvedPath delegates correctly")

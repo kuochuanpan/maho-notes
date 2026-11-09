@@ -546,6 +546,16 @@ import os
 
         wireManagers()
         let adoptedICloud = await GettingStartedBundler.installIfNeeded(store: store)
+        // Older builds could leave a `.device` entry in the shared iCloud registry whose vault
+        // lives in iCloud, so devices without a local copy showed it empty. Saves only when
+        // something needed repair, so later loads are a no-op.
+        do {
+            if try await store.repairDeviceEntriesStoredInICloud() {
+                logger.info("Repaired device vault entries whose data lives in iCloud")
+            }
+        } catch {
+            logger.warning("Device vault entry repair skipped: \(error.localizedDescription)")
+        }
         do {
             let result: VaultRegistry? = try await store.loadRegistry()
 
@@ -570,7 +580,7 @@ import os
             // If we just adopted iCloud vaults on first launch, write the local cache,
             // show the adoption overlay, and start monitoring for download completion.
             if adoptedICloud, let registry = result {
-                try? await store.saveRegistry(registry)
+                try? await store.saveCachedRegistry(registry)
                 self.adoptedVaultCount = registry.vaults.filter { $0.type == .icloud }.count
                 self.isAdoptingICloud = true
                 startICloudAdoptionMonitoring()
@@ -670,7 +680,7 @@ import os
     func removeVault(name: String) {
         Task {
             do {
-                guard var registry = try await store.loadRegistry() else { return }
+                guard var registry = try await store.loadRegistryForUpdate() else { return }
 
                 // Resolve the vault path and type before removing from registry
                 if let entry = registry.findVault(named: name) {
@@ -714,7 +724,7 @@ import os
     func setPrimaryVault(name: String) {
         Task {
             do {
-                guard var registry = try await store.loadRegistry() else { return }
+                guard var registry = try await store.loadRegistryForUpdate() else { return }
                 try registry.setPrimary(name)
                 try await store.saveRegistry(registry)
             } catch {

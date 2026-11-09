@@ -26,25 +26,20 @@ enum GettingStartedBundler {
 
         // Check if iCloud already has vaults from another device.
         // If so, skip the tutorial vault and adopt the iCloud registry directly.
-        let cloudCheck = await store.checkCloudRegistryExists()
-        if case .cloudRegistryExists(let cloudRegistry) = cloudCheck,
-           !cloudRegistry.vaults.isEmpty {
+        switch await store.checkCloudRegistryExists() {
+        case .cloudRegistryExists(let cloudRegistry) where !cloudRegistry.vaults.isEmpty:
             logger.info("GettingStartedBundler: iCloud registry found with \(cloudRegistry.vaults.count) vault(s) — adopting instead of installing tutorial")
-            do {
-                try await store.setCloudSyncMode(.icloud)
-                // The iCloud registry will be picked up by loadRegistry() since cloud mode is now ON.
-                // Trigger downloads for iCloud vaults that may not be on this device yet.
-                let fm = FileManager.default
-                for entry in cloudRegistry.vaults where entry.type == .icloud {
-                    let path = store.resolvedPath(for: entry)
-                    try? fm.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: path))
-                }
-                UserDefaults.standard.set(true, forKey: hasInstalledKey)
-                logger.info("GettingStartedBundler: iCloud adoption complete ✅")
-                return true
-            } catch {
-                logger.warning("GettingStartedBundler: failed to adopt iCloud registry: \(error.localizedDescription), falling back to tutorial install")
-            }
+            if await adoptICloudRegistry(cloudRegistry.vaults, store: store) { return true }
+        case .cloudRegistryUnavailable:
+            // Another device's registry is in iCloud but hasn't downloaded yet. Installing the
+            // tutorial now would save a one-vault registry over it and hide every vault on
+            // every device. Adopt instead; the registry loads once iCloud delivers it.
+            logger.info("GettingStartedBundler: iCloud registry not readable yet — adopting instead of installing tutorial")
+            if await adoptICloudRegistry([], store: store) { return true }
+            // Couldn't switch to iCloud mode: retry on next launch rather than risk the install
+            return false
+        default:
+            break
         }
 
         do {
@@ -55,6 +50,25 @@ enum GettingStartedBundler {
             logger.warning("Failed to install getting-started vault: \(error.localizedDescription)")
         }
         return false
+    }
+
+    /// Turns Cloud Sync on so `loadRegistry()` reads the iCloud registry, and asks iCloud to
+    /// download the given vaults. Returns `false` if the mode couldn't be saved.
+    private static func adoptICloudRegistry(_ vaults: [VaultEntry], store: VaultStore) async -> Bool {
+        do {
+            try await store.setCloudSyncMode(.icloud)
+            let fm = FileManager.default
+            for entry in vaults where entry.type == .icloud {
+                let path = store.resolvedPath(for: entry)
+                try? fm.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: path))
+            }
+            UserDefaults.standard.set(true, forKey: hasInstalledKey)
+            logger.info("GettingStartedBundler: iCloud adoption complete ✅")
+            return true
+        } catch {
+            logger.warning("GettingStartedBundler: failed to adopt iCloud registry: \(error.localizedDescription)")
+            return false
+        }
     }
 
     private static func install(store: VaultStore) async throws {
@@ -68,10 +82,13 @@ enum GettingStartedBundler {
 
         logger.info("GettingStartedBundler: bundle found at \(bundleURL.path)")
 
-        // Resolve the destination: device-type vault stored in the config vaults dir
+        // With Cloud Sync on, the registry is shared by every device, so the tutorial must
+        // live in iCloud too. A `.device` entry there points at a folder only this device
+        // has, and every other device shows an empty Getting Started vault.
+        let type: VaultType = await store.cloudSyncMode() == .icloud ? .icloud : .device
         let entry = VaultEntry(
             name: vaultName,
-            type: .device,
+            type: type,
             access: .readWrite,
             displayName: "Getting Started"
         )
@@ -83,8 +100,7 @@ enum GettingStartedBundler {
         // Skip if the vault directory already exists on disk
         if fm.fileExists(atPath: destPath) {
             logger.info("GettingStartedBundler: destPath already exists, registering only")
-            // Directory exists but wasn't registered — still mark as installed
-            try? await store.registerVault(entry)
+            try await register(entry, store: store)
             return
         }
 
@@ -113,7 +129,18 @@ enum GettingStartedBundler {
 
         // Register in the vault registry
         logger.info("GettingStartedBundler: registering vault...")
-        try await store.registerVault(entry)
+        try await register(entry, store: store)
         logger.info("GettingStartedBundler: registered ✅")
+    }
+
+    /// Registers the tutorial vault; an existing entry (e.g. added by another device) counts
+    /// as success. Any other failure, such as an unreadable iCloud registry, is rethrown so
+    /// the install is retried next launch instead of being marked done.
+    private static func register(_ entry: VaultEntry, store: VaultStore) async throws {
+        do {
+            try await store.registerVault(entry)
+        } catch VaultRegistryError.duplicateName {
+            logger.info("GettingStartedBundler: already registered")
+        }
     }
 }

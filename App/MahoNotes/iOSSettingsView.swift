@@ -65,6 +65,12 @@ struct iOSSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    if let notice = appState.cloudSync.cloudSyncNotice {
+                        Text(notice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 // GitHub

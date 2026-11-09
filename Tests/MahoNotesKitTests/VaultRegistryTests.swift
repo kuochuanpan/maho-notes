@@ -407,4 +407,199 @@ struct VaultRegistryTests {
         #expect(conflicts[0].localType == .device)
         #expect(conflicts[0].cloudType == .icloud)
     }
+
+    // MARK: - Device → iCloud migration when iCloud already has the folder
+    //
+    // Every test injects both the iCloud base and the local storage base, so nothing
+    // here reads or writes the live App Group or iCloud container.
+
+    /// Creates `<base>/vaults/<name>/` containing the given files (relative path → content).
+    @discardableResult
+    private func makeVault(in base: String, name: String, files: [String: String]) throws -> String {
+        let dir = (base as NSString).appendingPathComponent("vaults/\(name)")
+        for (relative, content) in files {
+            let path = (dir as NSString).appendingPathComponent(relative)
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try content.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+        return dir
+    }
+
+    @Test func migrateToCloudConvertsEntryWhenICloudFolderAlreadyExists() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+
+        try makeVault(in: localBase, name: "getting-started", files: [
+            "maho.yaml": "local config",
+            "getting-started/001-welcome.md": "local welcome",
+            "getting-started/011-local-only.md": "only on this device",
+        ])
+        let iCloudVault = try makeVault(in: iCloudBase, name: "getting-started", files: [
+            "maho.yaml": "icloud config",
+            "getting-started/001-welcome.md": "icloud welcome",
+        ])
+
+        let registry = VaultRegistry(primary: "getting-started", vaults: [
+            VaultEntry(name: "getting-started", type: .device, access: .readWrite, displayName: "Getting Started"),
+        ])
+        let migrated = try migrateVaultsToCloud(registry: registry, iCloudBase: iCloudBase, localBase: localBase)
+
+        #expect(migrated.vaults[0].type == .icloud)
+        #expect(migrated.vaults[0].displayName == "Getting Started")
+        // Missing files are filled in; existing iCloud files are never overwritten
+        let read = { (rel: String) in try String(contentsOfFile: (iCloudVault as NSString).appendingPathComponent(rel), encoding: .utf8) }
+        #expect(try read("maho.yaml") == "icloud config")
+        #expect(try read("getting-started/001-welcome.md") == "icloud welcome")
+        #expect(try read("getting-started/011-local-only.md") == "only on this device")
+    }
+
+    @Test func migrateToCloudConvertsEntryWhenOnlyICloudHasTheFolder() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+        try makeVault(in: iCloudBase, name: "getting-started", files: ["maho.yaml": "x"])
+
+        let registry = VaultRegistry(primary: "getting-started", vaults: [
+            VaultEntry(name: "getting-started", type: .device, access: .readWrite),
+        ])
+        let migrated = try migrateVaultsToCloud(registry: registry, iCloudBase: iCloudBase, localBase: localBase)
+        #expect(migrated.vaults[0].type == .icloud)
+    }
+
+    @Test func migrateToCloudLeavesEntryWhenNoFolderExists() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+
+        let registry = VaultRegistry(primary: "ghost", vaults: [
+            VaultEntry(name: "ghost", type: .device, access: .readWrite),
+        ])
+        let migrated = try migrateVaultsToCloud(registry: registry, iCloudBase: iCloudBase, localBase: localBase)
+        #expect(migrated.vaults[0].type == .device)
+        #expect(!FileManager.default.fileExists(atPath: (iCloudBase as NSString).appendingPathComponent("vaults/ghost")))
+    }
+
+    // MARK: - Repair of `.device` entries whose data lives in iCloud
+
+    @Test func repairConvertsDeviceEntryMissingLocallyButPresentInICloud() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+        try makeVault(in: iCloudBase, name: "getting-started", files: ["maho.yaml": "x"])
+
+        let registry = VaultRegistry(primary: "Personal", vaults: [
+            VaultEntry(name: "getting-started", type: .device, access: .readWrite, displayName: "Getting Started"),
+            VaultEntry(name: "Personal", type: .icloud, access: .readWrite),
+        ])
+        let repaired = try #require(repairDeviceEntriesStoredInICloud(
+            registry: registry, iCloudBase: iCloudBase, localBase: localBase))
+        #expect(repaired.vaults[0].type == .icloud)
+        #expect(repaired.vaults[0].displayName == "Getting Started")
+        #expect(repaired.vaults[1].type == .icloud)
+        #expect(repaired.primary == "Personal")
+    }
+
+    @Test func repairLeavesDeviceEntryThatExistsLocally() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+        try makeVault(in: localBase, name: "notes", files: ["maho.yaml": "local"])
+        try makeVault(in: iCloudBase, name: "notes", files: ["maho.yaml": "icloud"])
+
+        let registry = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .device, access: .readWrite),
+        ])
+        #expect(repairDeviceEntriesStoredInICloud(registry: registry, iCloudBase: iCloudBase, localBase: localBase) == nil)
+    }
+
+    @Test func repairIgnoresICloudFolderThatIsNotAVault() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let localBase = (dir as NSString).appendingPathComponent("local")
+        try makeVault(in: iCloudBase, name: "notes", files: ["stray.md": "no maho.yaml here"])
+
+        let registry = VaultRegistry(primary: "notes", vaults: [
+            VaultEntry(name: "notes", type: .device, access: .readWrite),
+        ])
+        #expect(repairDeviceEntriesStoredInICloud(registry: registry, iCloudBase: iCloudBase, localBase: localBase) == nil)
+    }
+
+    // MARK: - iCloud registry that exists but isn't readable yet
+
+    /// Puts only iCloud's `.vaults.yaml.icloud` stub in place — what a device sees before
+    /// iCloud downloads the registry another device wrote.
+    private func makeRegistryPlaceholder(iCloudBase: String) throws {
+        let config = (iCloudBase as NSString).appendingPathComponent("config")
+        try FileManager.default.createDirectory(atPath: config, withIntermediateDirectories: true)
+        try Data().write(to: URL(fileURLWithPath: (config as NSString).appendingPathComponent(".vaults.yaml.icloud")))
+    }
+
+    @Test func iCloudFileExistsCountsPlaceholder() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let registryPath = (dir as NSString).appendingPathComponent("config/vaults.yaml")
+        #expect(!iCloudFileExists(atPath: registryPath))
+        try makeRegistryPlaceholder(iCloudBase: dir)
+        #expect(iCloudFileExists(atPath: registryPath))
+    }
+
+    @Test func loadRegistryThrowsInsteadOfReturningNilForUndownloadedICloudRegistry() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        try setGlobalSyncMode(.icloud, globalConfigDir: dir)
+        try makeRegistryPlaceholder(iCloudBase: iCloudBase)
+
+        #expect {
+            _ = try loadRegistry(globalConfigDir: dir, iCloudBase: iCloudBase)
+        } throws: { error in
+            guard case VaultRegistryError.iCloudRegistryUnavailable = error else { return false }
+            return true
+        }
+    }
+
+    @Test func checkCloudRegistryReportsUnavailableForPlaceholder() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        try makeRegistryPlaceholder(iCloudBase: iCloudBase)
+
+        guard case .cloudRegistryUnavailable = checkCloudRegistryExists(globalConfigDir: dir, iCloudBase: iCloudBase) else {
+            Issue.record("an undownloaded iCloud registry must not be reported as absent")
+            return
+        }
+    }
+
+    @Test func checkCloudRegistryReportsUnavailableForUndecodableRegistry() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        let config = (iCloudBase as NSString).appendingPathComponent("config")
+        try FileManager.default.createDirectory(atPath: config, withIntermediateDirectories: true)
+        try "not: [a registry".write(toFile: (config as NSString).appendingPathComponent("vaults.yaml"),
+                                     atomically: true, encoding: .utf8)
+
+        guard case .cloudRegistryUnavailable = checkCloudRegistryExists(globalConfigDir: dir, iCloudBase: iCloudBase) else {
+            Issue.record("an unreadable iCloud registry must not be reported as absent")
+            return
+        }
+    }
+
+    @Test func checkCloudRegistryReportsAbsentWhenNothingIsThere() throws {
+        let dir = try makeTempDir()
+        defer { cleanup(dir) }
+        let iCloudBase = (dir as NSString).appendingPathComponent("icloud")
+        guard case .noCloudRegistry = checkCloudRegistryExists(globalConfigDir: dir, iCloudBase: iCloudBase) else {
+            Issue.record("expected no registry")
+            return
+        }
+    }
 }

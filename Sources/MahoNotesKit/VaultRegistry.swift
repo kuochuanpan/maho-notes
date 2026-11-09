@@ -77,11 +77,16 @@ public struct VaultRegistry: Codable, Sendable {
 public enum VaultRegistryError: Error, CustomStringConvertible {
     case duplicateName(String)
     case notFound(String)
+    /// iCloud holds a vault registry that this device can't read right now (not downloaded yet,
+    /// offline, or undecodable). Never treat this as "no registry": writing a fresh registry
+    /// in its place replaces every device's vault list.
+    case iCloudRegistryUnavailable(String)
 
     public var description: String {
         switch self {
         case .duplicateName(let name): return "Vault '\(name)' already exists"
         case .notFound(let name): return "Vault '\(name)' not found"
+        case .iCloudRegistryUnavailable(let reason): return "The iCloud vault registry can't be read yet: \(reason)"
         }
     }
 }
@@ -94,13 +99,15 @@ func resolvedPath(for entry: VaultEntry) -> String {
 
 /// `resolvedPath(for:)` with an explicit iCloud Documents base, so callers that
 /// were handed a non-default base (tests, `VaultStore`) never touch the live container.
-func resolvedPath(for entry: VaultEntry, iCloudBase: String) -> String {
+/// `localBase` holds the `vaults/` directory for `.device` and `.github` vaults; it defaults to
+/// the live App Group (macOS) or app Documents (iOS) and is only overridden by tests.
+func resolvedPath(for entry: VaultEntry, iCloudBase: String, localBase: String = mahoConfigBase()) -> String {
     switch entry.type {
     case .icloud:
         let base = (iCloudBase as NSString).appendingPathComponent("vaults")
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .github, .device:
-        let base = mahoConfigBase() + "/vaults"
+        let base = (localBase as NSString).appendingPathComponent("vaults")
         return (base as NSString).appendingPathComponent(entry.name) + "/"
     case .local:
         #if os(macOS)
@@ -119,9 +126,16 @@ func resolvedPath(for entry: VaultEntry, iCloudBase: String) -> String {
 /// - Copies vault directory contents from source to destination
 /// - Updates vault type in registry
 /// - Returns the updated registry
+///
+/// If iCloud already has a folder with the vault's name (this vault, migrated earlier from
+/// this or another device), local files it lacks are copied in, nothing in iCloud is
+/// overwritten, and the entry still becomes `.icloud`. Leaving it `.device` would put an
+/// entry in the shared registry that points at a folder only one device has; every other
+/// device then shows the vault as empty. The local source folder is never removed.
 func migrateVaultsToCloud(
     registry: VaultRegistry,
-    iCloudBase: String = iCloudDocumentsBasePath()
+    iCloudBase: String = iCloudDocumentsBasePath(),
+    localBase: String = mahoConfigBase()
 ) throws -> VaultRegistry {
     let fm = FileManager.default
     let iCloudVaultsBase = (iCloudBase as NSString).appendingPathComponent("vaults")
@@ -133,23 +147,22 @@ func migrateVaultsToCloud(
         guard entry.type == .device else { continue }
 
         // Only trim trailing slash — leading "/" is part of the absolute path
-        var sourcePath = resolvedPath(for: entry, iCloudBase: iCloudBase)
+        var sourcePath = resolvedPath(for: entry, iCloudBase: iCloudBase, localBase: localBase)
         while sourcePath.hasSuffix("/") { sourcePath.removeLast() }
         let destPath = (iCloudVaultsBase as NSString).appendingPathComponent(entry.name)
 
-        // Skip if source doesn't exist
-        guard fm.fileExists(atPath: sourcePath) else { continue }
+        let sourceExists = fm.fileExists(atPath: sourcePath)
+        let destExists = fm.fileExists(atPath: destPath)
 
-        // Create iCloud vaults directory if needed
-        try fm.createDirectory(atPath: iCloudVaultsBase, withIntermediateDirectories: true)
+        // Nothing on disk on either side — leave the entry alone
+        guard sourceExists || destExists else { continue }
 
-        if fm.fileExists(atPath: destPath) {
-            // Destination already exists — skip (merge handled separately)
-            continue
+        if !destExists {
+            try fm.createDirectory(atPath: iCloudVaultsBase, withIntermediateDirectories: true)
+            try fm.copyItem(atPath: sourcePath, toPath: destPath)
+        } else if sourceExists {
+            try copyMissingItems(from: sourcePath, to: destPath)
         }
-
-        // Copy vault contents to iCloud
-        try fm.copyItem(atPath: sourcePath, toPath: destPath)
 
         // Update vault entry type to .icloud (path is derived from name for icloud type)
         updated.vaults[index] = VaultEntry(
@@ -166,13 +179,73 @@ func migrateVaultsToCloud(
     return updated
 }
 
+/// Converts `.device` entries that only exist in iCloud into `.icloud` entries.
+///
+/// Before `migrateVaultsToCloud` handled existing iCloud folders, turning Cloud Sync on
+/// could leave a `.device` entry in the shared registry whose data was in iCloud
+/// `vaults/<name>/`. A device with no local folder of that name showed the vault as
+/// empty. An entry is converted only if this device has no local folder for it and the
+/// iCloud folder holds a vault (`maho.yaml`). Call only while Cloud Sync is on.
+/// Returns `nil` if nothing needed repair.
+func repairDeviceEntriesStoredInICloud(
+    registry: VaultRegistry,
+    iCloudBase: String = iCloudDocumentsBasePath(),
+    localBase: String = mahoConfigBase()
+) -> VaultRegistry? {
+    let fm = FileManager.default
+    var updated = registry
+    var changed = false
+
+    for (index, entry) in registry.vaults.enumerated() where entry.type == .device {
+        let localPath = resolvedPath(for: entry, iCloudBase: iCloudBase, localBase: localBase)
+        guard !fm.fileExists(atPath: localPath) else { continue }
+
+        let iCloudEntry = VaultEntry(
+            name: entry.name,
+            type: .icloud,
+            github: entry.github,
+            path: nil,
+            access: entry.access,
+            displayName: entry.displayName,
+            color: entry.color
+        )
+        let iCloudPath = resolvedPath(for: iCloudEntry, iCloudBase: iCloudBase, localBase: localBase)
+        let iCloudConfig = (iCloudPath as NSString).appendingPathComponent("maho.yaml")
+        guard iCloudFileExists(atPath: iCloudConfig) else { continue }
+
+        updated.vaults[index] = iCloudEntry
+        changed = true
+    }
+
+    return changed ? updated : nil
+}
+
+/// Recursively copies items under `source` that don't exist under `destination`.
+/// Existing files and folders at the destination are never replaced.
+private func copyMissingItems(from source: String, to destination: String) throws {
+    let fm = FileManager.default
+    for name in try fm.contentsOfDirectory(atPath: source) {
+        let src = (source as NSString).appendingPathComponent(name)
+        let dst = (destination as NSString).appendingPathComponent(name)
+        var srcIsDir: ObjCBool = false
+        fm.fileExists(atPath: src, isDirectory: &srcIsDir)
+        var dstIsDir: ObjCBool = false
+        if !fm.fileExists(atPath: dst, isDirectory: &dstIsDir) {
+            try fm.copyItem(atPath: src, toPath: dst)
+        } else if srcIsDir.boolValue && dstIsDir.boolValue {
+            try copyMissingItems(from: src, to: dst)
+        }
+    }
+}
+
 /// Migrates vault data from iCloud back to local storage.
 func migrateVaultsFromCloud(
     registry: VaultRegistry,
-    iCloudBase: String = iCloudDocumentsBasePath()
+    iCloudBase: String = iCloudDocumentsBasePath(),
+    localBase: String = mahoConfigBase()
 ) throws -> VaultRegistry {
     let fm = FileManager.default
-    let localVaultsBase = (mahoConfigBase() as NSString).appendingPathComponent("vaults")
+    let localVaultsBase = (localBase as NSString).appendingPathComponent("vaults")
 
     var updated = registry
 
@@ -278,6 +351,9 @@ public enum CloudSyncActivationCheck: Sendable {
     case noCloudRegistry
     /// iCloud registry exists with these vaults. Merge needed.
     case cloudRegistryExists(cloud: VaultRegistry)
+    /// iCloud has a registry that can't be read yet (not downloaded, offline, or undecodable).
+    /// Neither uploading the local registry nor installing a fresh one is safe; retry later.
+    case cloudRegistryUnavailable
 }
 
 /// Checks whether iCloud already has a vault registry.
@@ -285,16 +361,56 @@ func checkCloudRegistryExists(
     globalConfigDir: String = mahoConfigBase(),
     iCloudBase: String = iCloudDocumentsBasePath()
 ) -> CloudSyncActivationCheck {
-    let fm = FileManager.default
     let iCloudConfig = iCloudConfigPath(iCloudBase: iCloudBase)
     let iCloudRegistryPath = (iCloudConfig as NSString).appendingPathComponent(registryFileName)
 
-    if fm.fileExists(atPath: iCloudRegistryPath),
-       let content = try? String(contentsOfFile: iCloudRegistryPath, encoding: .utf8),
-       let registry = try? YAMLDecoder().decode(VaultRegistry.self, from: content) {
-        return .cloudRegistryExists(cloud: registry)
+    guard iCloudFileExists(atPath: iCloudRegistryPath) else { return .noCloudRegistry }
+    do {
+        return .cloudRegistryExists(cloud: try readICloudRegistry(at: iCloudRegistryPath))
+    } catch {
+        Log.sync.warning("iCloud registry exists but can't be read: \(error.localizedDescription)")
+        return .cloudRegistryUnavailable
     }
-    return .noCloudRegistry
+}
+
+// MARK: - iCloud File Presence
+
+/// The hidden stub iCloud keeps in place of a file this device hasn't downloaded:
+/// `dir/name` → `dir/.name.icloud`.
+func iCloudPlaceholderPath(for path: String) -> String {
+    let dir = (path as NSString).deletingLastPathComponent
+    let name = (path as NSString).lastPathComponent
+    return (dir as NSString).appendingPathComponent(".\(name).icloud")
+}
+
+/// Whether a file exists in iCloud, downloaded or not. Until a device downloads a file, only
+/// its `.name.icloud` stub is on disk, so `fileExists` on the real path is false. A fresh
+/// install that took that to mean "no registry" saved a new registry over the shared one.
+func iCloudFileExists(atPath path: String) -> Bool {
+    let fm = FileManager.default
+    return fm.fileExists(atPath: path) || fm.fileExists(atPath: iCloudPlaceholderPath(for: path))
+}
+
+/// Reads and decodes the iCloud registry, asking iCloud to download it first when this device
+/// only has the placeholder (a coordinated read also waits for the download).
+/// Throws `VaultRegistryError.iCloudRegistryUnavailable` when the file can't be read.
+private func readICloudRegistry(at path: String) throws -> VaultRegistry {
+    let fm = FileManager.default
+    if !fm.fileExists(atPath: path) {
+        try? fm.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: path))
+    }
+    let content: String
+    do {
+        content = try coordinatedRead(at: path)
+    } catch {
+        Log.sync.warning("coordinated read from iCloud failed (\(error.localizedDescription)), falling back to regular read")
+        do {
+            content = try String(contentsOfFile: path, encoding: .utf8)
+        } catch {
+            throw VaultRegistryError.iCloudRegistryUnavailable(error.localizedDescription)
+        }
+    }
+    return try YAMLDecoder().decode(VaultRegistry.self, from: content)
 }
 
 /// Describes a name conflict found during merge.
@@ -541,16 +657,10 @@ func loadRegistry(
 
     if cloudSync == .icloud {
         let iCloudPath = (iCloudConfigPath(iCloudBase: iCloudBase) as NSString).appendingPathComponent(registryFileName)
-        if fm.fileExists(atPath: iCloudPath) {
-            // Use coordinated read for iCloud; fall back to regular read if coordination fails
-            let content: String
-            do {
-                content = try coordinatedRead(at: iCloudPath)
-            } catch {
-                Log.sync.warning("coordinated read from iCloud failed (\(error.localizedDescription)), falling back to regular read")
-                content = try String(contentsOfFile: iCloudPath, encoding: .utf8)
-            }
-            return try YAMLDecoder().decode(VaultRegistry.self, from: content)
+        // A registry iCloud hasn't downloaded yet still counts: read it (or throw), never
+        // fall through to "no registry", which callers answer by saving a new one over it.
+        if iCloudFileExists(atPath: iCloudPath) {
+            return try readICloudRegistry(at: iCloudPath)
         }
     }
 

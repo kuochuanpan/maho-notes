@@ -16,6 +16,9 @@ import MahoNotesKit
     /// Status text during migration (e.g. "Migrating vaults to iCloud…").
     var migrationStatus: String?
 
+    /// Why the last attempt to turn on Cloud Sync stopped, shown under the picker.
+    var cloudSyncNotice: String?
+
     /// Whether the merge confirmation sheet is showing.
     var showMergeSheet: Bool = false
 
@@ -42,6 +45,7 @@ import MahoNotesKit
 
     /// Called when user toggles cloud sync. Checks for merge needs before applying.
     func requestCloudSyncChange(to mode: CloudSyncMode) {
+        cloudSyncNotice = nil
         Task {
             if mode == .off {
                 // Turning off — migrate vaults back to local, then disable
@@ -86,6 +90,12 @@ import MahoNotesKit
                 migrationStatus = nil
                 pendingCloudRegistry = cloudRegistry
                 showMergeSheet = true
+            case .cloudRegistryUnavailable:
+                // iCloud has another device's vault list that this device can't read yet.
+                // Uploading the local registry now would replace it, so leave sync off.
+                isMigrating = false
+                migrationStatus = nil
+                cloudSyncNotice = String(localized: "Your vault list in iCloud hasn't finished downloading. Try again in a moment.")
             }
         }
     }
