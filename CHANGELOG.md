@@ -1,6 +1,34 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.3] — 2026-11-09
+
+TestFlight build 4. CLI `mn` 1.0.3 released through Homebrew on 2026-11-10 (`brew install mahopan/tap/mn`).
+
+### 📱 iPhone Duo
+- **Full screen on both displays** — the app now requires the iOS 27.1+ SDK (Xcode 27.1 or later), which removes the empty strip a 27.0-SDK build leaves along the right edge of Duo's outer and inner displays.
+- **Bottom toolbar moves to the right edge** — where Duo lays bars out vertically (closed, and open in landscape), the iPhone layout's floating toolbar (New Note, New Collection, Sync, Settings) and the note's view-mode pill become system toolbar items in the trailing vertical bar. Other iPhones and iPads keep the floating toolbar.
+- **Even columns when half open** — partially folded like a book, the navigator column ends exactly on the fold so the list side and the note side are the same width.
+- See decision #31; `scripts/verify-duo.sh` lists what to check in each pose.
+- **Fixed after TestFlight build 4** (found on a real iPhone Duo):
+  - *Half open looked like fully open.* Build 4 waited for the system to mark the fold's reserved region active, which only happens once the hinge has settled, so a hand-held device never split. The split now follows the hinge angle itself (engages at ≤ 160°, releases above 170°) and still honors the system's fold region.
+  - *Search stayed at the bottom of the left panel.* On the inner display, search now sits in the trailing vertical bar with the other controls; results still list in the navigator.
+  - *Vault rail flickered in and out with the fold.* The inner display now starts with navigator + note (the layout the split view settles on at that width), so folding only moves the divider; the sidebar button still brings the rail in.
+
+### 🗂 Vault registry
+- **Vaults no longer disappear from every device** — a device that couldn't see the shared iCloud registry (not downloaded yet on a fresh install, or deleted by the old test suite) treated it as missing, registered the Getting Started tutorial into an empty registry, and saved that over the real one. Every device then lost its vault list (the vault folders stayed on disk). Now:
+  - An iCloud registry that exists but isn't downloaded (`.vaults.yaml.icloud` placeholder) or can't be decoded counts as present. Loads throw `VaultRegistryError.iCloudRegistryUnavailable` instead of returning nothing, and `checkCloudRegistryExists` reports `.cloudRegistryUnavailable`.
+  - Code that loads the registry in order to save it (`registerVault`, `registerVaultEntry`, vault remove / set primary / rename, disabling Cloud Sync) uses `loadRegistryForUpdate()`. That load aborts on an unreadable iCloud registry and no longer starts from an empty registry when a load fails. When the iCloud registry is truly gone, it builds on the cached vault list.
+  - First launch adopts iCloud instead of installing the tutorial while the iCloud registry is still downloading. Turning Cloud Sync on in that state leaves it off and shows a notice under the picker (localized in all 7 languages).
+  - After first-launch adoption, only the local cache is rewritten, never the iCloud registry.
+- **Getting Started no longer shows up empty on other devices** — turning Cloud Sync on skipped any `.device` vault whose folder already existed in iCloud, so the shared registry kept a `.device` entry pointing at a folder only one device had. Migration now copies in the local files iCloud lacks (never overwriting) and converts the entry to `.icloud`. With Cloud Sync on, the bundled tutorial is installed into iCloud as an `.icloud` vault. On launch, the app repairs existing `.device` entries that have no local folder but a vault in iCloud.
+
+### 🔎 Find Missing Items
+- **Settings › Vaults › Find Missing Items…** (macOS and iOS) lists what's on this device but doesn't show up. Each row with a fix is checked by default; **Fix Selected** applies the checked ones, reloads, and scans again. Nothing is deleted.
+  - **Vaults not in your list** — folders with a `maho.yaml` in iCloud `vaults/` (while Cloud Sync is on) or in this device's `vaults/` that aren't registered. A repo in `maho.yaml` makes it a GitHub vault, and its repo is filled in. With Cloud Sync on, a device vault is copied into iCloud before it's added. Folders whose name is already registered are skipped: they're leftovers from moving a vault between this device and iCloud.
+  - **Collections** — a folder with notes that `maho.yaml` doesn't list (fix: add it, keeping every other key). A collection `maho.yaml` lists without a folder (fix: create the folder). An unreadable or not-yet-downloaded `maho.yaml` is reported, and its collections are skipped so no fix can overwrite it.
+  - **Notes the app can't show** — notes at the vault root (fix: move into an `unsorted` collection). `.markdown`/`.MD`/… files (fix: rename to `.md`). UTF-16/32 files (fix: convert to UTF-8; other encodings are only reported). Notes iCloud hasn't downloaded (fix: download). README/LICENSE/CHANGELOG at a vault root, `_`-prefixed folders and READMEs aren't flagged.
+- **CLI:** `mn vault find [--vault <name>] [--fix] [--json]` runs the same scan; `mn skill` documents it.
+- Kit: `VaultStore.findMissingItems(vaultName:)`, `VaultStore.addFoundVault(_:)`, `Vault.findIssues()`, `Vault.fix(_:)`; 33 new UI strings in all 7 languages.
 
 ### ⌨️ CLI — writing notes from scripts and AI agents
 - **Write a whole note in one call** — `mn new` takes the body from `--body`, `--stdin` (heredoc) or `--file`, and puts a `# Title` heading above it unless the body has one (`--no-heading` to skip). `--series` sets the series, and `--author` now defaults to `author.name` from the vault config instead of a hard-coded name.
@@ -47,40 +75,8 @@
 - Kit: `FrontmatterDocument`, `YAMLFormat`, `noteTimestamp()`, `NoteError`, `Vault.createNote(…body:…)`, `writeNoteBody`, `replaceInNoteBody`, `updateNoteMetadata`, `deleteNote`, `resolveNotePath`, `SearchIndex.refresh(from:)`.
 
 ### 🧪 Tests
-- 69 new library tests for the above, and a new `mnTests` target (20 tests) that runs the built `mn` binary end to end against throwaway vaults and home directories.
-
-## [1.0.3] — 2026-11-09
-
-TestFlight build 4.
-
-### 📱 iPhone Duo
-- **Full screen on both displays** — the app now requires the iOS 27.1+ SDK (Xcode 27.1 or later), which removes the empty strip a 27.0-SDK build leaves along the right edge of Duo's outer and inner displays.
-- **Bottom toolbar moves to the right edge** — where Duo lays bars out vertically (closed, and open in landscape), the iPhone layout's floating toolbar (New Note, New Collection, Sync, Settings) and the note's view-mode pill become system toolbar items in the trailing vertical bar. Other iPhones and iPads keep the floating toolbar.
-- **Even columns when half open** — partially folded like a book, the navigator column ends exactly on the fold so the list side and the note side are the same width.
-- See decision #31; `scripts/verify-duo.sh` lists what to check in each pose.
-- **Fixed after TestFlight build 4** (found on a real iPhone Duo):
-  - *Half open looked like fully open.* Build 4 waited for the system to mark the fold's reserved region active, which only happens once the hinge has settled, so a hand-held device never split. The split now follows the hinge angle itself (engages at ≤ 160°, releases above 170°) and still honors the system's fold region.
-  - *Search stayed at the bottom of the left panel.* On the inner display, search now sits in the trailing vertical bar with the other controls; results still list in the navigator.
-  - *Vault rail flickered in and out with the fold.* The inner display now starts with navigator + note (the layout the split view settles on at that width), so folding only moves the divider; the sidebar button still brings the rail in.
-
-### 🗂 Vault registry
-- **Vaults no longer disappear from every device** — a device that couldn't see the shared iCloud registry (not downloaded yet on a fresh install, or deleted by the old test suite) treated it as missing, registered the Getting Started tutorial into an empty registry, and saved that over the real one. Every device then lost its vault list (the vault folders stayed on disk). Now:
-  - An iCloud registry that exists but isn't downloaded (`.vaults.yaml.icloud` placeholder) or can't be decoded counts as present. Loads throw `VaultRegistryError.iCloudRegistryUnavailable` instead of returning nothing, and `checkCloudRegistryExists` reports `.cloudRegistryUnavailable`.
-  - Code that loads the registry in order to save it (`registerVault`, `registerVaultEntry`, vault remove / set primary / rename, disabling Cloud Sync) uses `loadRegistryForUpdate()`. That load aborts on an unreadable iCloud registry and no longer starts from an empty registry when a load fails. When the iCloud registry is truly gone, it builds on the cached vault list.
-  - First launch adopts iCloud instead of installing the tutorial while the iCloud registry is still downloading. Turning Cloud Sync on in that state leaves it off and shows a notice under the picker (localized in all 7 languages).
-  - After first-launch adoption, only the local cache is rewritten, never the iCloud registry.
-- **Getting Started no longer shows up empty on other devices** — turning Cloud Sync on skipped any `.device` vault whose folder already existed in iCloud, so the shared registry kept a `.device` entry pointing at a folder only one device had. Migration now copies in the local files iCloud lacks (never overwriting) and converts the entry to `.icloud`. With Cloud Sync on, the bundled tutorial is installed into iCloud as an `.icloud` vault. On launch, the app repairs existing `.device` entries that have no local folder but a vault in iCloud.
-
-### 🔎 Find Missing Items
-- **Settings › Vaults › Find Missing Items…** (macOS and iOS) lists what's on this device but doesn't show up. Each row with a fix is checked by default; **Fix Selected** applies the checked ones, reloads, and scans again. Nothing is deleted.
-  - **Vaults not in your list** — folders with a `maho.yaml` in iCloud `vaults/` (while Cloud Sync is on) or in this device's `vaults/` that aren't registered. A repo in `maho.yaml` makes it a GitHub vault, and its repo is filled in. With Cloud Sync on, a device vault is copied into iCloud before it's added. Folders whose name is already registered are skipped: they're leftovers from moving a vault between this device and iCloud.
-  - **Collections** — a folder with notes that `maho.yaml` doesn't list (fix: add it, keeping every other key). A collection `maho.yaml` lists without a folder (fix: create the folder). An unreadable or not-yet-downloaded `maho.yaml` is reported, and its collections are skipped so no fix can overwrite it.
-  - **Notes the app can't show** — notes at the vault root (fix: move into an `unsorted` collection). `.markdown`/`.MD`/… files (fix: rename to `.md`). UTF-16/32 files (fix: convert to UTF-8; other encodings are only reported). Notes iCloud hasn't downloaded (fix: download). README/LICENSE/CHANGELOG at a vault root, `_`-prefixed folders and READMEs aren't flagged.
-- **CLI:** `mn vault find [--vault <name>] [--fix] [--json]` runs the same scan; `mn skill` documents it.
-- Kit: `VaultStore.findMissingItems(vaultName:)`, `VaultStore.addFoundVault(_:)`, `Vault.findIssues()`, `Vault.fix(_:)`; 33 new UI strings in all 7 languages.
-
-### 🧪 Tests
 - **Test suite no longer touches live user data** — `Auth` takes an injectable `globalConfigDir`, and `VaultStore` / the registry functions take an injectable iCloud Documents base. `AuthTests` used to overwrite the real GitHub token in the App Group `config.yaml`, and `VaultStoreTests.cleanupRemovesCache` used to delete the device-synced iCloud `config/vaults.yaml`; both now use temp dirs. `cacheFileWrittenOnSaveWhenCloudOn` is re-enabled, and new tests cover a real `storeToken` round-trip and cloud-mode registry I/O against the injected iCloud base.
+- 69 new library tests for the above, and a new `mnTests` target (20 tests) that runs the built `mn` binary end to end against throwaway vaults and home directories.
 
 ## [1.0.2] — 2026-10-09
 
