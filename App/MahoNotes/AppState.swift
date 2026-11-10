@@ -42,6 +42,9 @@ import os
     /// Monitors the vault registry file for external changes.
     private var registryPresenter: VaultRegistryPresenter?
 
+    /// Path of the vault whose content is currently loaded (see `loadSelectedVault()`).
+    private var loadedVaultPath: String?
+
     /// The primary vault name from the registry.
     private(set) var primaryVaultName: String?
 
@@ -213,7 +216,7 @@ import os
                 selectedNotePath = path
                 selectedNotePaths = []
                 editorState.viewMode = .preview
-                editorState.editingBody = ""
+                editorState.resetBuffer()
             }
         } else if newSelection.isEmpty {
             if selectedNotePath != nil {
@@ -230,7 +233,7 @@ import os
                 }
                 selectedNotePath = path
                 editorState.viewMode = .preview
-                editorState.editingBody = ""
+                editorState.resetBuffer()
             }
         }
     }
@@ -254,7 +257,7 @@ import os
         navigatorSelection = path == nil ? [] : [path!]
         // Reset view mode to preview when selecting a new note
         editorState.viewMode = .preview
-        editorState.editingBody = ""
+        editorState.resetBuffer()
     }
 
     /// Cmd+Click — toggle note in multi-selection.
@@ -284,7 +287,7 @@ import os
             }
             selectedNotePath = path
             editorState.viewMode = .preview
-            editorState.editingBody = ""
+            editorState.resetBuffer()
         }
         navigatorSelection = selectedNotePaths.isEmpty
             ? (selectedNotePath.map { [$0] } ?? [])
@@ -370,10 +373,16 @@ import os
 
     var iCloudManager = iCloudSyncManager()
 
-    /// Whether any vault has iCloud or GitHub conflicts.
+    /// Whether the current vault has iCloud conflict versions or conflict copies on disk.
     var hasConflicts: Bool {
-        !iCloudManager.conflicts.isEmpty ||
-        !syncCoordinator.githubConflictFiles.values.flatMap { $0 }.isEmpty
+        !iCloudManager.conflicts.isEmpty || !conflictCopyPaths.isEmpty
+    }
+
+    /// Conflict copies (`note.conflict-{DeviceName}.md`) in the current vault, read from disk
+    /// on every reload — so they are still reported after a relaunch, and whichever sync
+    /// path or device left them.
+    var conflictCopyPaths: [String] {
+        allNotes.map(\.relativePath).filter { isConflictCopyPath($0) }
     }
 
     /// Find iCloud conflict info for a specific note path.
@@ -381,18 +390,16 @@ import os
         iCloudManager.conflicts.first { $0.notePath == notePath }
     }
 
-    /// Find a GitHub conflict file path for a specific note path.
+    /// Find a conflict copy for a specific note path.
     /// e.g. `notes/hello.md` → `notes/hello.conflict-Mahos-Mac-mini.md`
     func githubConflictFile(for notePath: String) -> String? {
-        let allConflicts = syncCoordinator.githubConflictFiles.values.flatMap { $0 }
-        let noteURL = URL(fileURLWithPath: notePath)
-        let noteDir = noteURL.deletingLastPathComponent().relativePath
-        let noteBase = noteURL.deletingPathExtension().lastPathComponent
-        return allConflicts.first { conflictPath in
-            let cURL = URL(fileURLWithPath: conflictPath)
-            let cDir = cURL.deletingLastPathComponent().relativePath
-            let cBase = cURL.deletingPathExtension().lastPathComponent
-            return cDir == noteDir && cBase.hasPrefix("\(noteBase).conflict-")
+        let noteDir = (notePath as NSString).deletingLastPathComponent
+        let noteBase = ((notePath as NSString).lastPathComponent as NSString).deletingPathExtension
+        // A conflict copy has no conflict of its own.
+        guard !isConflictCopyPath(notePath) else { return nil }
+        return allNotes.lazy.map(\.relativePath).first { path in
+            (path as NSString).deletingLastPathComponent == noteDir
+                && (path as NSString).lastPathComponent.hasPrefix("\(noteBase).conflict-")
         }
     }
 
@@ -518,6 +525,10 @@ import os
             navigatorSelection = [prev]
         }
 
+        // The open note may have changed on disk (sync pull, iCloud, another process):
+        // show the new text in the editor too, unless the user is in the middle of typing.
+        editorState.reconcileWithDisk()
+
         // Refresh conflict list for iCloud vaults
         if entry.type == .icloud {
             let vaultURL = URL(fileURLWithPath: vaultPath)
@@ -594,7 +605,13 @@ import os
                 self.isAdoptingICloud = true
                 startICloudAdoptionMonitoring()
             }
-            loadSelectedVault()
+            // A registry refresh (another device, the CLI, iCloud touching the file) is not
+            // a vault switch: keep the open note and whatever is being typed into it.
+            if let entry = selectedVault, loadedVaultPath == store.resolvedPath(for: entry) {
+                reloadCurrentVault()
+            } else {
+                loadSelectedVault()
+            }
             syncCoordinator.startResolving(vaults: self.vaults)
             Task { await authManager.checkAuth() }
 
@@ -636,7 +653,9 @@ import os
 
     /// Load collections and notes for the currently selected vault.
     func loadSelectedVault() {
+        editorState.resetBuffer()
         guard let entry = selectedVault else {
+            loadedVaultPath = nil
             collections = []
             fileTree = []
             notesByCollection = [:]
@@ -647,6 +666,7 @@ import os
         }
 
         let vaultPath = store.resolvedPath(for: entry)
+        loadedVaultPath = vaultPath
         let vault = Vault(path: vaultPath)
 
         do {
@@ -863,7 +883,7 @@ import os
         selectedNotePath = relativePath
         navigatorSelection = [relativePath]
         editorState.viewMode = .editor
-        editorState.editingBody = selectedNote?.body ?? ""
+        editorState.loadBuffer(selectedNote?.body ?? "")
         return relativePath
     }
 

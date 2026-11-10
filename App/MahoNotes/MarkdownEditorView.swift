@@ -21,8 +21,11 @@ struct MarkdownEditorView: NSViewRepresentable {
     /// Unused on macOS (keyboard accessory is iOS-only). Kept for API parity.
     var showKeyboardAccessory: Bool = false
 
+    /// Called when an input method starts (`true`) or finishes (`false`) composing text.
+    var onCompositionChange: ((Bool) -> Void)?
+
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
+        let scrollView = ComposingAwareTextView.scrollableTextView()
         guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
 
         textView.delegate = context.coordinator
@@ -40,22 +43,28 @@ struct MarkdownEditorView: NSViewRepresentable {
         textView.string = text
 
         context.coordinator.textView = textView
+        (textView as? ComposingAwareTextView)?.onCompositionChange = { [weak coordinator = context.coordinator] composing in
+            coordinator?.compositionChanged(composing)
+        }
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        // The coordinator outlives this value: hand it the current bindings and callbacks.
+        context.coordinator.parent = self
         context.coordinator.isUpdating = true
         defer { context.coordinator.isUpdating = false }
 
-        if textView.string != text {
-            let selectedRanges = textView.selectedRanges
-            textView.string = text
-            textView.selectedRanges = selectedRanges
-        }
+        // While an input method is composing (Zhuyin, Pinyin, Kana…), the text view holds the
+        // uncommitted "marked" text but the binding does not — AppKit only reports the text as
+        // changed once it is committed. Writing the binding back at that point would throw the
+        // composition away, and any view update (an auto-save, a sync, a vault reload) used to
+        // do exactly that. The text is reconciled when the composition ends instead.
+        context.coordinator.applyBindingTextIfNeeded(to: textView)
 
         let newFontSize = fontSize
-        if textView.font?.pointSize != CGFloat(newFontSize) {
+        if textView.font?.pointSize != CGFloat(newFontSize), !textView.hasMarkedText() {
             textView.font = .monospacedSystemFont(ofSize: newFontSize, weight: .regular)
         }
 
@@ -101,6 +110,43 @@ struct MarkdownEditorView: NSViewRepresentable {
             self.parent = parent
         }
 
+        /// Replace the text view's content with the binding's when something other than typing
+        /// changed it (a note reloaded after sync, a checkbox toggled in the preview). Never
+        /// while an input method is composing — see `updateNSView`.
+        @MainActor
+        func applyBindingTextIfNeeded(to textView: NSTextView) {
+            guard !textView.hasMarkedText() else { return }
+            let text = parent.text
+            guard textView.string != text else { return }
+
+            let length = (text as NSString).length
+            let selection = textView.selectedRanges.map { value -> NSValue in
+                let range = value.rangeValue
+                // The new text can be shorter; a range past its end raises an exception.
+                let location = min(range.location, length)
+                return NSValue(range: NSRange(location: location, length: min(range.length, length - location)))
+            }
+            let wasUpdating = isUpdating
+            isUpdating = true
+            textView.string = text
+            textView.selectedRanges = selection.isEmpty ? [NSValue(range: NSRange(location: length, length: 0))] : selection
+            // The undo stack describes edits to the text that was just replaced.
+            textView.undoManager?.removeAllActions()
+            isUpdating = wasUpdating
+        }
+
+        /// The input method started or finished composing.
+        @MainActor
+        func compositionChanged(_ composing: Bool) {
+            parent.onCompositionChange?(composing)
+            // A change that arrived mid-composition was held back; apply it now if the
+            // composition was cancelled. (A commit goes through `textDidChange` instead,
+            // and what the user typed is then the newer text.)
+            if !composing, let textView {
+                applyBindingTextIfNeeded(to: textView)
+            }
+        }
+
         func textDidChange(_ notification: Notification) {
             guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
@@ -110,6 +156,37 @@ struct MarkdownEditorView: NSViewRepresentable {
             guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             parent.onSelectionChange?(textView.selectedRange())
         }
+    }
+}
+
+/// `NSTextView` that reports when an input method starts and stops composing.
+///
+/// AppKit has no delegate callback for this: marked text is set and cleared through
+/// `NSTextInputClient`, and a cancelled composition (Esc) changes nothing a delegate sees.
+final class ComposingAwareTextView: NSTextView {
+    var onCompositionChange: (@MainActor (Bool) -> Void)?
+    private var wasComposing = false
+
+    private func reportCompositionIfChanged() {
+        let composing = hasMarkedText()
+        guard composing != wasComposing else { return }
+        wasComposing = composing
+        onCompositionChange?(composing)
+    }
+
+    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        reportCompositionIfChanged()
+    }
+
+    override func unmarkText() {
+        super.unmarkText()
+        reportCompositionIfChanged()
+    }
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        super.insertText(string, replacementRange: replacementRange)
+        reportCompositionIfChanged()
     }
 }
 
@@ -130,6 +207,9 @@ struct MarkdownEditorView: UIViewRepresentable {
 
     /// Keyboard accessory actions for iPhone.
     var showKeyboardAccessory: Bool = false
+
+    /// Called when an input method starts (`true`) or finishes (`false`) composing text.
+    var onCompositionChange: ((Bool) -> Void)?
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -154,20 +234,14 @@ struct MarkdownEditorView: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        // The coordinator outlives this value: hand it the current bindings and callbacks.
+        context.coordinator.parent = self
         context.coordinator.isUpdating = true
         defer { context.coordinator.isUpdating = false }
 
-        if textView.text != text {
-            let selectedRange = textView.selectedRange
-            let contentOffset = textView.contentOffset
-            textView.text = text
-            // Restore selection if still valid
-            if selectedRange.location + selectedRange.length <= (text as NSString).length {
-                textView.selectedRange = selectedRange
-            }
-            // Preserve scroll position (prevents jumping to bottom on text sync)
-            textView.setContentOffset(contentOffset, animated: false)
-        }
+        // Replacing the text while an input method is composing would end the composition;
+        // the text is reconciled once it finishes (see the macOS editor above).
+        context.coordinator.applyBindingTextIfNeeded(to: textView)
 
         let newFontSize = fontSize
         if textView.font?.pointSize != CGFloat(newFontSize) {
@@ -216,9 +290,45 @@ struct MarkdownEditorView: UIViewRepresentable {
             self.parent = parent
         }
 
+        private var wasComposing = false
+
+        /// Replace the text view's content with the binding's when something other than typing
+        /// changed it. Never while an input method is composing.
+        @MainActor
+        func applyBindingTextIfNeeded(to textView: UITextView) {
+            guard textView.markedTextRange == nil, textView.text != parent.text else { return }
+            let text = parent.text
+            let selectedRange = textView.selectedRange
+            let contentOffset = textView.contentOffset
+            let wasUpdating = isUpdating
+            isUpdating = true
+            textView.text = text
+            // Restore selection if still valid
+            if selectedRange.location + selectedRange.length <= (text as NSString).length {
+                textView.selectedRange = selectedRange
+            }
+            // Preserve scroll position (prevents jumping to bottom on text sync)
+            textView.setContentOffset(contentOffset, animated: false)
+            isUpdating = wasUpdating
+        }
+
+        @MainActor
+        private func reportCompositionIfChanged(_ textView: UITextView) {
+            let composing = textView.markedTextRange != nil
+            guard composing != wasComposing else { return }
+            wasComposing = composing
+            parent.onCompositionChange?(composing)
+            if !composing, textView.text != parent.text {
+                // Nothing was committed (the composition was cancelled) and a change was held
+                // back meanwhile: apply it now.
+                applyBindingTextIfNeeded(to: textView)
+            }
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             guard !isUpdating else { return }
             parent.text = textView.text
+            reportCompositionIfChanged(textView)
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {

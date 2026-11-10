@@ -51,10 +51,18 @@ import MahoNotesKit
         pendingToolbarAction = action
     }
 
-    /// Whether the editing buffer differs from the saved note body.
+    /// The note body on disk that the buffer was loaded from or last saved as.
+    /// `nil` while no note is loaded into the buffer.
+    private(set) var baseBody: String?
+
+    /// Whether an input method is composing in the editor (uncommitted Zhuyin / Pinyin / Kana).
+    /// The composing text is not part of `editingBody` yet.
+    private(set) var isComposing = false
+
+    /// Whether the editing buffer holds changes that are not on disk yet.
     var hasUnsavedChanges: Bool {
-        guard let note = appState?.selectedNote else { return false }
-        return editingBody != note.body
+        guard appState?.selectedNote != nil, let baseBody else { return false }
+        return editingBody != baseBody
     }
 
     /// Whether the current vault is read-only.
@@ -62,11 +70,75 @@ import MahoNotesKit
         appState?.selectedVault?.access == .readOnly
     }
 
-    /// Copy the note body into the editing buffer.
+    /// Copy the note body into the editing buffer, unless it already holds this note.
     func startEditing() {
         guard let note = appState?.selectedNote else { return }
-        if editingBody.isEmpty || !hasUnsavedChanges {
-            editingBody = note.body
+        if baseBody == nil {
+            loadBuffer(note.body)
+        } else {
+            reconcileWithDisk()
+        }
+    }
+
+    /// Forget the buffer — the selection moved to another note (or to none).
+    func resetBuffer() {
+        editingBody = ""
+        baseBody = nil
+    }
+
+    /// Fill the buffer with a note body that is known to match the file on disk.
+    func loadBuffer(_ body: String) {
+        editingBody = body
+        baseBody = body
+    }
+
+    /// The editor's input method started or finished composing.
+    func compositionChanged(_ composing: Bool) {
+        isComposing = composing
+        if !composing {
+            // A reload that arrived mid-composition was held back.
+            reconcileWithDisk()
+        }
+    }
+
+    /// How the note's file on disk relates to the buffer and to the version the buffer
+    /// started from.
+    enum DiskChange: Equatable {
+        /// The file is what the buffer was loaded from or last saved as.
+        case none
+        /// The file already has the buffer's text (our own save, read back).
+        case sameAsBuffer
+        /// The file changed and the buffer has no edits of its own: show the new text.
+        case incoming
+        /// The file changed and so did the buffer.
+        case diverged
+    }
+
+    nonisolated static func diskChange(buffer: String, base: String, disk: String) -> DiskChange {
+        if disk == base { return .none }
+        if disk == buffer { return .sameAsBuffer }
+        return buffer == base ? .incoming : .diverged
+    }
+
+    /// Bring the buffer up to date after the vault was re-read from disk — a sync pulled
+    /// changes, iCloud delivered a new version, another process edited the file.
+    ///
+    /// The buffer follows the disk only while it has no edits of its own and nothing is being
+    /// composed; text the user is typing is never replaced. When both sides changed, the
+    /// buffer is kept as it is and `saveNote()` settles it.
+    func reconcileWithDisk() {
+        guard let note = appState?.selectedNote, let baseBody else { return }
+        switch Self.diskChange(buffer: editingBody, base: baseBody, disk: note.body) {
+        case .none, .diverged:
+            break
+        case .sameAsBuffer:
+            self.baseBody = note.body
+        case .incoming:
+            // Mid-composition the text view holds more than the buffer does; wait for
+            // `compositionChanged(false)`.
+            if !isComposing {
+                loadBuffer(note.body)
+            }
         }
     }
 
@@ -98,6 +170,7 @@ import MahoNotesKit
         guard let appState,
               let note = appState.selectedNote,
               let entry = appState.selectedVault,
+              let baseBody,
               !isReadOnly else { return }
         guard hasUnsavedChanges else { return }
         guard !editingBody.isEmpty else { return }
@@ -121,6 +194,34 @@ import MahoNotesKit
             }
             guard let endIdx = closingIndex else { return }
 
+            // The file changed on disk since the buffer was loaded (a sync or iCloud delivered
+            // another device's edit, the CLI wrote it) and the buffer was edited too. Writing
+            // the buffer would silently undo that other edit. Same rule as sync conflicts:
+            // the version on disk stays, this device's text goes to a conflict copy.
+            // Read the body the way `parseNote` does, so this compares like with like.
+            let diskBody = splitFrontmatter(content.hasPrefix("\u{FEFF}") ? String(content.dropFirst()) : content).body
+            switch Self.diskChange(buffer: editingBody, base: baseBody, disk: diskBody) {
+            case .none, .incoming:
+                break
+            case .sameAsBuffer:
+                // Already on disk; nothing to write.
+                self.baseBody = diskBody
+                return
+            case .diverged:
+                // Replacing the editor's text would end a composition in progress; the
+                // commit that follows comes back through here.
+                guard !isComposing else { return }
+                let conflictPath = Self.conflictCopyPath(for: note.relativePath, vaultPath: vaultPath)
+                let conflictContent = lines[0...endIdx].joined(separator: "\n") + "\n" + editingBody
+                try conflictContent.write(
+                    toFile: (vaultPath as NSString).appendingPathComponent(conflictPath),
+                    atomically: true, encoding: .utf8
+                )
+                loadBuffer(diskBody)
+                appState.reloadCurrentVault()
+                return
+            }
+
             // Update the `updated` timestamp in frontmatter
             var frontmatterLines = Array(lines[0...endIdx])
             let isoFormatter = ISO8601DateFormatter()
@@ -133,8 +234,10 @@ import MahoNotesKit
                 frontmatterLines.insert("updated: \(now)", at: endIdx)
             }
 
-            let newContent = frontmatterLines.joined(separator: "\n") + "\n" + editingBody
+            let savedBody = editingBody
+            let newContent = frontmatterLines.joined(separator: "\n") + "\n" + savedBody
             try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
+            self.baseBody = savedBody
             appState.syncCoordinator.notifyContentChanged(vault: entry)
 
             // Reload the note in allNotes
@@ -147,6 +250,26 @@ import MahoNotesKit
         } catch {
             // Silently fail for now — could add error reporting later
         }
+    }
+
+    /// Path (relative to the vault) for a conflict copy of `relativePath`, in the same
+    /// `note.conflict-{DeviceName}.md` form the sync engines' copies end up with.
+    private static func conflictCopyPath(for relativePath: String, vaultPath: String) -> String {
+        let directory = (relativePath as NSString).deletingLastPathComponent
+        let filename = (relativePath as NSString).lastPathComponent
+        let ext = (filename as NSString).pathExtension
+        let base = (filename as NSString).deletingPathExtension
+        func path(_ suffix: String) -> String {
+            let name = "\(base).conflict-\(DeviceInfo.filenameSafe)\(suffix)" + (ext.isEmpty ? "" : ".\(ext)")
+            return directory.isEmpty ? name : "\(directory)/\(name)"
+        }
+        var candidate = path("")
+        var counter = 2
+        while FileManager.default.fileExists(atPath: (vaultPath as NSString).appendingPathComponent(candidate)) {
+            candidate = path("-\(counter)")
+            counter += 1
+        }
+        return candidate
     }
 
     /// Re-embed a single note's vector chunks in the background after save.
@@ -243,7 +366,7 @@ import MahoNotesKit
                 appState.updateNote(updated, replacing: note.relativePath)
 
                 // Always sync the editing buffer so startEditing() picks up the change
-                editingBody = updated.body
+                loadBuffer(updated.body)
 
                 // Re-embed for vector search
                 reembedNoteInBackground(updated, vaultPath: vaultPath)
@@ -256,7 +379,7 @@ import MahoNotesKit
     /// Revert editing buffer and switch to preview.
     func cancelEditing() {
         if let note = appState?.selectedNote {
-            editingBody = note.body
+            loadBuffer(note.body)
         }
         viewMode = .preview
     }

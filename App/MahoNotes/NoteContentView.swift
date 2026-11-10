@@ -346,7 +346,10 @@ struct NoteContentView: View {
             onComplexAction: { action in
                 handleToolbarAction(action)
             },
-            showKeyboardAccessory: true
+            showKeyboardAccessory: true,
+            onCompositionChange: { composing in
+                appState.editorState.compositionChanged(composing)
+            }
         )
         .task(id: appState.editorState.editingBody) {
             // Debounced auto-save: 2s after last keystroke

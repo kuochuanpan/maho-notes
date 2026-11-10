@@ -34,8 +34,7 @@ struct MarkdownWebView: NSViewRepresentable, Equatable {
         context.coordinator.lastBaseURL = baseURL
         // After a checkbox toggle the DOM already shows the correct state —
         // just update lastHTML for future comparisons, skip loadHTMLString.
-        if context.coordinator.skipNextHTMLReload {
-            context.coordinator.skipNextHTMLReload = false
+        if context.coordinator.consumeSkipNextHTMLReload() {
             return
         }
         webView.loadHTMLString(html, baseURL: baseURL)
@@ -79,8 +78,7 @@ struct MarkdownWebView: UIViewRepresentable, Equatable {
         context.coordinator.lastBaseURL = baseURL
         // After a checkbox toggle the DOM already shows the correct state —
         // just update lastHTML for future comparisons, skip loadHTMLString.
-        if context.coordinator.skipNextHTMLReload {
-            context.coordinator.skipNextHTMLReload = false
+        if context.coordinator.consumeSkipNextHTMLReload() {
             return
         }
         webView.loadHTMLString(html, baseURL: baseURL)
@@ -127,10 +125,24 @@ extension MarkdownWebView {
             }
         }
 
-        /// When true, the next `updateNSView`/`updateUIView` will update `lastHTML`
+        /// When set, the next `updateNSView`/`updateUIView` will update `lastHTML`
         /// but skip `loadHTMLString` — the DOM already reflects the correct state
         /// (e.g. after a checkbox toggle handled natively by the browser).
-        var skipNextHTMLReload = false
+        ///
+        /// It expires: a toggle that ends up changing nothing (the file could not be
+        /// written, the box was already in that state on disk) causes no update to consume
+        /// it, and the next real change — a sync, another note — must not be the one skipped.
+        private var skipHTMLReloadUntil: Date?
+
+        func skipNextHTMLReload() {
+            skipHTMLReloadUntil = Date().addingTimeInterval(1)
+        }
+
+        func consumeSkipNextHTMLReload() -> Bool {
+            defer { skipHTMLReloadUntil = nil }
+            guard let until = skipHTMLReloadUntil else { return false }
+            return Date() < until
+        }
 
         // MARK: - WKScriptMessageHandler
 
@@ -145,7 +157,7 @@ extension MarkdownWebView {
             guard let onCheckboxToggle else { return }
             // The browser already toggled the checkbox visually — skip the next
             // HTML reload to avoid scroll-to-top.
-            skipNextHTMLReload = true
+            skipNextHTMLReload()
             onCheckboxToggle(index, checked)
         }
     }
