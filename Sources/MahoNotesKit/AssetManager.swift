@@ -33,6 +33,9 @@ public enum AssetManager {
         for match in matches {
             guard let captureRange = Range(match.range(at: 1), in: markdown) else { continue }
             let path = String(markdown[captureRange])
+            // `_assets/../../x` points outside the assets folder (and possibly the vault);
+            // moving or copying a note must never carry such a file along.
+            if path.split(separator: "/").contains("..") { continue }
             if !paths.contains(path) {
                 paths.append(path)
             }

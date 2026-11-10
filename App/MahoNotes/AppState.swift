@@ -894,7 +894,7 @@ import os
         let indexPath = (subDir as NSString).appendingPathComponent("_index.md")
         let content = """
         ---
-        title: \(name)
+        title: \(YAMLFormat.scalar(name))
         ---
         """
         try content.write(toFile: indexPath, atomically: true, encoding: .utf8)

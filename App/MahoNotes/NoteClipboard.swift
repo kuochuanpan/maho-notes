@@ -88,16 +88,13 @@ import MahoNotesKit
                 try fm.copyItem(atPath: sourceAbs, toPath: targetAbs)
 
                 // Update title in frontmatter to include (Copy) suffix
-                if var content = try? String(contentsOfFile: targetAbs, encoding: .utf8) {
-                    let lines = content.components(separatedBy: "\n")
-                    if let titleIdx = lines.firstIndex(where: { $0.hasPrefix("title:") }) {
-                        var mutableLines = lines
-                        let originalTitle = mutableLines[titleIdx]
-                            .replacingOccurrences(of: "title:", with: "")
-                            .trimmingCharacters(in: .whitespaces)
-                        mutableLines[titleIdx] = "title: \(originalTitle) \(copySuffix)"
-                        content = mutableLines.joined(separator: "\n")
-                        try? content.write(toFile: targetAbs, atomically: true, encoding: .utf8)
+                // Read the title as YAML and write it back quoted when needed: appending the
+                // suffix to the raw line would turn `title: "Plan: Q4"` into invalid YAML.
+                if let content = try? String(contentsOfFile: targetAbs, encoding: .utf8) {
+                    var document = FrontmatterDocument(content)
+                    if let title = (try? document.yaml())?["title"] {
+                        document.set("title", string: "\(title) \(copySuffix)")
+                        try? document.rendered().write(toFile: targetAbs, atomically: true, encoding: .utf8)
                     }
                 }
 

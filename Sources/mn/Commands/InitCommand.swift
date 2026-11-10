@@ -345,7 +345,7 @@ struct InitCommand: AsyncParsableCommand {
         } else {
             skeleton = """
             # Maho Notes — global device config
-            author: \(authorInput)
+            author: \(YAMLFormat.scalar(authorInput))
             auth: {}
             embed:
               model: builtin

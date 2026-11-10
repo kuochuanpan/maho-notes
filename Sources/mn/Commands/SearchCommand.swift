@@ -23,8 +23,14 @@ struct SearchCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Hybrid search combining keyword + semantic (RRF)")
     var hybrid = false
 
-    @Option(name: .long, help: "Maximum number of results (default 10)")
+    @Option(name: .long, help: "Maximum number of results")
     var limit: Int = 10
+
+    func validate() throws {
+        if limit < 1 {
+            throw ValidationError("--limit must be at least 1.")
+        }
+    }
 
     func run() async throws {
         let store = VaultStore.shared
@@ -59,7 +65,7 @@ struct SearchCommand: AsyncParsableCommand {
         let vault = vaultOption.makeVault()
         do {
             let results = try ftsSearch(vault: vault)
-            outputResults(results, vaultName: nil, fts: true)
+            outputResults(Array(results.prefix(limit)), vaultName: nil, fts: true)
         } catch {
             FileHandle.standardError.write(
                 "⚠️  FTS5 search failed (\(error.localizedDescription)), falling back to substring search.\n"
@@ -70,7 +76,7 @@ struct SearchCommand: AsyncParsableCommand {
                     .data(using: .utf8)!
             )
             let results = try vault.searchNotes(query: query)
-            outputSubstringResults(results, vaultName: nil)
+            outputSubstringResults(Array(results.prefix(limit)), vaultName: nil)
         }
     }
 
@@ -127,7 +133,7 @@ struct SearchCommand: AsyncParsableCommand {
                     "score": r.score,
                 ]
             }
-            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
+            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
                let str = String(data: data, encoding: .utf8) {
                 print(str)
             }
@@ -165,7 +171,7 @@ struct SearchCommand: AsyncParsableCommand {
                 if let vectorRank = r.vectorRank { d["vector_rank"] = vectorRank }
                 return d
             }
-            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
+            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
                let str = String(data: data, encoding: .utf8) {
                 print(str)
             }
@@ -196,113 +202,95 @@ struct SearchCommand: AsyncParsableCommand {
 
     private func runAllVaults(entries: [VaultEntry]) throws {
         let store = VaultStore.shared
-        if outputOption.json {
-            var jsonArray: [[String: Any]] = []
-            for entry in entries {
-                let vault = Vault(path: store.resolvedPath(for: entry))
-                if let results = try? ftsSearch(vault: vault) {
-                    for r in results {
-                        jsonArray.append([
-                            "vault": entry.name,
-                            "path": r.path,
-                            "title": r.title,
-                            "tags": r.tags,
-                            "snippet": r.snippet,
-                            "rank": r.rank,
-                        ])
-                    }
-                } else if let notes = try? vault.searchNotes(query: query) {
-                    for n in notes {
-                        jsonArray.append([
-                            "vault": entry.name,
-                            "path": n.relativePath,
-                            "title": n.title,
-                            "tags": n.tags,
-                            "snippet": "",
-                        ])
-                    }
-                }
+
+        // Gather hits from every vault, then keep the best `limit` overall.
+        // bm25 ranks are negative, lower is better; substring hits have no rank and go last.
+        var ranked: [(vault: String, result: SearchResult)] = []
+        var substring: [(vault: String, note: Note)] = []
+        for entry in entries {
+            let vault = Vault(path: store.resolvedPath(for: entry))
+            if let results = try? ftsSearch(vault: vault) {
+                ranked.append(contentsOf: results.map { (entry.name, $0) })
+            } else if let notes = try? vault.searchNotes(query: query) {
+                substring.append(contentsOf: notes.map { (entry.name, $0) })
             }
-            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
-               let str = String(data: data, encoding: .utf8) {
+        }
+        ranked.sort { $0.result.rank < $1.result.rank }
+        ranked = Array(ranked.prefix(limit))
+        substring = Array(substring.prefix(max(0, limit - ranked.count)))
+
+        if outputOption.json {
+            var jsonArray: [[String: Any]] = ranked.map { hit in
+                [
+                    "vault": hit.vault,
+                    "path": hit.result.path,
+                    "title": hit.result.title,
+                    "tags": hit.result.tags,
+                    "snippet": hit.result.snippet,
+                    "rank": hit.result.rank,
+                ]
+            }
+            jsonArray.append(contentsOf: substring.map { hit in
+                [
+                    "vault": hit.vault,
+                    "path": hit.note.relativePath,
+                    "title": hit.note.title,
+                    "tags": hit.note.tags,
+                    "snippet": "",
+                ]
+            })
+            if let data = try? JSONSerialization.data(
+                withJSONObject: jsonArray,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            ), let str = String(data: data, encoding: .utf8) {
                 print(str)
             }
             return
         }
 
-        var totalCount = 0
-        var output: [(vaultName: String, results: [SearchResult])] = []
-        var substringOutput: [(vaultName: String, results: [Note])] = []
-        var usedFts = true
-
-        for entry in entries {
-            let path = store.resolvedPath(for: entry)
-            let vault = Vault(path: path)
-            if let results = try? ftsSearch(vault: vault) {
-                if !results.isEmpty {
-                    output.append((entry.name, results))
-                    totalCount += results.count
-                }
-            } else {
-                usedFts = false
-                if let results = try? vault.searchNotes(query: query), !results.isEmpty {
-                    substringOutput.append((entry.name, results))
-                    totalCount += results.count
-                }
-            }
-        }
-
+        let totalCount = ranked.count + substring.count
         if totalCount == 0 {
             print("No results for: \(query)")
             return
         }
 
-        let label = usedFts ? "" : " (substring)"
-        print("Found \(totalCount) result(s) for \"\(query)\"\(label):\n")
+        print("Found \(totalCount) result(s) for \"\(query)\":\n")
 
-        for (vaultName, results) in output {
-            for result in results {
-                let tags = result.tags.isEmpty ? "" : " [\(result.tags.joined(separator: ", "))]"
-                print("  [\(vaultName)] \(result.path)")
-                print("    \(result.title)\(tags)")
-                if !result.snippet.isEmpty {
-                    print("    … \(result.snippet)")
-                }
-                print()
+        for (vaultName, result) in ranked {
+            let tags = result.tags.isEmpty ? "" : " [\(result.tags.joined(separator: ", "))]"
+            print("  [\(vaultName)] \(result.path)")
+            print("    \(result.title)\(tags)")
+            if !result.snippet.isEmpty {
+                print("    … \(result.snippet)")
             }
+            print()
         }
-        for (vaultName, notes) in substringOutput {
-            for note in notes {
-                let tags = note.tags.isEmpty ? "" : " [\(note.tags.joined(separator: ", "))]"
-                print("  [\(vaultName)] \(note.relativePath)")
-                print("    \(note.title)\(tags)")
-                let lines = note.body.components(separatedBy: "\n")
-                let queryLower = query.lowercased()
-                for line in lines {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty && trimmed.lowercased().contains(queryLower) {
-                        print("    … \(trimmed.prefix(120))")
-                        break
-                    }
+        for (vaultName, note) in substring {
+            let tags = note.tags.isEmpty ? "" : " [\(note.tags.joined(separator: ", "))]"
+            print("  [\(vaultName)] \(note.relativePath)")
+            print("    \(note.title)\(tags)")
+            let queryLower = query.lowercased()
+            for line in note.body.components(separatedBy: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty && trimmed.lowercased().contains(queryLower) {
+                    print("    … \(trimmed.prefix(120))")
+                    break
                 }
-                print()
             }
+            print()
         }
     }
 
     // MARK: - Single-vault helpers
 
+    /// Keyword search against an index that is brought up to date first, so notes
+    /// written or edited since the last `mn index` (by this CLI, the app, or a sync) are found.
     private func ftsSearch(vault: Vault) throws -> [SearchResult] {
         if !SearchIndex.indexExists(vaultPath: vault.path) {
-            FileHandle.standardError.write(
-                "Building search index...\n".data(using: .utf8)!
-            )
-            let index = try SearchIndex(vaultPath: vault.path)
-            let notes = try vault.allNotes()
-            try index.buildIndex(notes: notes)
-            return try index.search(query: query)
+            printError("Building search index...")
         }
         let index = try SearchIndex(vaultPath: vault.path)
+        try index.refresh(from: vault)
         return try index.search(query: query)
     }
 
@@ -319,7 +307,7 @@ struct SearchCommand: AsyncParsableCommand {
                 if let v = vaultName { d["vault"] = v }
                 return d
             }
-            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys]),
+            if let data = try? JSONSerialization.data(withJSONObject: jsonArray, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
                let str = String(data: data, encoding: .utf8) {
                 print(str)
             }
@@ -346,7 +334,7 @@ struct SearchCommand: AsyncParsableCommand {
 
     private func outputSubstringResults(_ results: [Note], vaultName: String?) {
         if outputOption.json {
-            try? printJSON(results)
+            try? printJSON(results.map { NoteOutput($0, includeBody: false) })
             return
         }
 

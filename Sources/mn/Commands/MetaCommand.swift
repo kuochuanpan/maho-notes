@@ -1,12 +1,18 @@
 import ArgumentParser
 import Foundation
 import MahoNotesKit
-import Yams
 
 struct MetaCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "meta",
-        abstract: "Show or modify note frontmatter"
+        abstract: "Show or modify note frontmatter",
+        discussion: """
+            Only the fields you change are rewritten; the rest of the frontmatter and \
+            the body stay exactly as they are. Settable fields: \
+            \(NoteMetadataChanges.settableFields.joined(separator: ", ")).
+
+              mn meta notes/plan.md --set title="Plan: Q4" --add-tag roadmap --unset series
+            """
     )
 
     @OptionGroup var vaultOption: VaultOption
@@ -18,163 +24,78 @@ struct MetaCommand: ParsableCommand {
     @Option(name: .long, help: "Set a frontmatter field (key=value)")
     var set: [String] = []
 
-    @Option(name: .customLong("add-tag"), help: "Add a tag")
+    @Option(name: .long, help: "Remove a frontmatter field")
+    var unset: [String] = []
+
+    @Option(name: .customLong("add-tag"), help: "Add a tag (repeat the option, or separate tags with commas)")
     var addTags: [String] = []
 
-    @Option(name: .customLong("remove-tag"), help: "Remove a tag")
+    @Option(name: .customLong("remove-tag"), help: "Remove a tag (repeat the option, or separate tags with commas)")
     var removeTags: [String] = []
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        let vault = vaultOption.makeVault()
-        let filePath = (vault.path as NSString).appendingPathComponent(path)
+        let vault = try vaultOption.existingVault()
+        let relativePath = try vault.resolveNotePath(path)
 
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            print("Note not found: \(path)")
-            throw ExitCode.failure
+        var changes = NoteMetadataChanges(
+            unset: unset,
+            addTags: splitTags(addTags),
+            removeTags: splitTags(removeTags)
+        )
+        for pair in set {
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty else {
+                throw CLIError(
+                    code: "invalid_arguments",
+                    message: "Invalid --set value '\(pair)'",
+                    hint: "Use key=value, for example --set title=\"New title\"."
+                )
+            }
+            changes.set.append((String(parts[0]).trimmingCharacters(in: .whitespaces), String(parts[1])))
         }
 
-        let content = try String(contentsOfFile: filePath, encoding: .utf8)
-        let (yamlStr, body) = splitFrontmatter(content)
-
-        guard let yamlStr else {
-            print("No frontmatter found in: \(path)")
-            throw ExitCode.failure
-        }
-
-        guard var yaml = try Yams.load(yaml: yamlStr) as? [String: Any] else {
-            print("Invalid frontmatter in: \(path)")
-            throw ExitCode.failure
-        }
-
-        let hasModifications = !set.isEmpty || !addTags.isEmpty || !removeTags.isEmpty
-
-        if hasModifications {
-            try vaultOption.validateWritable()
-            // Valid frontmatter keys that can be set via --set
-            let validSetKeys: Set<String> = [
-                "title", "public", "slug", "author", "draft", "order", "series",
-            ]
-            // Keys that must NOT be set (inferred or managed differently)
-            let blockedKeys: Set<String> = [
-                "collection",  // inferred from path
-                "tags",        // use --add-tag / --remove-tag
-                "created",     // auto-managed
-                "updated",     // auto-managed
-            ]
-
-            // Apply --set modifications
-            for pair in set {
-                let parts = pair.split(separator: "=", maxSplits: 1)
-                guard parts.count == 2 else {
-                    print("Invalid --set format: \(pair) (expected key=value)")
-                    throw ExitCode.failure
-                }
-                let key = String(parts[0])
-                let value = String(parts[1])
-
-                if blockedKeys.contains(key) {
-                    if key == "collection" {
-                        print("Error: 'collection' is inferred from the file path — cannot be set in frontmatter.")
-                    } else if key == "tags" {
-                        print("Error: Use --add-tag / --remove-tag to modify tags.")
-                    } else {
-                        print("Error: '\(key)' is auto-managed and cannot be set directly.")
-                    }
-                    throw ExitCode.failure
-                }
-
-                guard validSetKeys.contains(key) else {
-                    let valid = validSetKeys.sorted().joined(separator: ", ")
-                    print("Error: Unknown frontmatter key '\(key)'. Valid keys: \(valid)")
-                    throw ExitCode.failure
-                }
-
-                // Safety: warn on public=true
-                if key == "public" && value == "true" {
-                    print("⚠️  Setting public=true — this note will be publishable via `mn publish`.")
-                }
-
-                // Parse booleans and integers
-                if value == "true" {
-                    yaml[key] = true
-                } else if value == "false" {
-                    yaml[key] = false
-                } else if let intVal = Int(value) {
-                    yaml[key] = intVal
-                } else {
-                    yaml[key] = value
-                }
-            }
-
-            // Apply tag modifications
-            var tags: [String]
-            if let tagArray = yaml["tags"] as? [String] {
-                tags = tagArray
-            } else if let tagStr = yaml["tags"] as? String {
-                tags = tagStr.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            } else {
-                tags = []
-            }
-
-            for tag in addTags where !tags.contains(tag) {
-                tags.append(tag)
-            }
-            for tag in removeTags {
-                tags.removeAll { $0 == tag }
-            }
-            if !addTags.isEmpty || !removeTags.isEmpty {
-                yaml["tags"] = tags
-            }
-
-            // Update the `updated` timestamp
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
-            yaml["updated"] = dateFormatter.string(from: Date())
-
-            // Rebuild frontmatter preserving original line-by-line format as much as possible
-            var yamlLines = yamlStr.components(separatedBy: "\n")
-
-            // Update changed keys in-place
-            for (key, value) in yaml {
-                let formattedValue: String
-                if let arr = value as? [String] {
-                    formattedValue = "[\(arr.joined(separator: ", "))]"
-                } else if let bool = value as? Bool {
-                    formattedValue = bool ? "true" : "false"
-                } else {
-                    formattedValue = "\(value)"
-                }
-
-                // Find and replace the line, or append if new
-                let prefix = "\(key):"
-                if let idx = yamlLines.firstIndex(where: { $0.hasPrefix(prefix) }) {
-                    yamlLines[idx] = "\(key): \(formattedValue)"
-                } else {
-                    yamlLines.append("\(key): \(formattedValue)")
-                }
-            }
-
-            let newYaml = yamlLines.joined(separator: "\n")
-            let newContent = "---\n\(newYaml)\n---\(body)"
-            try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
-            print("Updated frontmatter for: \(path)")
-        } else if outputOption.json {
-            // Parse as Note for structured JSON output
-            let note = try parseNote(at: filePath, relativeTo: vault.path)
-            if let note {
-                try printJSON(note)
-            }
+        if changes.isEmpty {
+            try show(vault: vault, relativePath: relativePath)
             return
-        } else {
-            // Just show frontmatter
-            for (key, value) in yaml.sorted(by: { $0.key < $1.key }) {
-                if let arr = value as? [String] {
-                    print("\(key): [\(arr.joined(separator: ", "))]")
-                } else {
-                    print("\(key): \(value)")
-                }
+        }
+
+        try vaultOption.validateWritable()
+        let note = try vault.updateNoteMetadata(relativePath: relativePath, changes: changes)
+
+        if outputOption.json {
+            try printJSON(NoteActionOutput(
+                action: "updated",
+                path: relativePath,
+                absolutePath: vault.absolutePath(for: relativePath),
+                note: NoteOutput(note, includeBody: false)
+            ))
+            return
+        }
+        if note.isPublic, changes.set.contains(where: { $0.field == "public" }) {
+            print("Note is now public — `mn publish` will include it in the site.")
+        }
+        print("Updated frontmatter for: \(relativePath)")
+    }
+
+    private func show(vault: Vault, relativePath: String) throws {
+        let filePath = vault.absolutePath(for: relativePath)
+        if outputOption.json {
+            guard let note = try parseNote(at: filePath, relativeTo: vault.path) else {
+                throw NoteError.noteNotFound(relativePath, suggestions: [])
             }
+            // Metadata only — `mn show --json` returns the body.
+            try printJSON(NoteOutput(note, includeBody: false, absolutePath: filePath))
+            return
+        }
+
+        let document = FrontmatterDocument(try String(contentsOfFile: filePath, encoding: .utf8))
+        guard document.hasFrontmatter else {
+            print("No frontmatter in: \(relativePath)")
+            return
+        }
+        // The frontmatter as written in the file.
+        for line in document.lines {
+            print(line)
         }
     }
 }

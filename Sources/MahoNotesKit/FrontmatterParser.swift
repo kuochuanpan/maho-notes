@@ -4,33 +4,8 @@ import Yams
 /// Splits a markdown file into (YAML frontmatter string, body content).
 /// Returns nil for frontmatter if no valid `---` delimiters are found.
 public func splitFrontmatter(_ content: String) -> (yaml: String?, body: String) {
-    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasPrefix("---") else {
-        return (nil, content)
-    }
-
     let lines = content.components(separatedBy: "\n")
-    // Find the opening --- line (may not be line 0 if there's leading whitespace)
-    var openingIndex: Int?
-    for i in 0..<lines.count {
-        if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
-            openingIndex = i
-            break
-        }
-    }
-    guard let startIdx = openingIndex else {
-        return (nil, content)
-    }
-    // Find closing ---
-    var closingIndex: Int?
-    for i in (startIdx + 1)..<lines.count {
-        if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
-            closingIndex = i
-            break
-        }
-    }
-
-    guard let endIdx = closingIndex else {
+    guard let (startIdx, endIdx) = locateFrontmatter(in: lines, content: content) else {
         return (nil, content)
     }
 
@@ -56,32 +31,18 @@ private func formatDateField(_ value: Any?) -> String {
 /// Rewrites the file in place, preserving all other content.
 public func setFrontmatterPublic(filePath: String, isPublic: Bool) throws {
     let content = try String(contentsOfFile: filePath, encoding: .utf8)
-    let (yamlStr, body) = splitFrontmatter(content)
+    var document = FrontmatterDocument(content)
 
-    guard var yamlStr else {
+    guard document.hasFrontmatter else {
         throw NSError(domain: "MahoNotesKit", code: 1, userInfo: [NSLocalizedDescriptionKey: "No frontmatter found in \(filePath)"])
     }
 
-    // Replace or add the public field
-    let publicLine = "public: \(isPublic)"
-    let lines = yamlStr.components(separatedBy: "\n")
-    var found = false
-    let updatedLines = lines.map { line -> String in
-        if line.trimmingCharacters(in: .whitespaces).hasPrefix("public:") {
-            found = true
-            return publicLine
-        }
-        return line
+    let wasReadable = (try? document.yaml()) != nil
+    document.set("public", bool: isPublic)
+    if wasReadable, (try? document.yaml())?["public"] as? Bool != isPublic {
+        throw NSError(domain: "MahoNotesKit", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not set `public` in the frontmatter of \(filePath)"])
     }
-
-    if found {
-        yamlStr = updatedLines.joined(separator: "\n")
-    } else {
-        yamlStr += "\n" + publicLine
-    }
-
-    let output = "---\n\(yamlStr)\n---\(body)"
-    try output.write(toFile: filePath, atomically: true, encoding: .utf8)
+    try document.rendered().write(toFile: filePath, atomically: true, encoding: .utf8)
 }
 
 /// Parses a markdown file at the given path into a Note

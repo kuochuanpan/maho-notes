@@ -9,6 +9,7 @@ struct DeleteCommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Relative path to the note")
     var path: String
@@ -17,29 +18,18 @@ struct DeleteCommand: ParsableCommand {
     var force: Bool = false
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        try vaultOption.validateWritable()
-        let vault = vaultOption.makeVault()
-        let filePath = (vault.path as NSString).appendingPathComponent(path)
-        let fm = FileManager.default
+        let vault = try vaultOption.writableVault()
+        let relativePath = try vault.resolveNotePath(path)
+        let trashed = try vault.deleteNote(relativePath: relativePath, permanently: force)
 
-        guard fm.fileExists(atPath: filePath) else {
-            print("Note not found: \(path)")
-            throw ExitCode.failure
+        if outputOption.json {
+            try printJSON(NoteActionOutput(
+                action: trashed ? "trashed" : "deleted",
+                path: relativePath,
+                absolutePath: nil
+            ))
+            return
         }
-
-        if force {
-            try fm.removeItem(atPath: filePath)
-            print("Deleted: \(path)")
-        } else {
-            #if os(macOS)
-            let fileURL = URL(fileURLWithPath: filePath)
-            try fm.trashItem(at: fileURL, resultingItemURL: nil)
-            print("Moved to trash: \(path)")
-            #else
-            try fm.removeItem(atPath: filePath)
-            print("Deleted: \(path)")
-            #endif
-        }
+        print(trashed ? "Moved to trash: \(relativePath)" : "Deleted: \(relativePath)")
     }
 }

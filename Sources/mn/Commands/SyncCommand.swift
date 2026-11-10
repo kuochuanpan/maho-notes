@@ -34,16 +34,7 @@ struct SyncCommand: ParsableCommand {
         do {
             result = try gitSync.sync()
         } catch {
-            if outputOption.json {
-                let output = ["error": "\(error)"]
-                if let data = try? JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]),
-                   let str = String(data: data, encoding: .utf8) {
-                    print(str)
-                }
-            } else {
-                print("Sync failed: \(error)")
-            }
-            throw ExitCode.failure
+            throw CLIError(code: "sync_failed", message: "Sync failed: \(error)")
         }
 
         if !outputOption.json {
@@ -88,6 +79,7 @@ struct SyncCommand: ParsableCommand {
         }
 
         var results: [[String: Any]] = []
+        var failures = 0
 
         let store = VaultStore.shared
         for entry in syncable {
@@ -117,6 +109,7 @@ struct SyncCommand: ParsableCommand {
                     }
                 }
             } catch {
+                failures += 1
                 if !outputOption.json {
                     print("  [\(entry.name)] Failed: \(error.localizedDescription)")
                 } else {
@@ -129,6 +122,10 @@ struct SyncCommand: ParsableCommand {
            let data = try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]),
            let str = String(data: data, encoding: .utf8) {
             print(str)
+        }
+        // The per-vault results are the output; the exit status says whether all succeeded.
+        if failures > 0 {
+            throw ExitCode.failure
         }
     }
 }

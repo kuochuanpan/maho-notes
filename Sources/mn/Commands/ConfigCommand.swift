@@ -91,6 +91,7 @@ struct ConfigSetSubcommand: ParsableCommand {
     )
 
     @OptionGroup var vaultOption: VaultOption
+    @OptionGroup var outputOption: OutputOption
 
     @Argument(help: "Config key (e.g., author.name, github.repo)")
     var key: String
@@ -103,6 +104,10 @@ struct ConfigSetSubcommand: ParsableCommand {
         let vaultPath = (vaultOption.resolvedPath as NSString).expandingTildeInPath
         let config = Config(vaultPath: vaultPath)
         try config.setValue(key: key, value: value)
+        if outputOption.json {
+            try printJSON(["key": key, "value": value])
+            return
+        }
         print("Set \(key) = \(value)")
     }
 }

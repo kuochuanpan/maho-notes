@@ -14,14 +14,8 @@ struct OpenCommand: ParsableCommand {
     var path: String
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        let vault = vaultOption.makeVault()
-        let filePath = (vault.path as NSString).appendingPathComponent(path)
-
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            print("Note not found: \(path)")
-            throw ExitCode.failure
-        }
+        let vault = try vaultOption.existingVault()
+        let filePath = vault.absolutePath(for: try vault.resolveNotePath(path))
 
         if let editor = ProcessInfo.processInfo.environment["EDITOR"] {
             let process = Process()
@@ -37,8 +31,7 @@ struct OpenCommand: ParsableCommand {
             try process.run()
             process.waitUntilExit()
             #else
-            print("Set $EDITOR to open notes in your preferred editor.")
-            throw ExitCode.failure
+            throw CLIError(code: "no_editor", message: "Set $EDITOR to open notes in your preferred editor.")
             #endif
         }
     }

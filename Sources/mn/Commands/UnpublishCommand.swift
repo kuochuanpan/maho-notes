@@ -15,16 +15,10 @@ struct UnpublishCommand: ParsableCommand {
     var path: String
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        try vaultOption.validateWritable()
-        let vault = vaultOption.makeVault()
+        let vault = try vaultOption.writableVault()
         let vaultPath = vault.path
-        let filePath = (vaultPath as NSString).appendingPathComponent(path)
-
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            print("Note not found: \(path)")
-            throw ExitCode.failure
-        }
+        let path = try vault.resolveNotePath(path)
+        let filePath = vault.absolutePath(for: path)
 
         // Set public: false in frontmatter
         try setFrontmatterPublic(filePath: filePath, isPublic: false)
@@ -41,13 +35,13 @@ struct UnpublishCommand: ParsableCommand {
 
         try manifest.save(to: vaultPath)
 
+        // Git commit + push, before the result is printed (see PublishCommand).
+        try gitCommitAndPush(vaultPath: vaultPath, message: "unpublish: \(path)")
+
         if outputOption.json {
             try printJSON(["unpublished": path])
         } else {
             print("Unpublished: \(path)")
         }
-
-        // Git commit + push
-        try gitCommitAndPush(vaultPath: vaultPath, message: "unpublish: \(path)")
     }
 }

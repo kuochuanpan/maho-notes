@@ -34,7 +34,7 @@ Get it from the [App Store](https://apps.apple.com/us/app/maho-notes/id676057221
 
 ```bash
 brew tap mahopan/tap
-brew install maho-notes    # installs the `mn` binary
+brew install mn
 ```
 
 ### Build from source
@@ -56,7 +56,8 @@ open MahoNotes.xcodeproj
 
 ```bash
 mn init                              # set up your first vault
-mn new "Hello World" --collection notes
+mn new "Hello World" --collection notes --body "My first note."
+mn write notes/hello-world.md --append --body "- one more thought"
 mn list
 mn search "hello"
 mn sync                              # sync with GitHub
@@ -67,8 +68,11 @@ mn sync                              # sync with GitHub
 | Command | Description |
 |---------|-------------|
 | `mn init` | Set up Maho Notes or add a new vault |
-| `mn new` | Create a new note |
-| `mn list` | List notes grouped by collection |
+| `mn new` | Create a new note, optionally with its body (`--body`, `--stdin`, `--file`) |
+| `mn write` | Replace a note's body, or append to it |
+| `mn edit` | Replace exact text in a note's body |
+| `mn move` | Move a note to another collection |
+| `mn list` | List notes grouped by collection (`--sort`, `--limit`, filters) |
 | `mn show` | Display a note with metadata |
 | `mn search` | Full-text, semantic, or hybrid search |
 | `mn meta` | Show or modify note frontmatter |
@@ -79,7 +83,7 @@ mn sync                              # sync with GitHub
 | `mn stats` | Show vault statistics |
 | `mn index` | Build or rebuild search index |
 | `mn sync` | Sync vault with GitHub |
-| `mn vault` | Manage vaults (list, add, remove) |
+| `mn vault` | Manage vaults (list, add, remove, set-primary, info, find) |
 | `mn model` | Manage embedding models |
 | `mn publish` | Publish public notes as a static site |
 | `mn unpublish` | Mark a note as private |
@@ -95,6 +99,24 @@ mn skill --json    # machine-readable format
 ```
 
 The `mn skill` command outputs everything an AI agent needs to use the CLI correctly — commands, guardrails, frontmatter rules, search modes, and vault structure.
+
+An agent can write a complete note in one call and get back where it landed:
+
+```bash
+mn new "Meeting notes" --collection work --tags "meeting, q4" --stdin --json <<'EOF'
+## Decisions
+- Ship on Friday
+EOF
+# {"action": "created", "path": "work/meeting-notes.md", "absolutePath": "…", "note": {…}}
+
+mn edit work/meeting-notes.md --find "Friday" --replace "Monday"
+mn meta work/meeting-notes.md --add-tag decided
+```
+
+- **Notes stay valid.** Titles and tags with YAML syntax in them (`Plan: Q4`, `c#`) are quoted, `mn meta` rewrites only the fields it is asked to change, and body commands never touch frontmatter.
+- **Mistakes are caught, not written.** A mistyped collection is an error instead of a new collection, paths cannot leave the vault, and `--if-exists skip` makes a retried `mn new` reuse the note instead of duplicating it.
+- **Errors are data.** With `--json`, a failure prints `{"error": {"code", "message", "hint", "suggestions"}}` and exits non-zero; a wrong note path comes back with the closest existing paths.
+- **Small output.** `mn list --json` returns metadata without bodies, `mn search` returns the best 10 by default, and keyword search always sees notes written a moment ago.
 
 ## Search
 

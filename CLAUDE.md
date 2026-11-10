@@ -36,8 +36,10 @@ The Xcode project (`App/MahoNotes.xcodeproj`) is gitignored — always run `xcod
 
 ```bash
 brew tap mahopan/tap
-brew install maho-notes              # formula is `maho-notes`; the installed binary is always `mn`
+brew install mn                      # formula is `mn` (Formula/mn.rb in mahopan/homebrew-tap)
 ```
+
+The formula builds from the source tarball of a `v<version>` tag in this repo (`swift build -c release --product mn`), and its `test do` block checks `mn --version` against the formula version and `mn skill` for the "AI Agent Guide" heading. Releasing the CLI therefore means: push a `v<version>` tag here, then update `url` and `sha256` in the tap's `Formula/mn.rb`.
 
 ### Xcode MCP (Xcode 27, external-agent mode)
 
@@ -54,7 +56,7 @@ Xcode 27 exposes its tooling to external agents over MCP through `xcrun mcpbridg
 Three artifacts share one Swift codebase:
 
 - **`MahoNotesKit`** (`Sources/MahoNotesKit/`) — library. All persistence, search, sync, markdown rendering, site generation. Both the CLI and the app depend on this. *Mostly* platform-agnostic, but several Kit files (`Auth.swift`, `GitSync.swift`, `VaultInit.swift`, `VaultRegistry.swift`, `VaultStore.swift`) use `#if os(macOS)` to gate things like `Process` invocations, `gh` lookup paths, and `~/.maho` resolution — iOS uses the app's Documents directory instead. Keep that pattern when adding code that touches the filesystem or subprocesses.
-- **`mn`** (`Sources/mn/`) — CLI executable using `swift-argument-parser`. One file per subcommand under `Sources/mn/Commands/`. New subcommands are registered in `Sources/mn/MahoNotes.swift`. **Version strings live in four places and must be kept in sync when releasing**: `App/project.yml` (`MARKETING_VERSION`), `Sources/mn/MahoNotes.swift` (`CommandConfiguration.version`), `Sources/mn/Commands/SkillCommand.swift` (the `version` field in `--json` output), and `README.md`'s version badge.
+- **`mn`** (`Sources/mn/`) — CLI executable using `swift-argument-parser`. One file per subcommand under `Sources/mn/Commands/`. New subcommands are registered in `Sources/mn/MahoNotes.swift`. **Version strings live in three places and must be kept in sync when releasing**: `App/project.yml` (`MARKETING_VERSION`), `Sources/mn/CLISupport.swift` (`mnVersion`, used by both `mn --version` and `mn skill --json`), and `README.md`'s version badge.
 - **`MahoNotes` app** (`App/MahoNotes/`) — SwiftUI universal app, single target building for macOS 15+ and iOS/iPadOS 18+. Depends on `MahoNotesKit` via the local Swift package.
 
 ### macOS / iPad / iPhone split inside the app
@@ -135,7 +137,10 @@ Ruby annotations use `{base|annotation}` syntax (language-agnostic — Japanese 
 
 ## Conventions that aren't obvious from the code
 
-- **`mn skill`** prints the canonical AI-agent usage guide. When in doubt about CLI behavior, run `swift run mn skill` rather than guessing — it documents guardrails, frontmatter rules, and JSON shapes.
+- **`mn skill`** prints the canonical AI-agent usage guide. When in doubt about CLI behavior, run `swift run mn skill` rather than guessing — it documents guardrails, frontmatter rules, and JSON shapes. When a command's flags, JSON shape or error codes change, update the guide text in `Sources/mn/Commands/SkillCommand.swift` in the same change.
+- **Frontmatter is written through `FrontmatterDocument` / `YAMLFormat`** (`Sources/MahoNotesKit/FrontmatterDocument.swift`), never by interpolating a value into a `key: value` line. A bare title such as `Plan: Q4` is invalid YAML, and a writer that rebuilds the file as `"---\n…\n---\(body)"` drops the line break after the closing delimiter — both used to corrupt notes and `_index.md` files. Note-level operations for the CLI (create with body, body write/append/edit, metadata, delete, path resolution) live in `Sources/MahoNotesKit/NoteWriting.swift` and throw `NoteError`, whose `code` is the `error.code` of `--json` output.
+- **CLI errors** are thrown as `CLIError` or `NoteError`, not printed and followed by `ExitCode.failure`. `MahoNotes.report(_:)` prints them as JSON on stdout when `--json` was given and as text on stderr otherwise.
+- **Tests**: `Tests/MahoNotesKitTests` covers the library; `Tests/mnTests` runs the built `mn` binary end to end, each invocation with a temp `CFFIXED_USER_HOME` and an explicit `--vault <temp dir>`.
 - **All CLI commands support `--json` and `--vault <name>`** via `OutputOption` / `VaultOption` (see `Sources/mn/`). Wire these into new commands the same way.
 - **Design decisions are numbered** in `docs/decisions.md` (#1–#28+). When changing something with cross-cutting implications (sync, search, embedding model, UI zones), check the decision log before diverging — many choices have non-obvious tradeoffs documented there (e.g., #21 NLEmbedding removal, #24 BGE-M3 → e5-large, #28 NTHU Purple theme zones).
 - **Localizations**: `App/MahoNotes/Localizable.xcstrings` is the source of truth for `en`, `zh-Hant`, `ja`, `ko`, `fr`, `it`, `es`. New UI strings must be added there; the build sets `SWIFT_EMIT_LOC_STRINGS: YES`. `InfoPlist.xcstrings` covers Info.plist values.

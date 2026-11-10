@@ -63,31 +63,48 @@ struct VaultOption: ParsableArguments {
     }
 
     func makeVault() -> Vault {
-        Vault(path: resolvedPath)
+        // Absolute, so `absolutePath` in results is usable from any working directory
+        // even when the vault was given as `--vault .` or a relative folder.
+        let expanded = (resolvedPath as NSString).expandingTildeInPath
+        return Vault(path: URL(fileURLWithPath: expanded).standardizedFileURL.path)
     }
 
     /// Validate that the vault exists. Call this from commands that need an existing vault.
     func validateVaultExists() throws {
         let expanded = (resolvedPath as NSString).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: expanded) else {
-            throw ValidationError("""
-                Vault not found at: \(expanded)
-
-                To fix this, either:
-                  1. Set the MN_VAULT environment variable:
-                     export MN_VAULT=~/path/to/your/vault
-                  2. Use the --vault flag:
-                     mn list --vault ~/path/to/your/vault
-                  3. Create a new vault:
-                     mn init --vault ~/path/to/your/vault
-                """)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory), isDirectory.boolValue else {
+            let requested = vault ?? ProcessInfo.processInfo.environment["MN_VAULT"]
+            let names = (allVaultEntries() ?? []).map(\.name)
+            let registered = names.isEmpty
+                ? "No vaults are registered yet — run `mn init`."
+                : "Registered vaults: \(names.joined(separator: ", "))."
+            throw CLIError(
+                code: "vault_not_found",
+                message: requested.map { "Vault not found: \($0) (looked in \(expanded))" }
+                    ?? "Vault not found at \(expanded)",
+                hint: "\(registered) Pass --vault <name or folder path>, or set MN_VAULT."
+            )
         }
     }
 
     /// Validate that the vault is writable. Call from commands that modify notes.
     func validateWritable() throws {
         if let entry = resolveVaultEntry(), entry.access == .readOnly {
-            throw ValidationError("Vault '\(entry.name)' is read-only")
+            throw CLIError(code: "vault_read_only", message: "Vault '\(entry.name)' is read-only")
         }
+    }
+
+    /// The vault for a command that reads notes.
+    func existingVault() throws -> Vault {
+        try validateVaultExists()
+        return makeVault()
+    }
+
+    /// The vault for a command that changes notes.
+    func writableVault() throws -> Vault {
+        try validateVaultExists()
+        try validateWritable()
+        return makeVault()
     }
 }

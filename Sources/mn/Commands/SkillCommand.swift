@@ -1,4 +1,5 @@
 import ArgumentParser
+import Foundation
 
 struct SkillCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -9,252 +10,227 @@ struct SkillCommand: ParsableCommand {
     @Flag(name: .long, help: "Output in JSON format")
     var json = false
 
-    func run() {
+    func run() throws {
         if json {
-            printJSON()
+            try printJSONDict(["name": "maho-notes", "version": mnVersion, "skill": skillText])
         } else {
             print(skillText)
         }
-    }
-
-    private func printJSON() {
-        // Escape for JSON
-        let escaped = skillText
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\t", with: "\\t")
-        print("""
-        {"name":"maho-notes","version":"1.0.3","skill":"\(escaped)"}
-        """)
     }
 }
 
 // MARK: - Skill Text
 
-private let skillText = """
+private let skillText = #"""
 # Maho Notes (`mn`) — AI Agent Guide
 
-> Personal knowledge base CLI with multi-vault support, full-text + semantic search,
-> GitHub sync, and static site publishing. Designed for both humans and AI agents.
+> Personal knowledge base CLI: Markdown notes in vaults, full-text + semantic search,
+> GitHub / iCloud sync, static-site publishing. Every command that reads or changes notes
+> takes `--json`.
 
-## Quick Start
-
-```bash
-mn init                              # first-time setup — creates or clones a vault
-mn vault list                        # list registered vaults
-mn new "Title" --collection notes    # create a note
-mn list                              # list all notes
-mn search "query"                    # full-text search
-mn sync                              # sync with GitHub
-```
-
-## Multi-Vault Architecture
-
-Vaults are registered in a central registry. Each vault is independent with its own
-config (`maho.yaml`), collections (`collections.yaml`), and search index (`.maho/index.db`).
+## Writing notes — the short version
 
 ```bash
-mn vault list                         # list all registered vaults
-mn vault add --github user/repo       # add vault from GitHub (SSH-first, HTTPS fallback)
-mn vault add --icloud                 # create vault in iCloud container
-mn vault add --device                 # create local vault
-mn vault add --path /some/local/dir   # register existing local directory
-mn vault remove <name>                # unregister vault
-mn vault set-primary <name>           # set default vault
-mn vault info <name>                  # show vault details
-mn vault find                         # report vaults/collections/notes on disk that don't show up
-mn vault find --fix                   # add those vaults and apply the fixes (never deletes files)
+# 1. See which collections exist
+mn list --list-collections --json
+
+# 2. Create the note with its body in one call (the result has its path)
+mn new "Title" --collection notes --tags "a, b" --stdin --json <<'EOF'
+Body in Markdown. A "# Title" heading is added above it for you.
+EOF
+
+# 3. Later: add to it, change part of it, change its metadata
+mn write notes/title.md --append --body "- one more line"
+mn edit  notes/title.md --find "old text" --replace "new text"
+mn meta  notes/title.md --add-tag done --set title="New title"
 ```
 
-Most commands accept `--vault <name>` to target a specific vault, or `--all` for all vaults.
+Rules that keep notes intact:
 
-`mn vault find` reports vault folders missing from the registry, collection folders missing
-from `maho.yaml` (or listed without a folder), and notes the app can't show: notes at the vault
-root (moved to `unsorted/` by `--fix`), `.markdown`/`.MD` files (renamed to `.md`), UTF-16/32
-files (converted to UTF-8), and notes iCloud hasn't downloaded. Run it read-only first; `--fix`
-changes files, and a vault added by `--fix` is only checked on the next run.
+- **Create with `mn new`**, never by writing a file yourself — it builds valid frontmatter,
+  picks the filename, and registers the note in the collection's order.
+- **Change frontmatter with `mn meta`**, never by hand. It rewrites only the fields you
+  name and refuses a change that would leave the frontmatter unreadable.
+- **Change the body with `mn write` / `mn edit`.** They never touch frontmatter except to
+  bump `updated`. Editing the `.md` file directly is also fine (path: `absolutePath` in
+  any `--json` result) as long as you leave the frontmatter block alone.
+- **Multi-line text goes through `--stdin` (heredoc) or `--file`**, not `--body`: the shell
+  does not turn `\n` inside quotes into a line break, and `mn` does not either.
+- Never add `collection:` to frontmatter (it is the note's folder — use `mn move`), and
+  never set `created` / `updated` (managed for you).
 
-## Commands
+## Paths and vaults
 
-### Create
+- A note path is relative to the vault: `notes/my-note.md`. The `.md` is optional, and an
+  absolute path inside the vault also works. Paths that leave the vault are rejected.
+- A wrong path fails with `note_not_found` and lists the closest existing notes under
+  `suggestions` — retry with one of those.
+- Commands act on the primary vault. Choose another with `--vault <name or folder path>`
+  or the `MN_VAULT` environment variable. `mn vault list --json` shows what is registered.
+
+## Create
 
 ```bash
 mn new "Title" --collection japanese --tags "N5, 漢字"
-mn new "Title" --collection japanese/grammar    # nested collection path
+mn new "Title" --collection japanese/grammar            # nested collection
+mn new "Title" --collection notes --body "One-line body"
+mn new "Title" --collection notes --file draft.md       # body from a file
+mn new "Title" --collection inbox --create-collection   # collection that doesn't exist yet
+mn new "Title" --collection notes --if-exists skip      # safe to retry: reuses the existing note
 ```
 
-### Read
+- The collection must already exist, so a typo cannot start a new one. Pass
+  `--create-collection` when you do want a new collection.
+- `--if-exists`: `suffix` (default — creates `title-1.md`), `error`, or `skip` (returns the
+  existing note with `"action": "exists"`). Use `skip` or `error` when a retry must not
+  leave duplicates.
+- An empty body from `--stdin` / `--file` is refused by `mn write` (`missing_body`), so a
+  failed pipe cannot blank a note; `--body ""` clears a body on purpose.
+- `--no-heading` adds no `# Title` heading (and no stub body when no body is given). `--author` defaults to `author.name` in
+  the vault config. `--series <name>` sets the series.
+- JSON result: `{"action": "created", "path", "absolutePath", "note": {…metadata…}}`.
+
+## Read
 
 ```bash
-mn list                              # all notes, grouped by collection
-mn list --collection japanese        # filter by collection
-mn list --tag N5                     # filter by tag
-mn list --list-collections           # show available collections
-mn list --list-tags                  # show all tags + counts
-mn list --list-series                # show all series
-mn show <path>                       # full note with metadata header
-mn show <path> --body-only           # body only (for piping)
-mn collections                       # collections overview with note counts
-mn stats                             # vault statistics
+mn list --json                         # every note's metadata (no bodies)
+mn list --collection japanese/grammar  # one collection (nested paths work)
+mn list --tag N5 --series "Kanji"      # filter by tag / series
+mn list --sort updated --limit 10      # most recently changed; also: created, title
+mn list --json --body                  # include bodies (large — prefer `mn show`)
+mn list --all                          # every registered vault
+mn list --list-collections | --list-tags | --list-series
+mn show <path> --json                  # one note: metadata + body + absolutePath
+mn show <path> --body-only             # body only, for piping
+mn meta <path> --json                  # metadata only
+mn collections --json                  # collections with note counts
+mn stats --json                        # vault statistics
 ```
 
-### Search
+## Change
 
 ```bash
-# Keyword (FTS5 with CJK tokenizer — Chinese, Japanese, Korean supported)
-mn search "query"                    # full-text keyword search (auto-builds index)
-mn search "query" --json             # JSON output
-mn search "query" --all              # search across all registered vaults
-
-# Semantic (vector embeddings — requires `mn index --model <name>` first)
-mn search "query" --semantic         # semantic vector search
-mn search "query" --hybrid           # keyword + semantic with RRF fusion (k=60)
-mn search "query" --hybrid --limit 20
+mn write <path> --stdin < new-body.md          # replace the whole body
+mn write <path> --append --body "- 14:00 deployed"
+mn edit  <path> --find "exact text" --replace "new text"   # must match exactly once
+mn edit  <path> --find "TODO" --replace "DONE" --all        # every occurrence
+mn meta  <path> --set title="New" --set public=true --unset series
+mn meta  <path> --add-tag grammar --remove-tag draft
+mn move  <path> --to archive                   # another collection; assets move with it
+mn delete <path>                               # to the Trash; --force removes it outright
 ```
 
-| Mode | Flag | How it works | Best for |
-|------|------|-------------|----------|
-| Keyword | (default) | FTS5 BM25 | Exact terms, code, hashes |
-| Semantic | `--semantic` | Vector cosine similarity | Meaning-based, cross-lingual |
-| Hybrid | `--hybrid` | Keyword + Semantic → RRF merge | Best of both worlds |
+- `mn write --append` starts a new paragraph, except that a list item appended to a list
+  (or a table row to a table) continues it on the next line.
+- `mn edit` matches exactly and case-sensitively, in the body only. `text_not_found` and
+  `ambiguous_text` (several matches without `--all`) leave the note untouched.
+- `mn meta --set` fields: `title`, `author`, `series`, `slug` (text), `public`, `draft`
+  (`true` / `false`), `order` (whole number). Tags only via `--add-tag` / `--remove-tag`.
+- Setting `public=true` makes the note part of the published site on the next `mn publish`.
 
-### Index
+## Search
 
 ```bash
-mn index                             # incremental FTS5 index update (mtime-based)
-mn index --full                      # full FTS5 rebuild
-mn index --model minilm              # build vector index with embedding model
-mn index --model e5-small            # multilingual-e5-small (better for CJK)
-mn index --model minilm --full       # full vector rebuild
-mn index --all                       # index all registered vaults
+mn search "query" --json               # keyword search (FTS5, CJK-aware), best 10
+mn search "query" --limit 30
+mn search "query" --vault work         # one vault (default: all registered vaults)
+mn search "query" --semantic           # meaning-based; needs `mn index --model <name>` first
+mn search "query" --hybrid             # keyword + semantic, fused with RRF
 ```
 
-### Metadata
+Keyword search updates its index before every query, so a note you just wrote is
+found straight away. The vector index used by `--semantic` / `--hybrid` is only updated
+by `mn index`.
+
+| Mode | Flag | Best for |
+|------|------|----------|
+| Keyword | (default) | Exact terms, names, code |
+| Semantic | `--semantic` | Meaning, cross-lingual queries |
+| Hybrid | `--hybrid` | Both |
 
 ```bash
-mn meta <path>                       # show frontmatter
-mn meta <path> --set title="New"     # update field
-mn meta <path> --set public=true     # mark as publishable (shows warning)
-mn meta <path> --add-tag "grammar"
-mn meta <path> --remove-tag "draft"
+mn index                               # update the keyword index (and the vector index if a model is set)
+mn index --full                        # rebuild from scratch
+mn index --model minilm                # build the vector index: minilm, e5-small, e5-large
+mn index --all                         # every registered vault
+mn model list | download <name> | remove <name>
 ```
 
-### Config
+## JSON output and errors
+
+- `--json` output is one JSON document on stdout. Note objects use the keys
+  `relativePath`, `title`, `collection`, `tags`, `created`, `updated`, `isPublic`,
+  `draft`, and when set `author`, `series`, `slug`, `order`; `mn show` adds `body` and
+  `absolutePath`.
+- Commands that change a note return `{"action", "path", "absolutePath", "note"}`, with
+  `action` one of `created`, `exists`, `replaced`, `appended`, `edited`, `updated`,
+  `moved`, `trashed`, `deleted`.
+- A failure exits non-zero (1, or 64 when the arguments themselves are invalid). With
+  `--json` it prints `{"error": {"code", "message", "hint", "suggestions"}}` on stdout;
+  without, a message on stderr. Codes: `note_not_found`, `note_exists`,
+  `collection_not_found`, `invalid_collection`, `invalid_path`, `empty_title`,
+  `invalid_frontmatter`, `unreadable_note`, `unknown_field`, `managed_field`,
+  `invalid_value`, `text_not_found`, `ambiguous_text`, `missing_body`, `invalid_input`,
+  `already_there`, `vault_not_found`, `vault_read_only`, `sync_failed`,
+  `invalid_arguments`; anything else is `error`.
+
+## Vaults
 
 ```bash
-mn config                            # show vault + device config
-mn config set author.name "Name"     # vault-level (maho.yaml)
-mn config set github.repo "user/repo"
-mn config set site.title "My Notes"
-mn config set embed.model minilm
+mn init                               # first-time setup — creates or clones a vault
+mn vault list                         # registered vaults
+mn vault add <name> --github user/repo      # clone a GitHub vault (SSH first, HTTPS fallback)
+mn vault add <name> --icloud | --device     # new vault in iCloud / on this device
+mn vault add <name> --path /some/local/dir  # register an existing folder
+mn vault remove <name>                # unregister (files stay unless --delete)
+mn vault set-primary <name>           # default vault for commands
+mn vault info <name>
+mn vault find                         # vaults, collections and notes on disk that don't show up
+mn vault find --fix                   # add / repair them (never deletes files)
 ```
 
-### Sync (GitHub)
+`mn vault find` reports vault folders missing from the registry, collection folders missing
+from `maho.yaml` (or listed without a folder), and notes the app can't show: notes at the
+vault root (moved to `unsorted/` by `--fix`), `.markdown` / `.MD` files (renamed to `.md`),
+UTF-16/32 files (converted to UTF-8), and notes iCloud hasn't downloaded. Run it read-only
+first; a vault added by `--fix` is only checked on the next run.
+
+## Sync, publish, config
 
 ```bash
-mn sync                              # git pull + push (primary vault)
-mn sync --vault <name>               # sync specific vault
-mn sync --all                        # sync all vaults with GitHub configured
-mn sync --reindex                    # rebuild search index after sync
+mn sync                               # git pull + push for the vault (GitHub vaults)
+mn sync --all                         # every vault with GitHub configured; prints one result per
+                                      # vault and exits non-zero if any of them failed
+mn sync --reindex                     # rebuild the search index afterwards
+mn publish                            # build the static site from public notes, commit and push
+mn publish <path>                     # mark one note public and publish
+mn publish --preview                  # build to a temp folder and open it
+mn unpublish <path>                   # mark private and remove from the site
+mn config                             # show vault + device config
+mn config set author.name "Name"      # keys: author.name, author.url, github.repo,
+                                      #       site.domain, site.title, site.theme, embed.model
+mn open <path>                        # open in $EDITOR
 ```
 
-### Publish (Static Site)
+`mn sync` and `mn publish` push to GitHub — run them when the user asks for it, not as a
+side effect of writing a note.
 
-```bash
-mn publish                           # generate static site from public notes
-mn publish <path>                    # mark note public + publish
-mn publish --preview                 # generate to temp dir and open in browser
-mn publish --force                   # full rebuild ignoring manifest
-mn unpublish <path>                  # mark note private + remove from site
-```
-
-### Embedding Models
-
-```bash
-mn model list                        # show available models + download status
-mn model download <name>             # pre-download a model
-mn model remove <name>               # delete cached model files
-```
-
-| Alias | Dimensions | Size | Best for |
-|-------|-----------|------|----------|
-| `minilm` | 384 | ~80MB | Quick setup, iPhone |
-| `e5-small` | 384 | ~120MB | Multilingual, iPad |
-| `e5-large` | 1024 | ~2.2GB | Best quality, Mac |
-
-### Other
-
-```bash
-mn open <path>                       # open in $EDITOR
-mn delete <path>                     # delete note (moves to trash)
-```
-
-## Guardrails — When to Use `mn` vs Direct File Edit
-
-| Operation | Use `mn` | Direct edit | Why |
-|-----------|----------|------------|-----|
-| Create note | ✅ `mn new` | ❌ | Auto-generates frontmatter, numbering, slug |
-| Read note | Either | ✅ | `mn show` or `cat` — both fine |
-| Edit body | ❌ | ✅ | Just edit the .md file directly |
-| Modify metadata | ✅ `mn meta` | ❌ | Validates keys, prevents bad overwrites |
-| Add/remove tags | ✅ `mn meta` | ❌ | Preserves array format |
-| Set config | ✅ `mn config set` | ❌ | Validates keys and values |
-| Delete note | ✅ `mn delete` | Acceptable | `mn delete` adds safety (trash) |
-| Search | ✅ `mn search` | ❌ | FTS5 ranking, CJK support |
-
-## Frontmatter Rules (Important!)
-
-- **Never** add `collection:` to frontmatter — it is inferred from the file path
-- **Never** set tags via `--set tags=x` — use `--add-tag` / `--remove-tag`
-- **Never** edit frontmatter YAML by hand — use `mn meta`
-- `created` and `updated` are auto-managed — don't touch them
-
-Valid `--set` fields: `title`, `public`, `slug`, `author`, `draft`, `order`, `series`
-
-## Config Keys
-
-Valid for `mn config set`:
-`author.name`, `author.url`, `github.repo`, `site.domain`, `site.title`, `site.theme`, `embed.model`
-
-Section keys (`author`, `github`, `site`) cannot be set directly — use dotted paths.
-
-## JSON Output
-
-All commands support `--json` for structured output:
-```bash
-mn list --json
-mn show <path> --json
-mn search "query" --json
-mn collections --json
-mn stats --json
-mn index --json
-mn sync --json
-```
-
-## Vault Structure
+## Vault layout
 
 ```
-vault-dir/
-├── maho.yaml            # vault config
-├── collections.yaml     # collection definitions
-├── japanese/            # collection directory
-│   ├── _index.md        # collection overview (optional)
+vault/
+├── maho.yaml            # the vault's only config file: title, author, collections, site
+├── japanese/            # a collection is a folder
+│   ├── _index.md        # ordering (order: notes, children: sub-collections) + description
 │   ├── _assets/         # images and attachments for this collection
-│   ├── vocabulary/      # nested sub-collection
-│   └── grammar/
-├── astronomy/
-├── _assets/             # vault-level shared assets
-├── .maho/               # local only (gitignored)
-│   └── index.db         # FTS5 + vector search index
-└── .gitignore           # auto-managed
+│   ├── grammar/         # nested collection
+│   └── kanji-basics.md  # a note: YAML frontmatter + Markdown body
+├── _assets/             # vault-wide assets
+└── .maho/               # device-local, not synced: index.db, sync-manifest.json
 ```
 
-## Asset Handling
-
-- Images and files live in `_assets/` directories (per-collection or vault-level)
-- Assets sync with GitHub (not excluded from git)
-- Image syntax: `![alt|alignment|width](_assets/file.png)`
-  - alignment: `left`, `center`, `right`
-  - width: `25`-`100` (percent)
-"""
+- Note order comes from `_index.md`, not from filenames — don't add numeric prefixes.
+- Images: `![alt|alignment|width](_assets/file.png)` — alignment `left` / `center` /
+  `right`, width `25`–`100` (percent).
+- Ruby annotations: `{漢字|かんじ}` renders the reading above the base text.
+"""#

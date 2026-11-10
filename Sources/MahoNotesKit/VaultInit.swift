@@ -153,7 +153,7 @@ func writeVaultFiles(
         }
         let content = """
         author:
-          name: "\(authorName)"
+          name: \(YAMLFormat.quoted(authorName))
           url: ""
         \(collectionsSection)
         github:

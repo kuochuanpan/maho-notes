@@ -27,6 +27,18 @@ struct IndexCommand: AsyncParsableCommand {
         }
         try vaultOption.validateVaultExists()
         let vault = vaultOption.makeVault()
+
+        // A model named on the command line is checked before any work, so a typo fails
+        // cleanly instead of after the keyword index has been built and reported.
+        let supported = EmbeddingModel.allCases.map(\.rawValue)
+        if let model, !supported.contains(model) {
+            throw CLIError(
+                code: "invalid_value",
+                message: "Unknown embedding model '\(model)'",
+                hint: "Supported models: \(supported.joined(separator: ", "))"
+            )
+        }
+
         let notes = try vault.allNotes()
 
         if !outputOption.json {
@@ -47,7 +59,13 @@ struct IndexCommand: AsyncParsableCommand {
         }
 
         // Resolve model: --model flag > vault device config > global config
-        let resolvedModel = model ?? Config.resolveEmbedModel(vaultPath: vault.path)
+        var resolvedModel = model ?? Config.resolveEmbedModel(vaultPath: vault.path)
+        if let configured = resolvedModel, !supported.contains(configured) {
+            // A model left in the config by an older version (e.g. `builtin`): the keyword
+            // index is done, so say why the vector index is skipped rather than fail.
+            printError("Skipping vector index: configured embedding model '\(configured)' is not supported. Run `mn index --model <\(supported.joined(separator: "|"))>` to choose one.")
+            resolvedModel = nil
+        }
         if let modelName = resolvedModel {
             if #available(macOS 15.0, *) {
                 try await buildVectorIndex(vault: vault, notes: notes, modelName: modelName)

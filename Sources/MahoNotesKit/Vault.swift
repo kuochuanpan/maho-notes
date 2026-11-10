@@ -126,68 +126,28 @@ public struct Vault: Sendable {
         }
     }
 
-    /// Create a new note with proper frontmatter
+    /// Create a new note with the `# Title` stub body and return its relative path.
+    ///
+    /// The collection folder is created when missing and a filename clash gets a
+    /// `-1`, `-2`, … suffix. Use `createNote(title:collection:…body:…)` to write a
+    /// body in the same step or to choose a different policy.
     public func createNote(
         title: String,
         collection: String,
         tags: [String],
-        author: String = "kuochuan"
+        author: String = ""
     ) throws -> String {
-        // Build filename from title
-        let slug = makeSlug(from: title)
-        let collectionDir = (path as NSString).appendingPathComponent(collection)
-        let fm = FileManager.default
-
-        // Ensure collection directory exists
-        if !fm.fileExists(atPath: collectionDir) {
-            try fm.createDirectory(atPath: collectionDir, withIntermediateDirectories: true)
+        let collectionDir = absolutePath(for: try normalizedCollectionPath(collection))
+        if !FileManager.default.fileExists(atPath: collectionDir) {
+            try FileManager.default.createDirectory(atPath: collectionDir, withIntermediateDirectories: true)
         }
-
-        // Use clean slug filename (no numeric prefix)
-        let filename = "\(slug).md"
-        var filePath = (collectionDir as NSString).appendingPathComponent(filename)
-
-        // Handle filename conflicts
-        var counter = 1
-        while fm.fileExists(atPath: filePath) {
-            let conflictName = "\(slug)-\(counter).md"
-            filePath = (collectionDir as NSString).appendingPathComponent(conflictName)
-            counter += 1
-        }
-        let actualFilename = (filePath as NSString).lastPathComponent
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssxxx"
-        let now = dateFormatter.string(from: Date())
-        let tagsYaml = tags.isEmpty ? "[]" : "[\(tags.joined(separator: ", "))]"
-
-        let content = """
-        ---
-        title: \(title)
-        tags: \(tagsYaml)
-        created: \(now)
-        updated: \(now)
-        public: false
-        author: \(author)
-        ---
-
-        # \(title)
-
-
-        """
-
-        try content.write(toFile: filePath, atomically: true, encoding: .utf8)
-
-        // Append to _index.md order
-        let (existingOrder, _) = readDirectoryOrder(at: collectionDir)
-        var newOrder = existingOrder
-        newOrder.append(actualFilename)
-        try writeDirectoryOrder(at: collectionDir, notes: newOrder)
-
-        // Return relative path
-        let vaultURL = URL(fileURLWithPath: path).standardizedFileURL
-        let fileURL = URL(fileURLWithPath: filePath).standardizedFileURL
-        return fileURL.path.replacingOccurrences(of: vaultURL.path + "/", with: "")
+        return try createNote(
+            title: title,
+            collection: collection,
+            tags: tags,
+            author: author,
+            body: nil
+        ).relativePath
     }
 
     /// Reorder notes in a collection by writing the order to `_index.md`.
@@ -254,7 +214,7 @@ public struct Vault: Sendable {
 
         // Append to target _index.md order
         let (targetOrder, _) = readDirectoryOrder(at: targetDirAbs)
-        var newOrder = targetOrder
+        var newOrder = targetOrder.filter { $0 != targetFilename }
         newOrder.append(targetFilename)
         try writeDirectoryOrder(at: targetDirAbs, notes: newOrder)
 
@@ -327,7 +287,7 @@ public struct Vault: Sendable {
 
         // Append to target _index.md order
         let (targetOrder, _) = readDirectoryOrder(at: targetDirAbs)
-        var newOrder = targetOrder
+        var newOrder = targetOrder.filter { $0 != targetFilename }
         newOrder.append(targetFilename)
         try writeDirectoryOrder(at: targetDirAbs, notes: newOrder)
 
@@ -441,7 +401,7 @@ public struct Vault: Sendable {
     /// The file on disk is NOT renamed — only the display title changes.
     public func renameNote(relativePath: String, newTitle: String) {
         let filePath = (path as NSString).appendingPathComponent(relativePath)
-        updateFrontmatterField(filePath: filePath, field: "title", value: newTitle)
+        updateFrontmatterField(filePath: filePath, field: "title", value: YAMLFormat.scalar(newTitle))
     }
 
     /// Rename a sub-collection by updating its _index.md frontmatter title.
@@ -450,10 +410,10 @@ public struct Vault: Sendable {
         let indexPath = (dirPath as NSString).appendingPathComponent("_index.md")
 
         if FileManager.default.fileExists(atPath: indexPath) {
-            updateFrontmatterField(filePath: indexPath, field: "title", value: newName)
+            updateFrontmatterField(filePath: indexPath, field: "title", value: YAMLFormat.scalar(newName))
         } else {
             // Create _index.md with the title
-            let content = "---\ntitle: \(newName)\n---\n"
+            let content = "---\ntitle: \(YAMLFormat.scalar(newName))\n---\n"
             try content.write(toFile: indexPath, atomically: true, encoding: .utf8)
         }
     }
@@ -557,31 +517,25 @@ private func hasMarkdownFiles(in directoryPath: String, fileManager fm: FileMana
     return false
 }
 
-/// Update a single frontmatter field in-place. Best-effort — silently fails if file can't be parsed.
+/// Update a single frontmatter field in-place. `value` is already formatted as YAML.
+/// Best-effort — leaves the file alone if it has no frontmatter, or if the edit would
+/// turn readable frontmatter into unreadable frontmatter.
 func updateFrontmatterField(filePath: String, field: String, value: String) {
     guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else { return }
-    let lines = content.components(separatedBy: "\n")
-    guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return }
+    let original = FrontmatterDocument(content)
+    guard original.hasFrontmatter else { return }
 
-    var closingIndex: Int?
-    for i in 1..<lines.count {
-        if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
-            closingIndex = i
-            break
-        }
-    }
-    guard let endIdx = closingIndex else { return }
-
-    var updatedLines = lines
-    let fieldLine = "\(field): \(value)"
-    if let idx = updatedLines[0...endIdx].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(field):") }) {
-        updatedLines[idx] = fieldLine
-    } else {
-        updatedLines.insert(fieldLine, at: endIdx)
+    // Replaces the field's whole entry: a multi-line value (`title: |` and its indented
+    // lines) must not leave its continuation lines behind under the new value.
+    var edited = original
+    edited.setRaw(field, value)
+    if (try? original.yaml()) != nil, (try? edited.yaml()) == nil {
+        Log.kit.error("updateFrontmatterField skipped for \(filePath): editing '\(field)' would break the frontmatter")
+        return
     }
 
     do {
-        try updatedLines.joined(separator: "\n").write(toFile: filePath, atomically: true, encoding: .utf8)
+        try edited.rendered().write(toFile: filePath, atomically: true, encoding: .utf8)
     } catch {
         Log.kit.error("updateFrontmatterField failed for \(filePath): \(error)")
     }

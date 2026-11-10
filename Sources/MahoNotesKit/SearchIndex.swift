@@ -179,7 +179,7 @@ public final class SearchIndex: @unchecked Sendable {
 
             if let existingMtime = existingMtimes[note.relativePath] {
                 // Note exists in index — check if changed
-                if fileMtime > existingMtime {
+                if Self.mtimeChanged(fileMtime, from: existingMtime) {
                     // Update: delete old, insert new
                     try deleteFromIndex(path: note.relativePath)
                     try insertIntoIndex(path: note.relativePath, title: note.title, tags: tagsJoined, body: note.body)
@@ -206,6 +206,61 @@ public final class SearchIndex: @unchecked Sendable {
         }
 
         return IndexStats(added: added, updated: updated, deleted: deleted, total: notes.count)
+    }
+
+    /// Bring the index up to date with the vault's files, reading only what changed.
+    ///
+    /// `buildIndex(notes:)` needs every note parsed up front. This walks the vault, compares
+    /// modification times against the index, and parses only notes that are new or changed —
+    /// cheap enough to run before every search, so a note written a moment ago is findable.
+    @discardableResult
+    public func refresh(from vault: Vault) throws -> IndexStats {
+        let now = Date().timeIntervalSince1970
+        let files = try vault.allNoteFiles()
+        let root = URL(fileURLWithPath: vault.path).standardizedFileURL.path + "/"
+
+        var existingMtimes: [String: Double] = [:]
+        for row in try db.query("SELECT path, mtime FROM _meta") {
+            if let path = row["path"], let mtimeStr = row["mtime"], let mtime = Double(mtimeStr) {
+                existingMtimes[path] = mtime
+            }
+        }
+
+        var added = 0
+        var updated = 0
+        var deleted = 0
+        var seen = Set<String>()
+
+        for file in files {
+            // Same relative path `parseNote` computes, so index keys match `Note.relativePath`.
+            let relativePath = URL(fileURLWithPath: file).standardizedFileURL.path
+                .replacingOccurrences(of: root, with: "")
+            seen.insert(relativePath)
+            let mtime = Self.fileMtime(atPath: file)
+            let existing = existingMtimes[relativePath]
+            if let existing, !Self.mtimeChanged(mtime, from: existing) { continue }
+
+            guard let note = try? parseNote(at: file, relativeTo: vault.path) else { continue }
+            let tagsJoined = note.tags.joined(separator: " ")
+            if existing != nil {
+                try deleteFromIndex(path: relativePath)
+                try insertIntoIndex(path: relativePath, title: note.title, tags: tagsJoined, body: note.body)
+                try updateMeta(path: relativePath, mtime: mtime, indexedAt: now)
+                updated += 1
+            } else {
+                try insertIntoIndex(path: relativePath, title: note.title, tags: tagsJoined, body: note.body)
+                try insertMeta(path: relativePath, mtime: mtime, indexedAt: now)
+                added += 1
+            }
+        }
+
+        for path in existingMtimes.keys where !seen.contains(path) {
+            try deleteFromIndex(path: path)
+            try deleteMeta(path: path)
+            deleted += 1
+        }
+
+        return IndexStats(added: added, updated: updated, deleted: deleted, total: files.count)
     }
 
     // MARK: - Search
@@ -372,6 +427,17 @@ public final class SearchIndex: @unchecked Sendable {
         try? fm.removeItem(atPath: dbPath)
         try? fm.removeItem(atPath: dbPath + "-wal")
         try? fm.removeItem(atPath: dbPath + "-shm")
+    }
+
+    /// Whether a file's mtime differs from the one recorded in the index.
+    ///
+    /// The recorded value comes back from SQLite as text with 15 significant digits, a few
+    /// microseconds off the original, so an exact comparison reported unchanged notes as
+    /// modified; anything within a millisecond counts as the same time. An *older* mtime
+    /// counts as a change too: a file restored from a backup or checked out by git can
+    /// carry a timestamp from before it was indexed.
+    private static func mtimeChanged(_ fileMtime: Double, from indexedMtime: Double) -> Bool {
+        abs(fileMtime - indexedMtime) > 0.001
     }
 
     private static func fileMtime(atPath path: String) -> Double {

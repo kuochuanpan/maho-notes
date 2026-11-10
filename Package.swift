@@ -45,5 +45,10 @@ let package = Package(
                 .product(name: "CJKSQLite", package: "swift-cjk-sqlite"),
             ]
         ),
+        // End-to-end tests: run the built `mn` binary against throwaway vaults.
+        .testTarget(
+            name: "mnTests",
+            dependencies: ["mn"]
+        ),
     ]
 )

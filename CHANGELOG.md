@@ -1,5 +1,54 @@
 # Changelog
 
+## [Unreleased]
+
+### ⌨️ CLI — writing notes from scripts and AI agents
+- **Write a whole note in one call** — `mn new` takes the body from `--body`, `--stdin` (heredoc) or `--file`, and puts a `# Title` heading above it unless the body has one (`--no-heading` to skip). `--series` sets the series, and `--author` now defaults to `author.name` from the vault config instead of a hard-coded name.
+- **New commands**
+  - `mn write <path>` replaces a note's body, or adds to it with `--append` (a list item appended to a list continues the list; anything else starts a new paragraph).
+  - `mn edit <path> --find <text> --replace <text>` changes part of a body. The text must match exactly once unless `--all` is given.
+  - `mn move <path> --to <collection>` (alias `mv`) moves a note, its ordering entry and the assets it references.
+- **`mn meta` rewrites only the fields it is asked to change.** `--unset <field>` removes one, `--add-tag` / `--remove-tag` accept comma-separated tags, values are checked per field (`public` / `draft` must be `true` or `false`, `order` a whole number, a title like `2024` stays text), and a change that would leave the frontmatter unreadable is refused before anything is written. A note with no frontmatter gets one.
+- **Mistakes are errors, not files**
+  - A collection that doesn't exist is `collection_not_found` (it used to be created silently, so a typo started a new collection). `--create-collection` makes one, and a new top-level collection is added to `maho.yaml`.
+  - Note and collection paths cannot leave the vault: `mn new --collection ../x` used to write outside it.
+  - `--if-exists suffix|error|skip` on `mn new`; `skip` returns the existing note, so a retried call does not leave `title-1.md` behind.
+  - A wrong note path fails with the closest existing paths (same filename in another collection, a title instead of a filename, a typo).
+  - Paths are spelled as they are on disk, so `Notes/A.md` and `notes/a.md` are one note; a symlinked folder cannot lead a write out of the vault; `_index.md` cannot be written or deleted as a note under any capitalization.
+  - `mn write --stdin` / `--file` with empty input is refused (`missing_body`), so a failed pipe cannot blank a note. `--body ""` clears a body on purpose.
+- **Machine-readable errors** — with `--json`, a failure prints `{"error": {"code", "message", "hint", "suggestions"}}` on stdout and exits non-zero. Without it the message goes to stderr (it used to go to stdout). `mn skill` lists the codes. ⚠️ `mn sync --json` failures use the same shape now; they used to print `{"error": "<text>"}`.
+- **Smaller, more useful output**
+  - `mn list --json` returns metadata without note bodies (`--body` puts them back). ⚠️ Scripts that read `body` from `mn list --json` need `--body`, or `mn show <path> --json`.
+  - `mn list` gains `--sort updated|created|title`, `--limit`, a working `--series` filter, nested paths for `--collection`, and follows the `_index.md` order the app shows.
+  - `mn new`, `write`, `edit`, `meta`, `move` and `delete` return `{"action", "path", "absolutePath", "note"}`; `mn show --json` includes `absolutePath`; `mn meta <path> --json` returns metadata only; `mn delete` accepts `--json`.
+  - Note paths may omit `.md` or be absolute paths inside the vault. `absolutePath` is absolute even with a relative `--vault`.
+  - `mn config set` accepts `--json`.
+  - JSON no longer escapes `/` as `\/`.
+- **`mn search` finds notes written a moment ago** — keyword search brings its index up to date before each query, reading only files that changed. Before, the index was built once and only `mn index` refreshed it. `--limit` (default 10) now applies to keyword search too, ranked across vaults.
+- **`mn skill` rewritten** — leads with the writing workflow and rules, documents the new commands, JSON shapes and error codes, and no longer describes `collections.yaml` or numeric filename prefixes.
+- **One JSON document per run** — `mn index --model <typo>` fails before indexing instead of after printing the keyword-index result; `mn publish` / `mn unpublish` print their result after the git push, so a failed push is the only output; usage errors (a bad flag value) are JSON too when `--json` is present, still with exit status 64.
+- **`mn index`** skips the vector index with a note on stderr when the configured model is one this version no longer has (an old `builtin`), instead of failing after the keyword index. **`mn sync --all`** exits non-zero when any vault failed.
+- **swift-argument-parser 1.7.0 → 1.8.2.**
+
+### 🩹 Note corruption fixes (CLI and app)
+- **Frontmatter survived only one edit** — `mn meta`, `mn publish <path>` and `mn unpublish` dropped the line break after the closing `---` on every write. The second write produced `---# Title`, after which the note had no readable frontmatter (title fell back to the filename; tags and dates were gone).
+- **`_index.md` with a description lost its title and order** — the same dropped line break in the ordering writer, which runs whenever a note is created, moved or reordered (drag & drop in the app included). By the third write only the latest entry was left.
+- **`_index.md` is edited, not regenerated** — writing a collection's order now changes only the `order:` / `children:` lines. Comments, key order and every other field stay as written, and an `_index.md` whose frontmatter no longer parses as a whole (an old unquoted title) keeps its title, order and sub-collections instead of being reduced to the newest entry.
+- **A filename listed twice in `order:` crashed the sort** used by the app's navigator and by `mn list`. The first position now wins, and moving a note no longer adds a second entry for a filename the target already lists.
+- **`---` inside frontmatter or at the top of a plain note** — an indented `---` inside a block value (`description: |`) no longer ends the frontmatter, and a note that has no frontmatter but opens with a `---` rule is read as all body rather than having its first paragraph treated as metadata.
+- **Renaming a note whose title spans several lines** (`title: |`) left the old lines under the new title and broke the frontmatter; the whole entry is replaced now. Same for sub-collection titles.
+- **Moving or copying a note could take a file from outside the vault with it** — an asset link written as `_assets/../../file` was followed. Such links are ignored when assets are moved, copied or checked for orphans.
+- **`mn meta` rewrote every field** — a block-style tag list kept its `- item` lines under the new inline list, `created` was rewritten in a different date format, and quoted values lost their quotes.
+- **Titles and tags with YAML syntax in them** — `Plan: Q4`, `#1`, `[draft]`, `true` and the like are now quoted wherever a title, tag, author, order entry or collection name is written: new notes, renaming a note or sub-collection, creating a sub-collection, pasting a copied note, `_index.md` titles and order lists, and the author name in a new vault's `maho.yaml`.
+- **Titles with no letters or digits** (emoji only) created a hidden `.md` file; the note is now `untitled.md`. Very long titles are cut to a filename the filesystem accepts, and a note titled "README" becomes `readme-note.md` (`readme.md` is never listed as a note).
+- **Timestamps follow the Gregorian calendar** regardless of the system calendar setting (a Buddhist or Japanese calendar wrote the wrong year into `created` / `updated`).
+- **CRLF line endings** — notes saved with Windows line endings now have their frontmatter read.
+- **Search index re-indexed unchanged notes** — a rounding difference in the stored modification time made unchanged notes look modified, so `mn index` re-indexed them. A file replaced by one with an older timestamp (restored from a backup, checked out by git) is now re-indexed as well.
+- Kit: `FrontmatterDocument`, `YAMLFormat`, `noteTimestamp()`, `NoteError`, `Vault.createNote(…body:…)`, `writeNoteBody`, `replaceInNoteBody`, `updateNoteMetadata`, `deleteNote`, `resolveNotePath`, `SearchIndex.refresh(from:)`.
+
+### 🧪 Tests
+- 69 new library tests for the above, and a new `mnTests` target (20 tests) that runs the built `mn` binary end to end against throwaway vaults and home directories.
+
 ## [1.0.3] — 2026-11-09
 
 TestFlight build 4.

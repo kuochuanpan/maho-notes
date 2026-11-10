@@ -22,9 +22,7 @@ struct PublishCommand: ParsableCommand {
     var preview: Bool = false
 
     func run() throws {
-        try vaultOption.validateVaultExists()
-        try vaultOption.validateWritable()
-        let vault = vaultOption.makeVault()
+        let vault = try vaultOption.writableVault()
         let vaultPath = vault.path
         let siteConfig = try loadSiteConfig(vaultPath: vaultPath)
         let generator = SiteGenerator(vault: vault, config: siteConfig)
@@ -72,24 +70,22 @@ struct PublishCommand: ParsableCommand {
 
         try manifest.save(to: vaultPath)
 
+        // Git commit + push — before the result is printed, so a failed push is the only
+        // thing on stdout (one JSON document) rather than an error after a success.
+        try gitCommitAndPush(vaultPath: vaultPath, message: "publish: update site")
+
         if outputOption.json {
             try printJSON(PublishOutput(generated: result.generated, skipped: result.skipped, errors: result.errors))
         } else {
             print("Published: \(result.generated) generated, \(result.skipped) skipped, \(result.errors) errors")
         }
-
-        // Git commit + push
-        try gitCommitAndPush(vaultPath: vaultPath, message: "publish: update site")
     }
 
     // MARK: - Single Note
 
     private func publishSingleNote(notePath: String, vault: Vault, vaultPath: String, generator: SiteGenerator) throws {
-        let filePath = (vaultPath as NSString).appendingPathComponent(notePath)
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            print("Note not found: \(notePath)")
-            throw ExitCode.failure
-        }
+        let notePath = try vault.resolveNotePath(notePath)
+        let filePath = vault.absolutePath(for: notePath)
 
         // Update frontmatter to set public: true
         try setFrontmatterPublic(filePath: filePath, isPublic: true)
@@ -99,6 +95,7 @@ struct PublishCommand: ParsableCommand {
         let existing = (try? PublishManifest.load(from: vaultPath)) ?? PublishManifest()
         let incremental = try generator.generateIncremental(to: outputPath, manifest: existing)
         try incremental.manifest.save(to: vaultPath)
+        try gitCommitAndPush(vaultPath: vaultPath, message: "publish: \(notePath)")
 
         if outputOption.json {
             try printJSON(PublishOutput(generated: incremental.result.generated, skipped: incremental.result.skipped, errors: incremental.result.errors))
@@ -106,8 +103,6 @@ struct PublishCommand: ParsableCommand {
             print("Marked \(notePath) as public")
             print("Published: \(incremental.result.generated) generated, \(incremental.result.skipped) skipped, \(incremental.result.errors) errors")
         }
-
-        try gitCommitAndPush(vaultPath: vaultPath, message: "publish: \(notePath)")
     }
 
     // MARK: - Preview
