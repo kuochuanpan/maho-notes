@@ -68,9 +68,9 @@ struct EmbeddingProviderTests {
     }
 
     @Test func approximateSizeForAllModels() {
-        #expect(EmbeddingModel.minilm.approximateSize == "~80 MB")
-        #expect(EmbeddingModel.e5small.approximateSize == "~120 MB")
-        #expect(EmbeddingModel.e5large.approximateSize == "~2.2 GB")
+        #expect(EmbeddingModel.minilm.downloadSize == "~80 MB")
+        #expect(EmbeddingModel.e5small.downloadSize == "~120 MB")
+        #expect(EmbeddingModel.e5large.downloadSize == "~2.2 GB")
     }
 
     @Test func allCasesIncludesBgeM3() {

@@ -71,12 +71,12 @@ struct IntegrationTests {
         #expect(titles.contains("Second Note"))
 
         // search by title substring
-        let results = try vault.searchNotes(query: "First")
+        let results = try vault.substringSearch(query: "First")
         #expect(results.count == 1)
         #expect(results[0].title == "First Note")
 
         // search by tag
-        let tagResults = try vault.searchNotes(query: "swift")
+        let tagResults = try vault.substringSearch(query: "swift")
         #expect(tagResults.count >= 1)
 
         // delete (via file removal)
@@ -284,16 +284,16 @@ struct IntegrationTests {
         let vault = Vault(path: vaultDir.path)
 
         // Search by title
-        let titleResults = try vault.searchNotes(query: "Quantum")
+        let titleResults = try vault.substringSearch(query: "Quantum")
         #expect(titleResults.count >= 1)
         #expect(titleResults.first?.title == "Quantum Physics")
 
         // Search by body content
-        let bodyResults = try vault.searchNotes(query: "superposition")
+        let bodyResults = try vault.substringSearch(query: "superposition")
         #expect(bodyResults.count >= 1)
 
         // Search non-matching
-        let noResults = try vault.searchNotes(query: "blockchain")
+        let noResults = try vault.substringSearch(query: "blockchain")
         #expect(noResults.isEmpty)
     }
 }

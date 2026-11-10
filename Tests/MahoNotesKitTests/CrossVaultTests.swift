@@ -155,7 +155,7 @@ struct CrossVaultTests {
         var matches: [(vaultName: String, notes: [Note])] = []
         for entry in loaded.vaults {
             let vault = Vault(path: resolvedPath(for: entry))
-            let notes = (try? vault.searchNotes(query: "sushi")) ?? []
+            let notes = (try? vault.substringSearch(query: "sushi")) ?? []
             if !notes.isEmpty { matches.append((entry.name, notes)) }
         }
         #expect(matches.count == 1)
@@ -165,7 +165,7 @@ struct CrossVaultTests {
         var matches2: [(vaultName: String, notes: [Note])] = []
         for entry in loaded.vaults {
             let vault = Vault(path: resolvedPath(for: entry))
-            let notes = (try? vault.searchNotes(query: "stars")) ?? []
+            let notes = (try? vault.substringSearch(query: "stars")) ?? []
             if !notes.isEmpty { matches2.append((entry.name, notes)) }
         }
         #expect(matches2.count == 1)

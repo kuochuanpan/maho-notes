@@ -63,14 +63,14 @@ struct VaultRegistryTests {
     // MARK: - findVault
 
     @Test func findVaultByName() {
-        var registry = sampleRegistry()
+        let registry = sampleRegistry()
         let found = registry.findVault(named: "cheatsheets")
         #expect(found != nil)
         #expect(found!.name == "cheatsheets")
     }
 
     @Test func findVaultNotFound() {
-        var registry = sampleRegistry()
+        let registry = sampleRegistry()
         #expect(registry.findVault(named: "nonexistent") == nil)
     }
 

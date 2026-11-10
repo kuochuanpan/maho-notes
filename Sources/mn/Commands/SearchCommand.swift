@@ -75,7 +75,7 @@ struct SearchCommand: AsyncParsableCommand {
                 "   Run `mn index --full` to rebuild the search index.\n"
                     .data(using: .utf8)!
             )
-            let results = try vault.searchNotes(query: query)
+            let results = try vault.substringSearch(query: query)
             outputSubstringResults(Array(results.prefix(limit)), vaultName: nil)
         }
     }
@@ -211,7 +211,7 @@ struct SearchCommand: AsyncParsableCommand {
             let vault = Vault(path: store.resolvedPath(for: entry))
             if let results = try? ftsSearch(vault: vault) {
                 ranked.append(contentsOf: results.map { (entry.name, $0) })
-            } else if let notes = try? vault.searchNotes(query: query) {
+            } else if let notes = try? vault.substringSearch(query: query) {
                 substring.append(contentsOf: notes.map { (entry.name, $0) })
             }
         }

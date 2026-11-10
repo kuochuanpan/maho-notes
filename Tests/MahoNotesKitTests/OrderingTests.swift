@@ -267,12 +267,12 @@ struct VaultMoveReorderTests {
         try fm.createDirectory(at: subDir, withIntermediateDirectories: true)
 
         // Can't move coll-a into coll-a/child (circular)
-        #expect(throws: MoveError.self) {
+        #expect(throws: VaultError.self) {
             _ = try vault.moveCollection(collectionId: "coll-a", intoParent: "coll-a/child")
         }
 
         // Can't move into self
-        #expect(throws: MoveError.self) {
+        #expect(throws: VaultError.self) {
             _ = try vault.moveCollection(collectionId: "coll-a", intoParent: "coll-a")
         }
     }
@@ -286,7 +286,7 @@ struct VaultMoveReorderTests {
         try fm.createDirectory(at: tmp.appendingPathComponent("coll-a/shared"), withIntermediateDirectories: true)
         try fm.createDirectory(at: tmp.appendingPathComponent("coll-b/shared"), withIntermediateDirectories: true)
 
-        #expect(throws: MoveError.self) {
+        #expect(throws: VaultError.self) {
             _ = try vault.moveCollection(collectionId: "coll-a/shared", intoParent: "coll-b")
         }
     }

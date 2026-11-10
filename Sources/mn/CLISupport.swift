@@ -4,7 +4,7 @@ import MahoNotesKit
 
 /// The CLI's version: `mn --version` and the `version` field of `mn skill --json`.
 /// Keep in sync with `MARKETING_VERSION` in App/project.yml and the README badge.
-let mnVersion = "1.0.3"
+let mnVersion = "1.0.4"
 
 // MARK: - Runtime state
 

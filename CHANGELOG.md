@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.4] — unreleased
+
+Build 5.
+
+### ⌨️ Editor
+- **Chinese / Japanese / Korean input no longer loses the text being composed (macOS)** — while an input method is composing (Zhuyin, Pinyin, Kana… with the candidate list open), the uncommitted text exists only in the text view. Any refresh of the editor in that moment — the auto-save two seconds after the last committed character, a sync finishing, a vault reload — wrote the last committed text back into the view and wiped the composition. The editor now leaves the text view alone while it is composing and reconciles when the composition ends. The iOS editor has the same guard.
+- **The open note follows the file on disk** — after a sync (or an iCloud update, or an edit by `mn`) changed the note that is open, the editor and the split preview kept showing the old text until another note was selected, and the next auto-save then wrote that old text back over the change. The editor now shows the new text right away when it has no edits of its own. Text being typed is never replaced: if the note changed on disk *and* in the editor, the version on disk stays and the editor's text is saved next to it as `note.conflict-{DeviceName}.md`, with the usual conflict banner.
+- **A vault-list refresh no longer closes the open note** — when the registry file changed (another device, the CLI, iCloud touching it) the app reloaded the vault as if it had been switched: the note was deselected and the last keystrokes dropped.
+- Replacing the editor's text with a shorter one could crash on an out-of-range selection.
+
+### 🔄 GitHub sync
+- **The app no longer overwrites what other devices pushed** — the app's sync pushed a snapshot of the local files first, with force, and only then looked at GitHub. A device with any local change removed the notes other devices had added since its last pull and reverted their edits. Sync now compares each file three ways (last synced version, local, remote), takes changes from either side, and pushes on top of the remote without force; if another device pushes at the same moment, it starts over against the new state. See decision #33.
+- **Collection order merges instead of conflicting** (issue #2) — two devices that each add a note to the same collection both change its `_index.md`. Both sync paths (`mn sync` and the app) now merge it by meaning: notes added on either side are kept, a note removed on one side stays removed, a reorder on one side is kept, other fields merge one by one. Only contradictory changes (two different reorders, the same field set to two values) still produce a conflict copy.
+- **"Synced" and "resolved" are reported separately** — `mn sync --json` adds `status` (`ok` / `conflicts`), `mergedFiles` and `unresolvedConflicts` (every conflict copy in the vault, also from earlier syncs); `mn sync --all --json` carries them per vault. Exit codes are unchanged. The app shows the number of unresolved conflicts under Settings › Sync, and still knows about them after a relaunch.
+- An edit now beats a deletion: a note edited on one device and deleted on another comes back (or is kept as a conflict copy on the device that edited it). In `mn sync` this case used to fail the whole sync.
+- `mn sync`: a conflict in a note with a non-ASCII filename (a Chinese title) was committed with Git's `<<<<<<<` markers in it; both versions are now kept like for any other note.
+- Conflict copies stay on the device that made them on both paths (`mn sync` used to push them); an `_index.conflict-*.md` is no longer listed as a note.
+- The app does not push a vault folder that has lost its `maho.yaml`, and never uploads a `.git` folder.
+
 ## [1.0.3] — 2026-11-09
 
 TestFlight build 4. CLI `mn` 1.0.3 released through Homebrew on 2026-11-10 (`brew install mahopan/tap/mn`).

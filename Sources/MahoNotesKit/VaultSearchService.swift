@@ -84,7 +84,7 @@ public struct VaultSearchService: Sendable {
                 }
             } catch {
                 Log.search.warning("FTS search failed for \(loc.path): \(error)")
-                if let fallback = try? vault.searchNotes(query: query) {
+                if let fallback = try? vault.substringSearch(query: query) {
                     scoredNotes.append(contentsOf: fallback.map { (rank: 0.0, note: $0.withVaultName(loc.name)) })
                 }
             }

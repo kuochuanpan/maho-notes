@@ -86,11 +86,11 @@ struct VaultTests {
         _ = try vault.createNote(title: "Alpha Note", collection: "testcoll", tags: ["findme"])
         _ = try vault.createNote(title: "Beta Note", collection: "testcoll", tags: [])
 
-        let results = try vault.searchNotes(query: "alpha")
+        let results = try vault.substringSearch(query: "alpha")
         #expect(results.count == 1)
         #expect(results[0].title == "Alpha Note")
 
-        let tagResults = try vault.searchNotes(query: "findme")
+        let tagResults = try vault.substringSearch(query: "findme")
         #expect(tagResults.count == 1)
 
         try FileManager.default.removeItem(at: tmp)

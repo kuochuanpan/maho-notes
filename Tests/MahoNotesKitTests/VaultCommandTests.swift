@@ -60,7 +60,7 @@ struct VaultCommandTests {
         let configDir = try makeTempDir()
         defer { cleanup(configDir) }
 
-        var registry = VaultRegistry(
+        let registry = VaultRegistry(
             primary: "first",
             vaults: [
                 VaultEntry(name: "first",  type: .local, path: "/tmp/first",  access: .readWrite),
@@ -82,7 +82,7 @@ struct VaultCommandTests {
         let configDir = try makeTempDir()
         defer { cleanup(configDir) }
 
-        var registry = VaultRegistry(
+        let registry = VaultRegistry(
             primary: "first",
             vaults: [VaultEntry(name: "first", type: .local, path: "/tmp/first", access: .readWrite)]
         )
@@ -153,7 +153,7 @@ struct VaultCommandTests {
         let configDir = try makeTempDir()
         defer { cleanup(configDir) }
 
-        var registry = VaultRegistry(
+        let registry = VaultRegistry(
             primary: "test",
             vaults: [VaultEntry(name: "test", type: .local, path: "/tmp/test", access: .readWrite)]
         )
