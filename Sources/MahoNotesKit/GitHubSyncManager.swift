@@ -23,12 +23,18 @@ public struct SyncManifest: Codable, Sendable {
     /// Last sync timestamp.
     public var lastSyncDate: Date
 
-    public init(lastCommitSHA: String, lastTreeSHA: String, branch: String, files: [String: String], lastSyncDate: Date = Date()) {
+    /// The remote head that the commit in `lastCommitSHA` was pushed on top of, when this
+    /// device pushed it. Right after a push GitHub can still answer with that older head;
+    /// this is how such a stale answer is recognised. Absent in manifests from older versions.
+    public var lastPushParentSHA: String?
+
+    public init(lastCommitSHA: String, lastTreeSHA: String, branch: String, files: [String: String], lastSyncDate: Date = Date(), lastPushParentSHA: String? = nil) {
         self.lastCommitSHA = lastCommitSHA
         self.lastTreeSHA = lastTreeSHA
         self.branch = branch
         self.files = files
         self.lastSyncDate = lastSyncDate
+        self.lastPushParentSHA = lastPushParentSHA
     }
 
     // MARK: - Persistence
@@ -191,370 +197,322 @@ public actor GitHubSyncManager {
         )
     }
 
-    // MARK: - Pull
+    // MARK: - Full Sync
 
-    /// Pull remote changes into the local vault.
+    /// How many times one `sync()` starts over when the ground moves under it: another
+    /// device pushes between reading the remote and updating it, or a file is saved locally
+    /// while its remote version is being fetched.
+    private static let maxAttempts = 4
+
+    /// How long after a push a remote head equal to that push's parent is taken for a stale
+    /// answer rather than a real rewind of the branch.
+    private static let staleReadWindow: TimeInterval = 120
+
+    /// Thrown inside a sync cycle to run it again from the top.
+    private struct Restart: Error {
+        let reason: String
+    }
+
+    /// What one `sync()` did, accumulated over its cycles.
+    private struct Progress {
+        var updated = 0
+        var deleted = 0
+        var conflicts: [String] = []
+        var merged: [String] = []
+        var pushed = false
+        var pushSummary = ""
+    }
+
+    /// Full sync: bring in what changed on GitHub, then push what changed here.
     ///
-    /// Compares local manifest SHAs with remote tree.
-    /// Downloads only changed/new files. Detects conflicts (remote-wins + .conflict-* file).
-    public func pull() async throws -> SyncResult {
-        guard SyncManifest.exists(vaultPath: vaultPath) else {
-            // No manifest = first sync → clone
-            return try await clone()
+    /// Every file is compared three ways — the version both sides last agreed on (the
+    /// manifest), the local file, the remote file:
+    ///
+    /// - changed on one side only: that change is taken (including a deletion);
+    /// - changed on both sides, a collection `_index.md`: merged by `CollectionIndexMerge`
+    ///   when the two changes are independent;
+    /// - changed on both sides otherwise: the remote version wins and the local one is kept
+    ///   next to it as a `.conflict-*` copy. An edit beats a deletion in either direction —
+    ///   edited remotely and deleted here, the file comes back; edited here and deleted
+    ///   remotely, the edit is kept as a conflict copy.
+    ///
+    /// The push then adds one commit on top of the remote head that was just reconciled
+    /// with, and never forces: if another device pushed in the meantime GitHub refuses the
+    /// update and the cycle runs again against the new head. (Earlier versions pushed a
+    /// snapshot of the local files first, with force — silently undoing whatever other
+    /// devices had pushed since this one last pulled.)
+    public func sync() async throws -> SyncResult {
+        var manifest: SyncManifest
+        if SyncManifest.exists(vaultPath: vaultPath) {
+            manifest = try SyncManifest.load(vaultPath: vaultPath)
+        } else {
+            if try scanLocalFiles().isEmpty {
+                // Empty vault → clone from remote
+                return try await clone()
+            }
+            // Local content that was never synced: no version both sides agreed on, so a
+            // file that exists on both sides and differs is a conflict.
+            manifest = SyncManifest(lastCommitSHA: "", lastTreeSHA: "", branch: branch, files: [:])
         }
 
-        var manifest = try SyncManifest.load(vaultPath: vaultPath)
-
-        // 1. Get remote HEAD
-        let ref = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
-        let remoteHeadSHA = ref.object.sha
-
-        // Already up to date?
-        if remoteHeadSHA == manifest.lastCommitSHA {
-            return SyncResult(message: "Already up to date.")
-        }
-
-        // 2. Get remote tree
-        let commit = try await client.commits.get(owner: owner, repo: repo, sha: remoteHeadSHA)
-        guard let remoteTreeSHA = commit.tree?.sha else {
-            throw GitHubSyncError.invalidRemoteState("Commit has no tree")
-        }
-        let remoteTree = try await client.trees.get(owner: owner, repo: repo, sha: remoteTreeSHA, recursive: true)
-
-        // 3. Build remote file map
-        var remoteFiles: [String: String] = [:] // path → blob SHA
-        for entry in remoteTree.tree where entry.type == "blob" && !shouldExclude(path: entry.path) {
-            if let sha = entry.sha {
-                remoteFiles[entry.path] = sha
+        var progress = Progress()
+        var attempt = 1
+        while true {
+            do {
+                try await runCycle(manifest: &manifest, progress: &progress)
+                break
+            } catch let restart as Restart {
+                guard attempt < Self.maxAttempts else {
+                    throw GitHubSyncError.interrupted(restart.reason)
+                }
+                attempt += 1
             }
         }
 
-        // 4. Diff: find changed/new/deleted files
+        var parts: [String] = []
+        if progress.updated > 0 || progress.deleted > 0 {
+            parts.append("Pulled: \(progress.updated) updated, \(progress.deleted) deleted.")
+        }
+        if progress.pushed {
+            parts.append("Pushed: \(progress.pushSummary).")
+        }
+        if parts.isEmpty {
+            parts.append("Already up to date.")
+        }
+        let unresolved = conflictCopies(inVault: vaultPath)
+        let message = parts.joined(separator: "\n")
+            + SyncResult.resolutionSummary(merged: progress.merged, created: progress.conflicts, unresolved: unresolved)
+
+        return SyncResult(
+            // "Pulled" is what tells the app to re-read the vault: anything this sync
+            // changed on disk counts.
+            pulled: progress.updated > 0 || progress.deleted > 0 || !progress.conflicts.isEmpty || !progress.merged.isEmpty,
+            pushed: progress.pushed,
+            conflictFiles: progress.conflicts,
+            mergedFiles: progress.merged,
+            unresolvedConflicts: unresolved,
+            message: message
+        )
+    }
+
+    /// One pass: read the remote head, reconcile the working copy with it, push on top of it.
+    private func runCycle(manifest: inout SyncManifest, progress: inout Progress) async throws {
         let fm = FileManager.default
-        var conflictFiles: [String] = []
-        var updatedCount = 0
-        var deletedCount = 0
 
-        // Files changed or added remotely
-        for (path, remoteSHA) in remoteFiles {
-            let manifestSHA = manifest.files[path]
+        // 1. Remote state
+        let ref = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
+        var remoteHead = ref.object.sha
+        var remoteTreeSHA = manifest.lastTreeSHA
+        var remoteFiles = manifest.files // path → blob SHA
 
-            if manifestSHA == remoteSHA {
-                continue // No remote change
+        let staleRead = remoteHead != manifest.lastCommitSHA
+            && remoteHead == manifest.lastPushParentSHA
+            && Date().timeIntervalSince(manifest.lastSyncDate) < Self.staleReadWindow
+        if staleRead {
+            // GitHub answered with the head from before this device's last push. Reading
+            // that tree as "remote changes" would put the old content back over the files
+            // just pushed; the manifest already describes the real head.
+            remoteHead = manifest.lastCommitSHA
+        } else if remoteHead != manifest.lastCommitSHA {
+            let commit = try await client.commits.get(owner: owner, repo: repo, sha: remoteHead)
+            guard let treeSHA = commit.tree?.sha else {
+                throw GitHubSyncError.invalidRemoteState("Commit has no tree")
             }
+            let remoteTree = try await client.trees.get(owner: owner, repo: repo, sha: treeSHA, recursive: true)
+            guard remoteTree.truncated != true else {
+                // A partial listing would read as "the rest was deleted".
+                throw GitHubSyncError.invalidRemoteState("The repository has too many files to list in one request")
+            }
+            remoteFiles = [:]
+            for entry in remoteTree.tree where entry.type == "blob" && !shouldExclude(path: entry.path) {
+                if let sha = entry.sha {
+                    remoteFiles[entry.path] = sha
+                }
+            }
+            remoteTreeSHA = treeSHA
+        }
+
+        // 2. Local state
+        try ensureGitignore()
+        var localFiles: [String: String] = [:] // path → blob SHA
+        for path in try scanLocalFiles().keys {
+            localFiles[path] = try localBlobSHA(path)
+        }
+
+        // 3. Reconcile each file: base (manifest) vs local vs remote
+        let base = manifest.files
+        let paths = Set(base.keys).union(localFiles.keys).union(remoteFiles.keys).sorted()
+        for path in paths {
+            let b = base[path], l = localFiles[path], r = remoteFiles[path]
+            if l == r { continue }      // the same on both sides already
+            if r == b { continue }      // changed here only → goes out with the push
 
             let localPath = (vaultPath as NSString).appendingPathComponent(path)
 
-            // If file was in manifest (we had it before) but is NOT on local disk,
-            // the user intentionally deleted it. Don't re-download — the push that
-            // already ran (push-first sync) has removed it from remote.
-            if manifestSHA != nil && !fm.fileExists(atPath: localPath) {
+            guard let r else {
+                // Deleted remotely.
+                try verifyUnchanged(path, expected: l)
+                if l == b {
+                    try fm.removeItem(atPath: localPath)
+                    progress.deleted += 1
+                } else if l != nil {
+                    // …and edited here: the edit is kept, as a conflict copy.
+                    let conflictPath = makeConflictPath(for: path)
+                    try fm.moveItem(atPath: localPath, toPath: (vaultPath as NSString).appendingPathComponent(conflictPath))
+                    progress.conflicts.append(conflictPath)
+                }
                 continue
             }
 
-            // Check if local file was also modified (conflict)
-            if let manifestSHA, fm.fileExists(atPath: localPath) {
-                let localSHA = try computeGitBlobSHA(filePath: localPath)
-                if localSHA != manifestSHA {
-                    // Both modified → conflict! Save local as .conflict-* file
-                    let conflictPath = makeConflictPath(for: path)
-                    let conflictFullPath = (vaultPath as NSString).appendingPathComponent(conflictPath)
-                    try? fm.copyItem(atPath: localPath, toPath: conflictFullPath)
-                    conflictFiles.append(conflictPath)
+            let remoteData = try await blobData(r)
+
+            if l == b || l == nil {
+                // Changed remotely only — or edited remotely and deleted here, where the
+                // edit wins and the file comes back.
+                try verifyUnchanged(path, expected: l)
+                try write(remoteData, to: localPath)
+                progress.updated += 1
+                continue
+            }
+
+            // Changed on both sides, differently.
+            if CollectionIndexMerge.isCollectionIndex(path: path),
+               let localText = try? String(contentsOfFile: localPath, encoding: .utf8),
+               let remoteText = String(data: remoteData, encoding: .utf8) {
+                var baseText: String?
+                if let b, let data = try? await blobData(b) {
+                    baseText = String(data: data, encoding: .utf8)
+                }
+                if case .merged(let text) = CollectionIndexMerge.merge(base: baseText, local: localText, remote: remoteText) {
+                    try verifyUnchanged(path, expected: l)
+                    if text != localText {
+                        try write(Data(text.utf8), to: localPath)
+                    }
+                    if !progress.merged.contains(path) {
+                        progress.merged.append(path)
+                    }
+                    continue
                 }
             }
 
-            // Download remote version (remote-wins)
-            let blob = try await client.blobs.get(owner: owner, repo: repo, sha: remoteSHA)
-            if let data = blob.decodedData {
-                let dirPath = (localPath as NSString).deletingLastPathComponent
-                if !fm.fileExists(atPath: dirPath) {
-                    try fm.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
-                }
-                try data.write(to: URL(fileURLWithPath: localPath))
-            }
-
-            manifest.files[path] = remoteSHA
-            updatedCount += 1
+            // Remote wins; the local version is kept next to it.
+            try verifyUnchanged(path, expected: l)
+            let conflictPath = makeConflictPath(for: path)
+            try fm.copyItem(atPath: localPath, toPath: (vaultPath as NSString).appendingPathComponent(conflictPath))
+            try write(remoteData, to: localPath)
+            progress.conflicts.append(conflictPath)
+            progress.updated += 1
         }
 
-        // Files deleted remotely
-        for path in manifest.files.keys where remoteFiles[path] == nil {
-            let localPath = (vaultPath as NSString).appendingPathComponent(path)
-
-            // Check if locally modified before deleting
-            if fm.fileExists(atPath: localPath) {
-                let localSHA = try? computeGitBlobSHA(filePath: localPath)
-                if localSHA != manifest.files[path] {
-                    // Locally modified but remotely deleted → save as conflict
-                    let conflictPath = makeConflictPath(for: path)
-                    let conflictFullPath = (vaultPath as NSString).appendingPathComponent(conflictPath)
-                    try? fm.moveItem(atPath: localPath, toPath: conflictFullPath)
-                    conflictFiles.append(conflictPath)
-                } else {
-                    try? fm.removeItem(atPath: localPath)
-                }
-            }
-
-            manifest.files.removeValue(forKey: path)
-            deletedCount += 1
+        // 4. The working copy now contains everything at `remoteHead`: that is the new
+        //    base. Saved before pushing, so an interrupted push is not mistaken for remote
+        //    changes next time.
+        if manifest.lastCommitSHA != remoteHead || manifest.files != remoteFiles {
+            manifest.files = remoteFiles
+            manifest.lastCommitSHA = remoteHead
+            manifest.lastTreeSHA = remoteTreeSHA
+            manifest.lastSyncDate = Date()
+            try manifest.save(vaultPath: vaultPath)
         }
 
-        // 5. Update manifest
-        manifest.lastCommitSHA = remoteHeadSHA
-        manifest.lastTreeSHA = remoteTreeSHA
-        manifest.lastSyncDate = Date()
-        try manifest.save(vaultPath: vaultPath)
-
-        var message = "Pulled: \(updatedCount) updated, \(deletedCount) deleted."
-        if !conflictFiles.isEmpty {
-            let files = conflictFiles.joined(separator: "\n  ")
-            message += "\nConflicts (local saved as .conflict-*):\n  \(files)"
-        }
-
-        return SyncResult(pulled: true, conflictFiles: conflictFiles, message: message)
-    }
-
-    // MARK: - Push
-
-    /// Push local changes to the remote repository.
-    ///
-    /// Uses **full tree mode** (no `baseTree`): builds a complete tree from local files.
-    /// This ensures deleted files don't persist via tree inheritance, and files excluded
-    /// from sync (e.g. `_site/`) don't leak into the tree.
-    public func push() async throws -> SyncResult {
-        guard SyncManifest.exists(vaultPath: vaultPath) else {
-            throw GitHubSyncError.noManifest
-        }
-
-        var manifest = try SyncManifest.load(vaultPath: vaultPath)
-
-        // 1. Scan local files
-        let localFiles = try scanLocalFiles()
-
-        // 2. Build full tree: every local file becomes a tree entry
+        // 5. Push: a full tree of the local files (so a deleted file does not survive through
+        //    tree inheritance, and files excluded from sync never get in).
         var treeEntries: [CreateTreeEntry] = []
-        var newBlobCount = 0
-        var deletedCount = 0
-        var newManifestFiles: [String: String] = [:]
-
-        for (path, _) in localFiles {
-            let localPath = (vaultPath as NSString).appendingPathComponent(path)
-            let localSHA = try computeGitBlobSHA(filePath: localPath)
-
-            if manifest.files[path] == localSHA {
-                // Unchanged — reuse existing SHA (no upload needed)
-                treeEntries.append(.blob(path: path, sha: localSHA))
-                newManifestFiles[path] = localSHA
-            } else {
-                // New or changed — upload blob
-                let fileData = try Data(contentsOf: URL(fileURLWithPath: localPath))
-                let blob = try await client.blobs.create(
-                    owner: owner, repo: repo,
-                    request: .base64(fileData)
-                )
-
-                treeEntries.append(.blob(path: path, sha: blob.sha))
-                newManifestFiles[path] = blob.sha
-                newBlobCount += 1
+        var pushedFiles: [String: String] = [:]
+        var changedCount = 0
+        for path in try scanLocalFiles().keys.sorted() {
+            let data = try Data(contentsOf: URL(fileURLWithPath: (vaultPath as NSString).appendingPathComponent(path)))
+            var sha = Self.gitBlobSHA(of: data)
+            if remoteFiles[path] != sha {
+                // New or changed — upload exactly the bytes that were hashed
+                sha = try await client.blobs.create(owner: owner, repo: repo, request: .base64(data)).sha
+                changedCount += 1
             }
+            treeEntries.append(.blob(path: path, sha: sha))
+            pushedFiles[path] = sha
+        }
+        let deletedCount = remoteFiles.keys.filter { pushedFiles[$0] == nil }.count
+
+        guard changedCount > 0 || deletedCount > 0 else { return }
+        guard !treeEntries.isEmpty, remoteFiles["maho.yaml"] == nil || pushedFiles["maho.yaml"] != nil else {
+            // A folder that is no longer a vault (a wiped container, an unmounted volume)
+            // must not turn into "delete everything on GitHub": every vault has a maho.yaml.
+            throw GitHubSyncError.invalidLocalState("The vault folder has lost its maho.yaml; not pushing its deletion.")
         }
 
-        // Count deleted files (in manifest but not on disk)
-        for path in manifest.files.keys where localFiles[path] == nil {
-            deletedCount += 1
-        }
-
-        // Nothing changed?
-        if newBlobCount == 0 && deletedCount == 0 {
-            return SyncResult(pushed: true, message: "Nothing to push.")
-        }
-
-        // 3. Create full tree (no baseTree — only what's in local scan)
         let newTree = try await client.trees.create(
             owner: owner, repo: repo,
             request: CreateTreeRequest(tree: treeEntries)
         )
 
-        // 4. Get current remote HEAD as commit parent (not manifest — avoids stale parent race)
-        let currentRef = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
-        let parentSHA = currentRef.object.sha
-
-        // 5. Create commit
-        let changeDesc = [
-            newBlobCount > 0 ? "\(newBlobCount) changed" : nil,
+        let summary = [
+            changedCount > 0 ? "\(changedCount) changed" : nil,
             deletedCount > 0 ? "\(deletedCount) deleted" : nil,
         ].compactMap { $0 }.joined(separator: ", ")
 
         let newCommit = try await client.commits.create(
             owner: owner, repo: repo,
             request: CreateCommitRequest(
-                message: "sync: \(changeDesc)",
+                message: "sync: \(summary)",
                 tree: newTree.sha,
-                parents: [parentSHA],
+                parents: [remoteHead],
                 author: CommitPerson(name: committerName, email: committerEmail)
             )
         )
 
-        // 6. Update ref (force = true eliminates non-fast-forward errors;
-        //    safe because full tree push is a complete snapshot of local state)
-        _ = try await client.refs.update(
-            owner: owner, repo: repo,
-            ref: "heads/\(branch)",
-            request: UpdateRefRequest(sha: newCommit.sha, force: true)
-        )
+        do {
+            // Never forced: the commit sits on the head that was reconciled with above. If
+            // that is no longer the head, another device pushed — start over against it.
+            _ = try await client.refs.update(
+                owner: owner, repo: repo,
+                ref: "heads/\(branch)",
+                request: UpdateRefRequest(sha: newCommit.sha, force: false)
+            )
+        } catch let error as GitHubError {
+            switch error {
+            case .validationFailed, .conflict:
+                throw Restart(reason: "GitHub changed while syncing (\(error))")
+            default:
+                throw error
+            }
+        }
 
-        // 7. Update manifest with new file state
-        manifest.files = newManifestFiles
+        manifest.files = pushedFiles
+        manifest.lastPushParentSHA = remoteHead
         manifest.lastCommitSHA = newCommit.sha
         manifest.lastTreeSHA = newTree.sha
         manifest.lastSyncDate = Date()
         try manifest.save(vaultPath: vaultPath)
 
-        return SyncResult(
-            pushed: true,
-            message: "Pushed: \(changeDesc)."
-        )
+        progress.pushed = true
+        progress.pushSummary = summary
     }
 
-    // MARK: - Full Sync
-
-    /// Full sync: pull → push (with conflict handling).
-    public func sync() async throws -> SyncResult {
-        if !SyncManifest.exists(vaultPath: vaultPath) {
-            // First sync — check if local vault has content
-            let localFiles = try scanLocalFiles()
-            if localFiles.isEmpty {
-                // Empty vault → clone from remote
-                return try await clone()
-            } else {
-                // Local content exists but no manifest — initialize manifest from remote, then push
-                return try await initialSyncWithExistingContent()
-            }
+    /// A file about to be replaced, moved or deleted must still be what it was when this
+    /// cycle looked at it. The app keeps saving while a sync is on the network; taking the
+    /// remote version over a file saved in between would lose that save without a trace.
+    private func verifyUnchanged(_ path: String, expected: String?) throws {
+        let localPath = (vaultPath as NSString).appendingPathComponent(path)
+        let current = FileManager.default.fileExists(atPath: localPath) ? try localBlobSHA(path) : nil
+        if current != expected {
+            throw Restart(reason: "\(path) changed on this device while syncing")
         }
-
-        // Push-first sync: push local state (including deletions) BEFORE pull.
-        // This prevents pull from re-downloading files the user deleted locally.
-        // Force-push ensures no non-fast-forward errors.
-        let pushResult = try await push()
-
-        // If we pushed changes, skip pull for this cycle.
-        // Push creates a full tree snapshot — the remote is now in sync with local.
-        // Pulling immediately after push risks getting stale data due to GitHub API
-        // eventual consistency (refs.get returns the pre-push HEAD because the GET
-        // endpoint hasn't replicated the PATCH update yet). Remote changes from
-        // other devices will be caught on the next sync cycle (periodic/manual).
-        let pushedChanges = pushResult.pushed
-            && !pushResult.message.contains("Nothing to push")
-        if pushedChanges {
-            return SyncResult(pushed: true, message: pushResult.message)
-        }
-
-        let pullResult = try await pull()
-
-        var message = pushResult.message
-        if !pullResult.message.contains("up to date") {
-            message += "\n" + pullResult.message
-        }
-
-        return SyncResult(
-            pulled: pullResult.pulled,
-            pushed: pushResult.pushed,
-            conflictFiles: pullResult.conflictFiles + pushResult.conflictFiles,
-            message: message
-        )
     }
 
-    // MARK: - Initial Sync with Existing Content
-
-    /// Handle first sync when vault already has local content but no manifest.
-    /// Downloads remote state, merges, and pushes.
-    private func initialSyncWithExistingContent() async throws -> SyncResult {
-        let fm = FileManager.default
-
-        // Get remote state
-        let ref = try await client.refs.get(owner: owner, repo: repo, ref: "heads/\(branch)")
-        let headSHA = ref.object.sha
-        let commit = try await client.commits.get(owner: owner, repo: repo, sha: headSHA)
-        guard let treeSHA = commit.tree?.sha else {
-            throw GitHubSyncError.invalidRemoteState("Commit has no tree")
+    private func blobData(_ sha: String) async throws -> Data {
+        let blob = try await client.blobs.get(owner: owner, repo: repo, sha: sha)
+        guard let data = blob.decodedData else {
+            throw GitHubSyncError.invalidRemoteState("Could not read file content (blob \(sha))")
         }
-        let remoteTree = try await client.trees.get(owner: owner, repo: repo, sha: treeSHA, recursive: true)
+        return data
+    }
 
-        // Build remote file map
-        var remoteFiles: [String: String] = [:]
-        for entry in remoteTree.tree where entry.type == "blob" && !shouldExclude(path: entry.path) {
-            if let sha = entry.sha {
-                remoteFiles[entry.path] = sha
-            }
+    private func write(_ data: Data, to localPath: String) throws {
+        let dirPath = (localPath as NSString).deletingLastPathComponent
+        if !FileManager.default.fileExists(atPath: dirPath) {
+            try FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
-
-        // Download remote-only files, detect conflicts
-        var conflictFiles: [String] = []
-        var manifestFiles: [String: String] = [:]
-
-        for (path, remoteSHA) in remoteFiles {
-            let localPath = (vaultPath as NSString).appendingPathComponent(path)
-
-            if fm.fileExists(atPath: localPath) {
-                // Both exist — check if different
-                let localSHA = try computeGitBlobSHA(filePath: localPath)
-                if localSHA != remoteSHA {
-                    // Conflict — save local, use remote
-                    let conflictPath = makeConflictPath(for: path)
-                    let conflictFullPath = (vaultPath as NSString).appendingPathComponent(conflictPath)
-                    try? fm.copyItem(atPath: localPath, toPath: conflictFullPath)
-                    conflictFiles.append(conflictPath)
-
-                    // Download remote version
-                    let blob = try await client.blobs.get(owner: owner, repo: repo, sha: remoteSHA)
-                    if let data = blob.decodedData {
-                        try data.write(to: URL(fileURLWithPath: localPath))
-                    }
-                }
-                manifestFiles[path] = remoteSHA
-            } else {
-                // Remote only — download
-                let blob = try await client.blobs.get(owner: owner, repo: repo, sha: remoteSHA)
-                if let data = blob.decodedData {
-                    let dirPath = (localPath as NSString).deletingLastPathComponent
-                    if !fm.fileExists(atPath: dirPath) {
-                        try fm.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
-                    }
-                    try data.write(to: URL(fileURLWithPath: localPath))
-                }
-                manifestFiles[path] = remoteSHA
-            }
-        }
-
-        // Create manifest with remote state
-        let manifest = SyncManifest(
-            lastCommitSHA: headSHA,
-            lastTreeSHA: treeSHA,
-            branch: branch,
-            files: manifestFiles
-        )
-        try manifest.save(vaultPath: vaultPath)
-        try ensureGitignore()
-
-        // Now push any local-only files
-        let pushResult = try await push()
-
-        var message = "Initial sync complete."
-        if !conflictFiles.isEmpty {
-            let files = conflictFiles.joined(separator: "\n  ")
-            message += "\nConflicts (local saved as .conflict-*):\n  \(files)"
-        }
-        if pushResult.pushed {
-            message += "\n" + pushResult.message
-        }
-
-        return SyncResult(
-            pulled: true,
-            pushed: pushResult.pushed,
-            conflictFiles: conflictFiles + pushResult.conflictFiles,
-            message: message
-        )
+        try data.write(to: URL(fileURLWithPath: localPath), options: .atomic)
     }
 
     // MARK: - Helpers
@@ -595,6 +553,8 @@ public actor GitHubSyncManager {
 
     /// Check if a path should be excluded from sync.
     private func shouldExclude(path: String) -> Bool {
+        // A vault that is also synced with the `git` CLI has a `.git` folder.
+        if path == ".git" || path.hasPrefix(".git/") { return true }
         for pattern in excludePatterns {
             if path == pattern || path.hasPrefix(pattern + "/") || path.contains("/\(pattern)") || path.contains(pattern) {
                 return true
@@ -603,44 +563,50 @@ public actor GitHubSyncManager {
         return false
     }
 
-    /// Compute git blob SHA for a local file (matches GitHub's SHA computation).
-    ///
-    /// Git blob SHA = SHA-1 of "blob <size>\0<content>"
-    private func computeGitBlobSHA(filePath: String) throws -> String {
-        let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
-        let header = "blob \(data.count)\0"
-        var hashInput = Data(header.utf8)
-        hashInput.append(data)
-
-        let digest = Insecure.SHA1.hash(data: hashInput)
-        return digest.map { String(format: "%02x", $0) }.joined()
+    /// Git blob SHA of a local file (the same value GitHub reports for it), by path
+    /// relative to the vault.
+    private func localBlobSHA(_ path: String) throws -> String {
+        let fullPath = (vaultPath as NSString).appendingPathComponent(path)
+        return Self.gitBlobSHA(of: try Data(contentsOf: URL(fileURLWithPath: fullPath)))
     }
 
-    /// Create a conflict file path for a given original path.
+    /// Git blob SHA = SHA-1 of "blob <size>\0<content>"
+    static func gitBlobSHA(of data: Data) -> String {
+        var hashInput = Data("blob \(data.count)\0".utf8)
+        hashInput.append(data)
+        return Insecure.SHA1.hash(data: hashInput).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// A conflict copy path for a given original path, not yet taken by another file.
     private func makeConflictPath(for path: String) -> String {
         let url = URL(fileURLWithPath: path)
         let baseName = url.deletingPathExtension().lastPathComponent
         let ext = url.pathExtension
-        let dir = url.deletingLastPathComponent().relativePath
+        let dir = (path as NSString).deletingLastPathComponent
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime]
         let timestamp = isoFormatter.string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
 
-        let conflictName = "\(baseName).conflict-\(timestamp)-local\(ext.isEmpty ? "" : ".\(ext)")"
-
-        if dir == "." || dir.isEmpty {
-            return conflictName
+        func candidate(_ counter: Int) -> String {
+            // The app's rename to `.conflict-{DeviceName}` expects the name to end in `-local`.
+            let stamp = counter == 1 ? timestamp : "\(timestamp)-\(counter)"
+            let name = "\(baseName).conflict-\(stamp)-local\(ext.isEmpty ? "" : ".\(ext)")"
+            return dir.isEmpty ? name : "\(dir)/\(name)"
         }
-        return "\(dir)/\(conflictName)"
+        var counter = 1
+        while FileManager.default.fileExists(atPath: (vaultPath as NSString).appendingPathComponent(candidate(counter))) {
+            counter += 1
+        }
+        return candidate(counter)
     }
 
     /// Ensure .gitignore has required entries.
     private func ensureGitignore() throws {
         let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
         let fm = FileManager.default
-        let requiredEntries = [".maho/", "_site/"]
+        let requiredEntries = syncGitignoreEntries
 
         if fm.fileExists(atPath: gitignorePath) {
             var content = try String(contentsOfFile: gitignorePath, encoding: .utf8)
@@ -667,7 +633,11 @@ public actor GitHubSyncManager {
 public enum GitHubSyncError: Error, LocalizedError, CustomStringConvertible, Sendable {
     case noManifest
     case invalidRemoteState(String)
+    case invalidLocalState(String)
     case nonFastForward
+    /// The sync kept being overtaken — by pushes from other devices or by local saves — and
+    /// gave up for now. Nothing is lost; the next sync picks up where this one stopped.
+    case interrupted(String)
 
     public var errorDescription: String? { description }
 
@@ -677,8 +647,12 @@ public enum GitHubSyncError: Error, LocalizedError, CustomStringConvertible, Sen
             return "No sync manifest found. Run sync to initialize."
         case .invalidRemoteState(let msg):
             return "Invalid remote state: \(msg)"
+        case .invalidLocalState(let msg):
+            return "Invalid local state: \(msg)"
         case .nonFastForward:
             return "Non-fast-forward update — pull first, then push."
+        case .interrupted(let reason):
+            return "Sync was interrupted and will be retried: \(reason)"
         }
     }
 }

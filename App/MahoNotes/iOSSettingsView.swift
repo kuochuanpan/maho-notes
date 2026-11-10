@@ -428,6 +428,12 @@ struct iOSSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if appState.syncCoordinator.unresolvedConflictCount > 0 {
+                    // Synced, but some files still exist in two versions.
+                    Text("Unresolved conflicts: \(appState.syncCoordinator.unresolvedConflictCount)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Spacer()

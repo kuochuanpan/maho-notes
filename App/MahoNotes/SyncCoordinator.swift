@@ -56,8 +56,14 @@ final class SyncCoordinator: @unchecked Sendable {
     var lastSyncDate: Date?
     var lastSyncError: String?
     var vaultSyncStatus: [String: VaultSyncStatus] = [:]
-    /// Conflict files by vault name → list of relative conflict paths (device-name format).
+    /// Conflict copies by vault name → relative paths, as found on disk after the last sync
+    /// (so copies left by earlier sessions, or by the CLI, are counted too).
     var githubConflictFiles: [String: [String]] = [:]
+
+    /// Number of conflict copies waiting to be resolved across all GitHub vaults.
+    var unresolvedConflictCount: Int {
+        githubConflictFiles.values.reduce(0) { $0 + $1.count }
+    }
 
     /// Called before sync starts for a vault.
     /// Set by AppState to flush unsaved editor changes to disk.
@@ -120,6 +126,10 @@ final class SyncCoordinator: @unchecked Sendable {
             managers[entry.name] = manager
             vaultPaths[entry.name] = vaultPath
             vaultSyncStatus[entry.name] = VaultSyncStatus()
+            let copies = conflictCopies(inVault: vaultPath)
+            if !copies.isEmpty {
+                githubConflictFiles[entry.name] = copies
+            }
         }
 
         guard !managers.isEmpty else { return }
@@ -234,8 +244,8 @@ final class SyncCoordinator: @unchecked Sendable {
             lastSyncError = nil  // Clear global error on success
             processConflicts(vaultName: vaultName, newConflicts: result.conflictFiles)
 
-            // Notify AppState to reload UI if remote changes were pulled
-            if result.pulled || result.cloned {
+            // Notify AppState to reload UI if the sync changed files on disk
+            if result.pulled || result.cloned || !result.conflictFiles.isEmpty {
                 onSyncCompleted?(vaultName)
             }
         } catch {
@@ -245,37 +255,21 @@ final class SyncCoordinator: @unchecked Sendable {
         }
     }
 
-    /// Rename new timestamp-based conflict files to device-name format, merge with existing,
-    /// and prune any that have since been removed from disk.
+    /// Rename new timestamp-based conflict files to device-name format, then record every
+    /// conflict copy the vault holds.
     @MainActor
     private func processConflicts(vaultName: String, newConflicts: [String]) {
         guard let vaultPath = vaultPaths[vaultName] else { return }
         let deviceName = DeviceInfo.filenameSafe
-        let fm = FileManager.default
-
-        // Rename each new conflict file from timestamp format to device-name format
-        var renamed: [String] = []
         for conflictPath in newConflicts {
-            if let newPath = renameConflictFile(at: conflictPath, in: vaultPath, deviceName: deviceName) {
-                renamed.append(newPath)
-            } else {
-                renamed.append(conflictPath)
-            }
+            _ = renameConflictFile(at: conflictPath, in: vaultPath, deviceName: deviceName)
         }
 
-        // Prune stale entries, then merge
-        let existing = githubConflictFiles[vaultName] ?? []
-        let stillExisting = existing.filter { path in
-            fm.fileExists(atPath: (vaultPath as NSString).appendingPathComponent(path))
-        }
-        var combined = stillExisting
-        for p in renamed where !combined.contains(p) {
-            combined.append(p)
-        }
+        let copies = conflictCopies(inVault: vaultPath)
         // Only update if the list actually changed — avoid unnecessary @Observable notifications
         // that cascade to NoteContentView and trigger MarkdownWebView re-renders.
-        if combined != (githubConflictFiles[vaultName] ?? []) {
-            githubConflictFiles[vaultName] = combined
+        if copies != (githubConflictFiles[vaultName] ?? []) {
+            githubConflictFiles[vaultName] = copies.isEmpty ? nil : copies
         }
     }
 
@@ -293,16 +287,25 @@ final class SyncCoordinator: @unchecked Sendable {
               let conflictRange = nameNoExt.range(of: ".conflict-") else { return nil }
 
         let baseName = String(nameNoExt[nameNoExt.startIndex..<conflictRange.lowerBound])
-        let newName = ext.isEmpty
-            ? "\(baseName).conflict-\(deviceName)"
-            : "\(baseName).conflict-\(deviceName).\(ext)"
-        let newRelativePath = (dir == "." || dir.isEmpty) ? newName : "\(dir)/\(newName)"
+        func path(_ counter: Int) -> String {
+            let suffix = counter == 1 ? "" : "-\(counter)"
+            let newName = ext.isEmpty
+                ? "\(baseName).conflict-\(deviceName)\(suffix)"
+                : "\(baseName).conflict-\(deviceName)\(suffix).\(ext)"
+            return (dir == "." || dir.isEmpty) ? newName : "\(dir)/\(newName)"
+        }
 
         let fullOld = (vaultPath as NSString).appendingPathComponent(relativePath)
-        let fullNew = (vaultPath as NSString).appendingPathComponent(newRelativePath)
+        guard FileManager.default.fileExists(atPath: fullOld) else { return nil }
 
-        // If the device-named file already exists (idempotent rename), just return new path
-        if FileManager.default.fileExists(atPath: fullNew) { return newRelativePath }
+        // An earlier conflict on the same file may still be waiting under the plain name:
+        // that copy holds different text, so this one gets a name of its own.
+        var counter = 1
+        while FileManager.default.fileExists(atPath: (vaultPath as NSString).appendingPathComponent(path(counter))) {
+            counter += 1
+        }
+        let newRelativePath = path(counter)
+        let fullNew = (vaultPath as NSString).appendingPathComponent(newRelativePath)
 
         do {
             try FileManager.default.moveItem(atPath: fullOld, toPath: fullNew)

@@ -891,6 +891,15 @@ struct GitHubSyncGroupBox: View {
                             .foregroundStyle(.red)
                             .lineLimit(2)
                     }
+                    if coordinator.unresolvedConflictCount > 0 {
+                        // Synced, but some files still exist in two versions.
+                        Text("Unresolved conflicts: \(coordinator.unresolvedConflictCount)")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .help(coordinator.githubConflictFiles.keys.sorted().flatMap { vault in
+                                (coordinator.githubConflictFiles[vault] ?? []).map { "\(vault): \($0)" }
+                            }.joined(separator: "\n"))
+                    }
                 }
 
                 Spacer()

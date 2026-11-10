@@ -82,8 +82,8 @@
 - **iCloud**: Automatic via `NSMetadataQuery` monitoring. Conflict resolution via `NSFileVersion`.
 - **GitHub (CLI)**: `mn sync` — uses `git` CLI (clone/pull/push). macOS only.
 - **GitHub (App)**: `GitHubSyncManager` — REST API via `swift-github-api`. Works on all Apple platforms.
-- **SyncCoordinator**: Auto-sync for GitHub vaults in the app — debounce 30s push + 5min periodic pull.
-- **Conflict**: Device-name based conflict files (`note.conflict-{DeviceName}.md`).
+- **SyncCoordinator**: Auto-sync for GitHub vaults in the app — full sync 30s after an edit and every 5 minutes.
+- **Conflict**: Device-name based conflict files (`note.conflict-{DeviceName}.md`): the remote version wins in place, this device's version is kept next to it and never pushed. A collection `_index.md` changed on both sides is merged by `CollectionIndexMerge` when the changes are independent. See decision #33.
 
 ## Tech Stack
 

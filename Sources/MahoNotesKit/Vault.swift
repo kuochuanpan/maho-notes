@@ -58,7 +58,8 @@ public struct Vault: Sendable {
         return defined + discovered.sorted(by: { $0.id < $1.id })
     }
 
-    /// Find all markdown files in the vault (excluding _index.md files)
+    /// Find all markdown files in the vault (excluding _index.md files, and conflict copies
+    /// of them — collection metadata, not notes)
     public func allNoteFiles() throws -> [String] {
         let vaultURL = URL(fileURLWithPath: path)
         let fm = FileManager.default
@@ -75,6 +76,7 @@ public struct Vault: Sendable {
             let filename = fileURL.lastPathComponent
             guard fileURL.pathExtension == "md",
                   filename != "_index.md",
+                  !filename.hasPrefix("_index.conflict-"),
                   filename.lowercased() != "readme.md"
             else { continue }
             files.append(fileURL.path)
@@ -113,10 +115,10 @@ public struct Vault: Sendable {
 
     /// Search notes by substring match across title, tags, and body.
     ///
-    /// - Note: This is an O(n) brute-force scan used only as a fallback when FTS5 is unavailable.
-    ///   Prefer `VaultSearchService.search()` or `SearchIndex` for production search.
-    @available(*, deprecated, message: "Use VaultSearchService or SearchIndex for efficient search")
-    public func searchNotes(query: String) throws -> [Note] {
+    /// An O(n) scan of every note, for when the FTS5 index cannot be opened or built —
+    /// the fallback `VaultSearchService` and `mn search` use. Search through
+    /// `VaultSearchService.search()` or `SearchIndex` otherwise.
+    public func substringSearch(query: String) throws -> [Note] {
         let lowercased = query.lowercased()
         let notes = try allNotes()
         return notes.filter { note in
@@ -124,6 +126,12 @@ public struct Vault: Sendable {
                 || note.body.lowercased().contains(lowercased)
                 || note.tags.contains(where: { $0.lowercased().contains(lowercased) })
         }
+    }
+
+    /// Search notes by substring match across title, tags, and body.
+    @available(*, deprecated, message: "Use VaultSearchService or SearchIndex for efficient search")
+    public func searchNotes(query: String) throws -> [Note] {
+        try substringSearch(query: query)
     }
 
     /// Create a new note with the `# Title` stub body and return its relative path.

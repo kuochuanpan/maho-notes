@@ -215,6 +215,32 @@ mn open <path>                        # open in $EDITOR
 `mn sync` and `mn publish` push to GitHub — run them when the user asks for it, not as a
 side effect of writing a note.
 
+**Check `status` after `mn sync --json`, not only the exit code.** Exit 0 with `pushed: true`
+means the data was transferred; it does not mean every file ended up in one version.
+
+```json
+{"cloned": false, "pulled": true, "pushed": true, "status": "conflicts",
+ "conflictFiles": ["notes/plan.conflict-2026-11-10T08-00-00Z-local.md"],
+ "mergedFiles": ["notes/_index.md"],
+ "unresolvedConflicts": ["notes/plan.conflict-2026-11-10T08-00-00Z-local.md"],
+ "message": "Sync complete. …"}
+```
+
+- `status` is `"ok"`, or `"conflicts"` when `unresolvedConflicts` is not empty.
+- A note changed here and on another device: the other device's version is now at the note's
+  path, and this device's version is in a conflict copy next to it (`conflictFiles` lists the
+  ones this sync created, `unresolvedConflicts` all that exist, including older ones). To
+  resolve: read both, write the result to the note with `mn write`, delete the conflict copy,
+  sync again. Conflict copies stay on this device — they are never pushed.
+- A collection's `_index.md` (note order, sub-collection order, title…) changed on both sides
+  is merged automatically when the changes are independent — two devices each adding a note
+  keeps both; a note removed on one side stays removed. Those are listed in `mergedFiles` and
+  need nothing from you. Only contradictory changes (two different reorders, the same field
+  set to two values) leave an `_index.conflict-*.md` copy; fix `order:` / `children:` in the
+  collection's `_index.md` by hand, then delete the copy.
+- `mn sync --all --json` gives the same `status`, `conflictFiles`, `mergedFiles` and
+  `unresolvedConflicts` per vault (`status` is `"error"` for a vault whose sync failed).
+
 ## Vault layout
 
 ```

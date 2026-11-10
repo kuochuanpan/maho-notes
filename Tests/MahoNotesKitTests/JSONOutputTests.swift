@@ -83,4 +83,21 @@ struct JSONOutputTests {
         let json = try encodeToJSON(result)
         #expect((json["conflictFiles"] as? [String])?.count == 2)
     }
+
+    /// `pushed: true` only says data was transferred; `status` says whether anything is
+    /// left to resolve — including conflict copies from earlier syncs.
+    @Test func syncResultStatusDistinguishesUnresolvedConflicts() throws {
+        let clean = try encodeToJSON(SyncResult(pulled: true, pushed: true, mergedFiles: ["notes/_index.md"], message: "Sync complete."))
+        #expect(clean["status"] as? String == "ok")
+        #expect(clean["mergedFiles"] as? [String] == ["notes/_index.md"])
+        #expect((clean["unresolvedConflicts"] as? [String])?.isEmpty == true)
+
+        let fresh = try encodeToJSON(SyncResult(pulled: true, pushed: true, conflictFiles: ["a.conflict-x-local.md"], message: ""))
+        #expect(fresh["status"] as? String == "conflicts")
+        #expect(fresh["unresolvedConflicts"] as? [String] == ["a.conflict-x-local.md"])
+
+        let leftover = try encodeToJSON(SyncResult(pulled: true, pushed: true, unresolvedConflicts: ["b.conflict-Mac.md"], message: ""))
+        #expect(leftover["status"] as? String == "conflicts")
+        #expect((leftover["conflictFiles"] as? [String])?.isEmpty == true)
+    }
 }

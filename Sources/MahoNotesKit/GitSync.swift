@@ -25,15 +25,66 @@ public struct SyncResult: Sendable, Codable {
     public let cloned: Bool
     public let pulled: Bool
     public let pushed: Bool
+    /// Conflict copies created by this sync: this device's version of a file whose remote
+    /// version won. Paths relative to the vault.
     public let conflictFiles: [String]
+    /// Files both sides had changed that were merged without a conflict copy
+    /// (collection `_index.md` files, merged by `CollectionIndexMerge`).
+    public let mergedFiles: [String]
+    /// Every conflict copy in the vault after this sync — the ones just created and any left
+    /// by earlier syncs. They stay until merged by hand and deleted.
+    public let unresolvedConflicts: [String]
+    /// `"ok"` when nothing is left to resolve, `"conflicts"` when `unresolvedConflicts` is
+    /// not empty. `pulled` / `pushed` only say that data was transferred.
+    public let status: String
     public let message: String
 
-    public init(cloned: Bool = false, pulled: Bool = false, pushed: Bool = false, conflictFiles: [String] = [], message: String = "") {
+    public init(
+        cloned: Bool = false, pulled: Bool = false, pushed: Bool = false,
+        conflictFiles: [String] = [], mergedFiles: [String] = [],
+        unresolvedConflicts: [String]? = nil, message: String = ""
+    ) {
         self.cloned = cloned
         self.pulled = pulled
         self.pushed = pushed
         self.conflictFiles = conflictFiles
+        self.mergedFiles = mergedFiles
+        self.unresolvedConflicts = unresolvedConflicts ?? conflictFiles
+        self.status = self.unresolvedConflicts.isEmpty ? "ok" : "conflicts"
         self.message = message
+    }
+
+    /// Text for the end of a sync message: what was merged, and what is left to resolve.
+    static func resolutionSummary(merged: [String], created: [String], unresolved: [String]) -> String {
+        var text = ""
+        if !merged.isEmpty {
+            text += "\n\nMerged automatically (both sides had changed these):\n  " + merged.joined(separator: "\n  ")
+        }
+        if !created.isEmpty {
+            text += "\n\nConflict files created (resolve manually, then delete):\n  " + created.joined(separator: "\n  ")
+        }
+        let earlier = unresolved.filter { !created.contains($0) }
+        if !earlier.isEmpty {
+            text += "\n\nConflict files from earlier syncs still to resolve:\n  " + earlier.joined(separator: "\n  ")
+        }
+        if !unresolved.isEmpty {
+            text += "\n\nSynced with unresolved conflicts: a conflict file holds this device's version, "
+                + "the file next to it holds the other one."
+        }
+        return text
+    }
+}
+
+/// What resolving a merge's conflicted files produced.
+struct ConflictResolution {
+    /// Conflict copies written (paths relative to the vault).
+    var conflicts: [String] = []
+    /// Files merged without a conflict copy.
+    var merged: [String] = []
+
+    mutating func add(_ other: ConflictResolution) {
+        conflicts += other.conflicts
+        merged += other.merged
     }
 }
 
@@ -135,17 +186,22 @@ public struct GitSync: Sendable {
                     _ = try? runGit(["merge", "--allow-unrelated-histories", remoteBranch, "-m", "Merge remote vault with local"],
                                    in: vaultPath, label: "merge unrelated", env: env)
                     // If merge has conflicts, resolve them
-                    let conflicts = try resolveConflicts()
-                    if !conflicts.isEmpty {
-                        try pushWithRetry(token: token)
-                        return SyncResult(pushed: true, conflictFiles: conflicts,
-                                        message: "Merged local vault with remote \(repo). Conflicts saved as .conflict-* files.")
+                    var resolution = try resolveConflicts()
+                    if !resolution.conflicts.isEmpty || !resolution.merged.isEmpty {
+                        resolution.add(try pushWithRetry(token: token))
+                        let unresolved = conflictCopies(inVault: vaultPath)
+                        return SyncResult(
+                            pushed: true, conflictFiles: resolution.conflicts, mergedFiles: resolution.merged,
+                            unresolvedConflicts: unresolved,
+                            message: "Merged local vault with remote \(repo)."
+                                + SyncResult.resolutionSummary(merged: resolution.merged, created: resolution.conflicts, unresolved: unresolved))
                     }
                 }
             }
 
-            try pushWithRetry(token: token)
-            return SyncResult(pushed: true, message: "Initialized git repo and pushed to \(repo)")
+            _ = try pushWithRetry(token: token)
+            return SyncResult(pushed: true, unresolvedConflicts: conflictCopies(inVault: vaultPath),
+                              message: "Initialized git repo and pushed to \(repo)")
         }
 
         // Empty or non-git vault — clone
@@ -187,9 +243,7 @@ public struct GitSync: Sendable {
 
     // MARK: - Normal Sync (Pull + Push)
 
-    private func normalSync(token: AuthToken) throws -> SyncResult {
-        var conflictFiles: [String] = []
-
+    func normalSync(token: AuthToken) throws -> SyncResult {
         // Ensure .gitignore
         try ensureGitignore()
 
@@ -200,34 +254,33 @@ public struct GitSync: Sendable {
         _ = try commitIfNeeded(message: "sync: update notes")
 
         // Pull with rebase
-        let pullResult = try pullWithConflictHandling(token: token)
-        conflictFiles = pullResult
+        var resolution = try pullWithConflictHandling(token: token)
 
         // Push (with retry on non-fast-forward)
-        try pushWithRetry(token: token)
+        resolution.add(try pushWithRetry(token: token))
 
-        let pulled = true
-        let pushed = true
-        var message = "Sync complete."
-        if !conflictFiles.isEmpty {
-            let files = conflictFiles.joined(separator: "\n  ")
-            message += "\n\nConflict files created (resolve manually, then delete):\n  \(files)"
-        }
+        let unresolved = conflictCopies(inVault: vaultPath)
+        let message = "Sync complete."
+            + SyncResult.resolutionSummary(merged: resolution.merged, created: resolution.conflicts, unresolved: unresolved)
 
-        return SyncResult(pulled: pulled, pushed: pushed, conflictFiles: conflictFiles, message: message)
+        return SyncResult(
+            pulled: true, pushed: true,
+            conflictFiles: resolution.conflicts, mergedFiles: resolution.merged,
+            unresolvedConflicts: unresolved, message: message
+        )
     }
 
     // MARK: - Pull with Conflict Handling
 
     /// Pull with rebase, falling back to merge (with unrelated histories), handling conflicts
-    private func pullWithConflictHandling(token: AuthToken) throws -> [String] {
+    private func pullWithConflictHandling(token: AuthToken) throws -> ConflictResolution {
         let env = gitEnv(token: token)
         let branch = try currentBranch()
 
         // Try rebase first
         do {
             try runGit(["pull", "--rebase", "origin", branch], in: vaultPath, label: "pull --rebase", env: env)
-            return []
+            return ConflictResolution()
         } catch {
             // Rebase conflict — abort and try merge
             _ = try? runGit(["rebase", "--abort"], in: vaultPath, label: "rebase --abort")
@@ -237,7 +290,7 @@ public struct GitSync: Sendable {
         do {
             try runGit(["pull", "--no-rebase", "--allow-unrelated-histories", "origin", branch],
                       in: vaultPath, label: "pull --no-rebase", env: env)
-            return []
+            return ConflictResolution()
         } catch {
             // Merge conflict — resolve by splitting
             do {
@@ -250,30 +303,58 @@ public struct GitSync: Sendable {
         }
     }
 
-    /// Resolve merge conflicts: save local as .conflict-*-local.md, accept remote
-    private func resolveConflicts() throws -> [String] {
-        // Get list of conflicted files
-        let statusOutput = try runGit(["diff", "--name-only", "--diff-filter=U"], in: vaultPath, label: "diff conflicts")
+    /// Resolve merge conflicts. A collection `_index.md` is merged by meaning where the two
+    /// sides' changes are independent; everything else (and an index whose changes contradict
+    /// each other) keeps the remote version and saves the local one as `.conflict-*-local.md`.
+    private func resolveConflicts() throws -> ConflictResolution {
+        // Get list of conflicted files. Without `core.quotePath=false` git prints a non-ASCII
+        // path (a Chinese note title) as an escaped, quoted string that names no file.
+        let statusOutput = try runGit(["-c", "core.quotePath=false", "diff", "--name-only", "--diff-filter=U"],
+                                      in: vaultPath, label: "diff conflicts")
         let conflicted = statusOutput
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: "\n")
             .map(String.init)
             .filter { !$0.isEmpty }
 
-        guard !conflicted.isEmpty else { return [] }
+        guard !conflicted.isEmpty else { return ConflictResolution() }
 
-        var conflictPaths: [String] = []
+        var resolution = ConflictResolution()
         let fm = FileManager.default
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime]
         let timestamp = isoFormatter.string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
 
+        /// Take the remote side of a conflicted file — or its deletion, when the remote
+        /// side deleted it.
+        func acceptRemote(_ file: String) throws {
+            do {
+                try runGit(["checkout", "--theirs", "--", file], in: vaultPath, label: "checkout theirs")
+            } catch {
+                try runGit(["rm", "-f", "--quiet", "--", file], in: vaultPath, label: "accept remote deletion")
+            }
+        }
+
         for file in conflicted {
             let fullPath = (vaultPath as NSString).appendingPathComponent(file)
+
+            // Collection index: stage 1 is the common base, 2 the local side, 3 the remote.
+            if CollectionIndexMerge.isCollectionIndex(path: file),
+               let local = try? runGit(["show", ":2:\(file)"], in: vaultPath, label: "show ours"),
+               let remote = try? runGit(["show", ":3:\(file)"], in: vaultPath, label: "show theirs") {
+                let base = try? runGit(["show", ":1:\(file)"], in: vaultPath, label: "show base")
+                if case .merged(let text) = CollectionIndexMerge.merge(base: base, local: local, remote: remote) {
+                    try text.write(toFile: fullPath, atomically: true, encoding: .utf8)
+                    try runGit(["add", "--", file], in: vaultPath, label: "stage merged index")
+                    resolution.merged.append(file)
+                    continue
+                }
+            }
+
             guard file.hasSuffix(".md"), fm.fileExists(atPath: fullPath) else {
                 // Non-markdown conflict: just accept remote
-                _ = try? runGit(["checkout", "--theirs", file], in: vaultPath, label: "checkout theirs")
+                try? acceptRemote(file)
                 continue
             }
 
@@ -283,8 +364,8 @@ public struct GitSync: Sendable {
                 // Get our version
                 localContent = try runGit(["show", ":2:\(file)"], in: vaultPath, label: "show ours")
             } catch {
-                // Can't get our version, just accept theirs
-                _ = try? runGit(["checkout", "--theirs", file], in: vaultPath, label: "checkout theirs")
+                // Can't get our version (deleted here, changed remotely), just accept theirs
+                try? acceptRemote(file)
                 continue
             }
 
@@ -305,31 +386,39 @@ public struct GitSync: Sendable {
             try localContent.write(toFile: conflictFullPath, atomically: true, encoding: .utf8)
 
             // Accept remote version
-            try runGit(["checkout", "--theirs", file], in: vaultPath, label: "checkout theirs")
-            conflictPaths.append(conflictRelPath)
+            try acceptRemote(file)
+            resolution.conflicts.append(conflictRelPath)
         }
 
         // Stage resolved files and commit
         try runGit(["add", "-A"], in: vaultPath, label: "stage resolved")
-        try runGit(["commit", "-m", "sync: resolve conflicts (local versions saved as .conflict-* files)"], in: vaultPath, label: "commit resolved")
+        let summary = resolution.conflicts.isEmpty
+            ? "sync: merge collection order"
+            : "sync: resolve conflicts (local versions saved as .conflict-* files)"
+        try runGit(["commit", "-m", summary], in: vaultPath, label: "commit resolved")
 
-        return conflictPaths
+        return resolution
     }
 
     // MARK: - Push with Retry
 
-    private func pushWithRetry(token: AuthToken) throws {
+    /// Push; when the remote moved in the meantime, pull once more and retry. Returns what
+    /// that extra pull had to resolve.
+    @discardableResult
+    private func pushWithRetry(token: AuthToken) throws -> ConflictResolution {
         let env = gitEnv(token: token)
         let branch = try currentBranch()
         do {
             try runGit(["push", "-u", "origin", branch], in: vaultPath, label: "push", env: env)
+            return ConflictResolution()
         } catch let error as GitError {
             // Check for non-fast-forward
             if case .commandFailed(_, let output) = error,
                output.contains("non-fast-forward") || output.contains("rejected") || output.contains("fetch first") {
                 // Pull (with unrelated histories support) and retry
-                let _ = try pullWithConflictHandling(token: token)
+                let resolution = try pullWithConflictHandling(token: token)
                 try runGit(["push", "-u", "origin", branch], in: vaultPath, label: "push retry", env: env)
+                return resolution
             } else {
                 throw error
             }
@@ -375,7 +464,7 @@ public struct GitSync: Sendable {
     func ensureGitignore() throws {
         let gitignorePath = (vaultPath as NSString).appendingPathComponent(".gitignore")
         let fm = FileManager.default
-        let requiredEntries = [".maho/", "_site/"]
+        let requiredEntries = syncGitignoreEntries
 
         if fm.fileExists(atPath: gitignorePath) {
             var content = try String(contentsOfFile: gitignorePath, encoding: .utf8)

@@ -309,6 +309,165 @@ struct GitSyncTests {
         #expect(finalContent.contains("device 2"))
     }
 
+    // MARK: - Sync through GitSync (two devices, local bare remote)
+
+    /// A second working copy of the vault's remote, standing in for another device.
+    private func cloneSecondDevice(of remotePath: String) throws -> URL {
+        let fm = FileManager.default
+        let device2 = fm.temporaryDirectory.appendingPathComponent("device2-\(UUID().uuidString)")
+        try runGit(["clone", remotePath, device2.path], in: fm.temporaryDirectory.path, label: "clone device2")
+        try runGit(["config", "user.email", "test2@example.com"], in: device2.path, label: "config email")
+        try runGit(["config", "user.name", "Test2"], in: device2.path, label: "config name")
+        return device2
+    }
+
+    private func commitAndPush(_ message: String, in path: String) throws {
+        try runGit(["add", "-A"], in: path, label: "add")
+        try runGit(["commit", "-m", message], in: path, label: "commit")
+        try runGit(["push", "origin", "main"], in: path, label: "push")
+    }
+
+    private func write(_ text: String, to relativePath: String, in root: String) throws {
+        let path = (root as NSString).appendingPathComponent(relativePath)
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try text.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    private func read(_ relativePath: String, in root: String) throws -> String {
+        try String(contentsOfFile: (root as NSString).appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    private let fakeToken = AuthToken(token: "ghp_fake_for_test", source: .stored)
+
+    private func indexFile(order: [String], title: String = "Notes") -> String {
+        "---\ntitle: \(title)\norder:\n" + order.map { "  - \($0)\n" }.joined() + "---\n"
+    }
+
+    /// Issue #2: a note added on this device and a different change to the same collection's
+    /// `_index.md` on another device are independent — sync merges them instead of keeping
+    /// the remote index and parking the local one in a conflict copy.
+    @Test func divergentCollectionIndexIsMergedNotConflicted() throws {
+        let (vaultPath, remotePath, cleanups) = try makeVaultWithRemote()
+        defer { cleanups.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try write("---\ntitle: A\n---\nA\n", to: "notes/a.md", in: vaultPath)
+        try write("---\ntitle: B\n---\nB\n", to: "notes/b.md", in: vaultPath)
+        try write(indexFile(order: ["a.md", "b.md"]), to: "notes/_index.md", in: vaultPath)
+        try commitAndPush("base", in: vaultPath)
+
+        let device2 = try cloneSecondDevice(of: remotePath)
+        defer { try? FileManager.default.removeItem(at: device2) }
+
+        // Device 2: adds d.md and lists it.
+        try write("---\ntitle: D\n---\nD\n", to: "notes/d.md", in: device2.path)
+        try write(indexFile(order: ["a.md", "b.md", "d.md"]), to: "notes/_index.md", in: device2.path)
+        try commitAndPush("device2: add d", in: device2.path)
+
+        // Device 1: adds c.md and lists it — the same lines of the index.
+        try write("---\ntitle: C\n---\nC\n", to: "notes/c.md", in: vaultPath)
+        try write(indexFile(order: ["a.md", "b.md", "c.md"]), to: "notes/_index.md", in: vaultPath)
+
+        let result = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+
+        #expect(result.conflictFiles.isEmpty)
+        #expect(result.mergedFiles == ["notes/_index.md"])
+        #expect(result.status == "ok")
+        #expect(readDirectoryOrder(at: (vaultPath as NSString).appendingPathComponent("notes")).notes
+                == ["a.md", "b.md", "c.md", "d.md"])
+        #expect(conflictCopies(inVault: vaultPath).isEmpty)
+
+        // The merged index is what got pushed, and a second sync is a no-op.
+        try runGit(["pull", "origin", "main"], in: device2.path, label: "pull")
+        #expect(try read("notes/_index.md", in: device2.path) == (try read("notes/_index.md", in: vaultPath)))
+        #expect(FileManager.default.fileExists(atPath: device2.appendingPathComponent("notes/c.md").path))
+        let again = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+        #expect(again.conflictFiles.isEmpty && again.mergedFiles.isEmpty && again.status == "ok")
+    }
+
+    /// Changes that contradict each other are not guessed at: the remote index stays, the
+    /// local one is kept in a conflict copy, and the result says so.
+    @Test func contradictoryIndexChangesAreReportedAsUnresolved() throws {
+        let (vaultPath, remotePath, cleanups) = try makeVaultWithRemote()
+        defer { cleanups.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try write(indexFile(order: ["a.md", "b.md", "c.md"]), to: "notes/_index.md", in: vaultPath)
+        try commitAndPush("base", in: vaultPath)
+        let device2 = try cloneSecondDevice(of: remotePath)
+        defer { try? FileManager.default.removeItem(at: device2) }
+
+        try write(indexFile(order: ["a.md", "c.md", "b.md"]), to: "notes/_index.md", in: device2.path)
+        try commitAndPush("device2: reorder", in: device2.path)
+        try write(indexFile(order: ["b.md", "a.md", "c.md"]), to: "notes/_index.md", in: vaultPath)
+
+        let result = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+
+        #expect(result.pushed)
+        #expect(result.status == "conflicts")
+        #expect(result.mergedFiles.isEmpty)
+        #expect(result.conflictFiles.count == 1)
+        #expect(result.unresolvedConflicts == result.conflictFiles)
+        let copy = try #require(result.conflictFiles.first)
+        #expect(copy.hasPrefix("notes/_index.conflict-") && copy.hasSuffix("-local.md"))
+        // Both versions are recoverable: remote in place, local in the copy.
+        #expect(readDirectoryOrder(at: (vaultPath as NSString).appendingPathComponent("notes")).notes == ["a.md", "c.md", "b.md"])
+        #expect(try read(copy, in: vaultPath) == indexFile(order: ["b.md", "a.md", "c.md"]))
+
+        // The copy stays on this device: it is not pushed, and a later sync still reports it.
+        try runGit(["pull", "origin", "main"], in: device2.path, label: "pull")
+        #expect(!FileManager.default.fileExists(atPath: device2.appendingPathComponent(copy).path))
+        let again = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+        #expect(again.conflictFiles.isEmpty)
+        #expect(again.unresolvedConflicts == [copy])
+        #expect(again.status == "conflicts")
+    }
+
+    /// A conflicted note with a non-ASCII filename used to be committed with git's conflict
+    /// markers in it: git printed the path escaped and quoted, so it matched no file.
+    @Test func conflictInNoteWithChineseFilenameKeepsBothVersions() throws {
+        let (vaultPath, remotePath, cleanups) = try makeVaultWithRemote()
+        defer { cleanups.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try write("---\ntitle: 筆記\n---\n原文\n", to: "notes/筆記.md", in: vaultPath)
+        try commitAndPush("base", in: vaultPath)
+        let device2 = try cloneSecondDevice(of: remotePath)
+        defer { try? FileManager.default.removeItem(at: device2) }
+
+        try write("---\ntitle: 筆記\n---\n另一台裝置\n", to: "notes/筆記.md", in: device2.path)
+        try commitAndPush("device2", in: device2.path)
+        try write("---\ntitle: 筆記\n---\n這台裝置\n", to: "notes/筆記.md", in: vaultPath)
+
+        let result = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+
+        let copy = try #require(result.conflictFiles.first)
+        #expect(copy.hasPrefix("notes/筆記.conflict-"))
+        #expect(try read("notes/筆記.md", in: vaultPath) == "---\ntitle: 筆記\n---\n另一台裝置\n")
+        #expect(try read(copy, in: vaultPath) == "---\ntitle: 筆記\n---\n這台裝置\n")
+    }
+
+    /// Edited here, deleted on the other device: the deletion is taken and the edit is kept
+    /// in a conflict copy. (This used to fail the whole sync.)
+    @Test func editedHereDeletedThereKeepsTheEditAsAConflictCopy() throws {
+        let (vaultPath, remotePath, cleanups) = try makeVaultWithRemote()
+        defer { cleanups.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try write("---\ntitle: A\n---\nA\n", to: "notes/a.md", in: vaultPath)
+        try commitAndPush("base", in: vaultPath)
+        let device2 = try cloneSecondDevice(of: remotePath)
+        defer { try? FileManager.default.removeItem(at: device2) }
+
+        try FileManager.default.removeItem(at: device2.appendingPathComponent("notes/a.md"))
+        try commitAndPush("device2: delete", in: device2.path)
+        try write("---\ntitle: A\n---\nEdited\n", to: "notes/a.md", in: vaultPath)
+
+        let result = try GitSync(vaultPath: vaultPath).normalSync(token: fakeToken)
+
+        let copy = try #require(result.conflictFiles.first)
+        #expect(!FileManager.default.fileExists(atPath: (vaultPath as NSString).appendingPathComponent("notes/a.md")))
+        #expect(try read(copy, in: vaultPath).contains("Edited"))
+        #expect(result.status == "conflicts")
+    }
+
     // MARK: - Non-Fast-Forward Push Retry
 
     @Test func nonFastForwardDetection() throws {

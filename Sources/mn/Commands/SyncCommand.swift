@@ -95,7 +95,12 @@ struct SyncCommand: ParsableCommand {
                 if !outputOption.json {
                     print("  [\(entry.name)] \(result.message)")
                 } else {
-                    results.append(["vault": entry.name, "status": "ok", "message": result.message])
+                    // "conflicts": synced, but conflict copies are waiting to be resolved.
+                    results.append([
+                        "vault": entry.name, "status": result.status, "message": result.message,
+                        "conflictFiles": result.conflictFiles, "mergedFiles": result.mergedFiles,
+                        "unresolvedConflicts": result.unresolvedConflicts,
+                    ])
                 }
 
                 if reindex {

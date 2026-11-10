@@ -108,7 +108,8 @@ private func noteStats(in vaultPath: String) -> (count: Int, lastModified: Date?
             ? String(name.dropFirst().dropLast(".icloud".count))
             : name
         guard !noteName.hasPrefix("."), (noteName as NSString).pathExtension == "md",
-              noteName != "_index.md", noteName.lowercased() != "readme.md"
+              noteName != "_index.md", !noteName.hasPrefix("_index.conflict-"),
+              noteName.lowercased() != "readme.md"
         else { continue }
         count += 1
         if noteName == name, let date = values?.contentModificationDate, date > (latest ?? .distantPast) {
@@ -455,7 +456,7 @@ extension Vault {
                 }
                 continue
             }
-            guard name != "_index.md" else { continue }
+            guard name != "_index.md", !name.hasPrefix("_index.conflict-") else { continue }
 
             if dir.isEmpty {
                 issues.append(VaultIssue(kind: .noteOutsideCollections, path: relative, isFixable: true))

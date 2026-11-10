@@ -232,6 +232,13 @@ public struct FrontmatterDocument: Sendable {
         replaceBlock(of: key, with: ["\(key):"] + items.map { "  - \(YAMLFormat.scalar($0))" })
     }
 
+    /// Set `key` to an entry copied from another document: its lines exactly as written there
+    /// (see `rawBlock(of:)`), so a block scalar or a comment inside a list survives.
+    mutating func setBlock(_ key: String, rawLines: [String]) {
+        // Line endings are normalised to this file's by `replaceBlock`.
+        replaceBlock(of: key, with: rawLines.map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 })
+    }
+
     private mutating func replaceBlock(of key: String, with newLines: [String]) {
         let newLines = usesCRLF ? newLines.map { $0 + "\r" } : newLines
         if !hasFrontmatter, !body.isEmpty, !body.hasPrefix("\n") {
